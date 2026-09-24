@@ -8,7 +8,10 @@ swift build --product probe
 scripts/app.sh .build/debug/probe tools/probe/Info.plist build/probe.app
 
 log=${1:-build/probe.log}
-pkill -f 'build/probe.app/Contents/MacOS/probe' || true
+# 옛 probe 가 완전히 끝난 뒤 open 한다 — 곧바로 open 하면 LaunchServices 가 죽어가는 process 에 붙으려다 -600 을 낸다.
+pattern='build/probe.app/Contents/MacOS/probe'
+pkill -f "$pattern" || true
+for _ in {1..20}; do pgrep -f "$pattern" >/dev/null || break; sleep 0.1; done
 : > "$log"
 open build/probe.app --stdout "$log"
 echo "probe log: $log"

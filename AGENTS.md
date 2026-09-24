@@ -1,9 +1,9 @@
 # AGENTS.md — hangul
 
-macOS 한글 입력기. 주인 한 사람이 매일 쓰는 도구이고, 목표는 **두벌식 한글 입력이 완벽하게 동작하는 것** 하나다.
-기능을 늘리는 프로젝트가 아니다 — 잡다한 기능·옵션·변죽은 만들지 않는다.
+**homi** (`com.unocult.inputmethod.homi`) — macOS 한글 입력기. 주인 한 사람이 매일 쓰는 도구이고,
+목표는 **두벌식 한글 입력이 완벽하게 동작하는 것** 하나다. 기능을 늘리는 프로젝트가 아니다 — 잡다한 기능·옵션·변죽은 만들지 않는다.
 
-> **현재 (2026-09-25)**: M0 준비 중. 개발 도구(`tis`·`probe`)와 선행 조사는 끝났고, 입력기 코드는 아직 없다 → [진행 단계](#진행-단계)
+> **현재 (2026-09-25)**: M0 완료 — 빈 homi 가 등록되어 선택되고, 모든 key 를 통과시킨다. 다음은 M1 (두벌식 조합 엔진) → [진행 단계](#진행-단계)
 
 ## 문서
 
@@ -90,15 +90,18 @@ eventtap timeout·stale cache·비동기 전환 race 와의 싸움이다 (`~/.ha
 세벌식 등 다른 자판, 옛한글, 자동완성·예측, 특수문자 palette, 설정 창, App Store 배포와 sandbox.
 명시적 요청 없이 옵션이나 기능을 늘리지 않는다.
 
-## 구조 (계획 — M0 에서 확정)
+## 구조
 
 SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설치가 CLI 로 끝나야 agent 가 스스로 검증할 수 있다.
 
 | module | 역할 | 의존 |
 |---|---|---|
-| `HangulCore` | 두벌식 자판 mapping + 조합 state machine. 입력: 자모·편집 명령 / 출력: commit 문자열 + 조합 중 문자열 | 없음 |
-| `InputSession` | key 해석(전환 키·trigger·수식키), 모드, 앱별 기억과 규칙. client 는 protocol 로 추상화 | `HangulCore` |
-| `HangulIME` (app) | IMK glue — `IMKServer`, `IMKInputController`, NSEvent 변환, menu bar 표시 | 위 둘 + AppKit·InputMethodKit |
+| `HangulCore` (M1) | 두벌식 자판 mapping + 조합 state machine. 입력: 자모·편집 명령 / 출력: commit 문자열 + 조합 중 문자열 | 없음 |
+| `InputSession` (M2) | key 해석(전환 키·trigger·수식키), 모드, 앱별 기억과 규칙. client 는 protocol 로 추상화 | `HangulCore` |
+| `homi` (app, `Sources/homi`) | IMK glue — `IMKServer`, `HomiInputController`, NSEvent 변환, menu bar 표시. `Bundle/` 에 `Info.plist`·resource | 위 둘 + AppKit·InputMethodKit |
+
+- `Info.plist` 는 한국어 mode 하나(`com.unocult.inputmethod.homi.korean`, `smKorean`)만 둔다 — [열린 결정](#열린-결정)의 (a) 를 잠정 적용.
+  mode 구성을 바꾸면 logout + input source 재추가가 필요하다.
 
 - 아래 두 module 은 AppKit·IMK 를 import 하지 않는다. 그래서 "key 순서 → client 호출 순서" 대부분을
   fake client 로 `swift test` 에서 검증한다. IMK 층에 남는 것이 적을수록 좋다.
@@ -128,14 +131,14 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 
 | 결정 | 선택지 | 근거 · 할 실험 | 때 |
 |---|---|---|---|
-| system 에 보일 mode | (a) 한국어 mode 하나 + 우리 status item 으로 한/A 표시 · (b) 한국어·영문 두 mode, `selectInputMode` 는 key 가 멈췄을 때만 | (a) 는 결정 4 와 맞고 비밀번호 칸은 system 이 ABC 로 대체한다. 대가는 cursor 옆 system 표시가 없다는 것. (b) 는 ongeul 방식 | M3 |
+| system 에 보일 mode | (a) 한국어 mode 하나 + 우리 status item 으로 한/A 표시 · (b) 한국어·영문 두 mode, `selectInputMode` 는 key 가 멈췄을 때만 | (a) 는 결정 4 와 맞고 비밀번호 칸은 system 이 ABC 로 대체한다. 대가는 cursor 옆 system 표시가 없다는 것. (b) 는 ongeul 방식. **M0 는 (a) 로 등록했다** | M3 |
 | Caps Lock 받기 | (A) flagsChanged + IOKit 으로 lock 되돌리기 + delay override · (B) Caps Lock → F18 remap, F18 keyDown 이 전환 키 | (B) 가 결정적. macOS 27 에서 권한 없이 걸리는지 실험 | M3 |
 | 오른쪽 ⌘ 받기 | press·release 사이 `CGEventSourceCounterForEventType` 비교(권한 불필요, 전례 없음) · CGEventTap(손쉬운 사용) | 실험 | M3 |
 | Shift+Space 받기 | IMK `handle()` · event tap | iTerm2·JetBrains 는 입력기가 먹어도 space 를 친다 — 실험 | M3 |
 | terminal 의 ESC | 조합 중 ESC: 확정 → key 를 먹고 다시 보냄 · 그대로 둠 | Ghostty·iTerm2 실험 | M4 |
 | 두벌식 세부 | Apple 과 같게(ㅅㅅ → ㅆ 초성 합침, 홀로 선 ㄳ 없음, Option+key → ASCII) · 표준(libhangul) | 주인 손버릇 | M1 |
 | 서명 신원 | 자체 서명 인증서 · Apple Development(Apple ID) | TCC 권한(event tap 등)을 쓰게 되면 필수 | 필요해질 때 |
-| 설치 위치 | `~/Library/Input Methods` · `/Library/Input Methods` | Secure Keyboard Entry 가 켜지면 전자는 비활성된다 (macOS 15.4.1) | M0 |
+| 설치 위치 | `~/Library/Input Methods` · `/Library/Input Methods` | Secure Keyboard Entry 가 켜지면 전자는 비활성된다 (macOS 15.4.1). **M0 는 전자** — sudo 가 필요 없고, 지금 Secure Keyboard Entry 가 늘 켜진 곳이 없다 | M5 |
 
 ## 선행 사례
 
@@ -153,9 +156,11 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
   - `scripts/probe.sh` — test client 창을 띄운다 (log: `build/probe.log`). key event, `handleEvent` 의 handled 여부,
     입력기가 client 에게 묻는 것(`? selectedRange`…)과 시키는 것(`setMarkedText`·`insertText`…), input source 변화를 시간순·중첩으로 보여준다.
     입력기가 client 에게 무엇을 하는지는 추측하지 말고 여기서 본다.
-- `scripts/app.sh <exe> <Info.plist> <out.app>` — bundle 조립 + ad-hoc 서명. bundle 이 없으면 macOS 는 app 으로 대접하지 않는다 (창이 앞으로 안 나온다).
-- `scripts/install.sh` (M0 예정) — release build → bundle 조립 → codesign → 설치 → 실행 중인 입력기 process 종료.
-- log: `log stream --level debug --predicate 'subsystem == "<bundle ID>"'` (bundle ID 는 M0 에서 정한다)
+- `scripts/install.sh [--register]` — release build → bundle 조립 → ad-hoc 서명 → `~/Library/Input Methods/homi.app` → 실행 중인 homi 종료.
+  다음 입력 때 system 이 새 binary 로 띄운다. `--register` 는 처음 한 번 (TIS 등록 + enable; 안 잡히면 System Settings 에서 추가하거나 logout).
+- `scripts/app.sh <exe> <Info.plist> <out.app> [resources]` — bundle 조립 + ad-hoc 서명. bundle 이 없으면 macOS 는 app 으로 대접하지 않는다 (창이 앞으로 안 나온다).
+- `swift scripts/make-icon.swift 호 Sources/homi/Bundle/Resources/homi.tiff` — menu bar template icon (16pt @1x·@2x)
+- log: `log stream --level debug --predicate 'subsystem == "com.unocult.inputmethod.homi"'`
 - 직접 확인할 앱 (주인이 쓰는 것): VS Code · Obsidian · Ghostty · iTerm2 · Wave · Terminal · Chrome · Safari · Firefox ·
   KakaoTalk · Telegram · Word · Excel · PowerPoint · Pages · Xcode · IntelliJ · LaunchBar · Spotlight ·
   ChatGPT · Claude · Codex · TextEdit · Notes · Windows App
@@ -183,8 +188,8 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
   사라지거나 엉뚱한 곳에 들어가면 안 된다. 이 경로들은 test 목록으로 관리한다.
 - **macOS 동작을 추측으로 코딩하지 않는다.** IMK·TIS 는 문서가 얇고 앱마다 다르게 군다. 실험으로 확인하고
   `docs/macos-input.md` 에 남긴다. 결함을 고쳤다면 `docs/lessons.md` 에 증상 · 원인 · 증거 · 대응으로.
-- **입력 내용을 log·file 에 남기지 않는다.** key code·상태 전이·bundle ID 까지만. 타이핑은 곧 비밀번호이고 대화다.
-  (예외: `probe` 는 test 창에 친 것만 `build/` 에 남긴다.)
+- **입력 내용을 log·file 에 남기지 않는다.** 상태 전이·bundle ID 까지만 — key code 도 모이면 입력 내용이다 (key 는 memory 의 ring buffer 에만).
+  타이핑은 곧 비밀번호이고 대화다. (예외: `probe` 는 test 창에 친 것만 `build/` 에 남긴다.)
 - IMK 층을 바꿨으면 설치해서 해당 앱에서 직접 확인하고, 무엇을 확인했는지 보고한다. `swift test` 통과만으로 "된다"고 하지 않는다.
 - 앱별 우회 코드에는 증상·재현 절차·앱 version 을 함께 남긴다.
 - system 설정 변경(`defaults write`, `hidutil`, input source 추가·제거, 인증서)은 주인에게 먼저 확인받는다.
@@ -214,7 +219,7 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 
 | | 내용 | 완료 기준 |
 |---|---|---|
-| M0 | 준비 — SwiftPM package ✅, 개발 도구 `tis`·`probe` ✅, bundle 조립 `scripts/app.sh` ✅, 선행 조사 ✅. 남은 것: bundle ID·표시 이름, 설치 위치, 설치 script, 빈 입력기 등록 | 빈 입력기가 System Settings 에 보이고 선택된다 |
+| M0 ✅ | 준비 — SwiftPM package, 개발 도구 `tis`·`probe`, 선행 조사, 이름 homi·bundle ID, 설치 script, 빈 입력기 등록 | 빈 입력기가 System Settings 에 보이고 선택된다 (2026-09-25) |
 | M1 | `HangulCore` — 두벌식 조합, `docs/spec.md`, test | 조합 규칙 전부가 test 로 고정된다 |
 | M2 | 최소 입력기 — 한글 조합(marked text), 영문 통과, commit 경로, ring buffer | 주요 앱에서 한글이 쳐진다 |
 | M3 | 전환 키 셋 + menu bar 표시 | "전환 → 다음 키" 순서가 test 로 고정된다 |

@@ -106,6 +106,20 @@ keyDown return     → insertText "글" repl={1,1} → doCommand insertNewline: 
 
 - **도깨비불**은 insertText 두 번: `일` + ㅓ → `insertText "이" {16,1}` + `insertText "러"`. ✅ (run 2)
 
+## homi 첫 설치 (M0)
+
+- **등록**: `TISRegisterInputSource` 뒤 parent 에 `TISEnableInputSource` 가 성공(0)을 돌려주고도 parent 는 꺼진 채였고, mode 만 켜졌다 (조사의 qingjian#209 와 같은 증상).
+  주인이 menu 에서 homi 를 고른 뒤에는 parent 도 켜졌다. system 이 저장하는 `AppleEnabledInputSources` 에는 바로 나타나지 않았다. ✅ / 이유 🔶
+- system 은 homi 를 **고르는 순간** 띄운다 (부모 process = launchd). 입력칸이 바뀔 때마다 `activateServer`·`deactivateServer` 가 오고,
+  같은 app 안에서도 3ms 안에 deactivate → activate → deactivate 가 몰려오는 일이 있다. ✅
+- homi 아래 keyboard layout 은 **ABC** 다 (`tis current`). `handle()` 이 NO 를 돌려주면 context 가 그 layout 으로 `insertText` 한다 — app 쪽에서는 ABC 와 구별되지 않는다. ✅
+- **homi 를 고른 동안 Caps Lock 은 input source 전환이 아니라 진짜 대문자 고정이다** (`chars="D" mods=⇪`). homi 는 `TICapsLockLanguageSwitchCapable` 을 선언하지 않았다.
+  조사(gureum#883)와 맞고, M3 에서 Caps Lock 을 직접 다룬다는 전제가 선다. ✅
+- ⌃Space 로 input source 를 바꾸면 app 은 ⌃ 의 flags 만 보고 Space 는 못 본다 — ⌘Tab 과 같다. ✅
+- homi 를 고른 채 probe 로 돌아오자 system 이 문서별 기억으로 **ABC 를 되살렸다**. "문서의 입력 소스로 자동 전환" 이 homi 의 앱별 기억과 싸우리라는 예상의 실증이다. ✅
+- IMK 의 `error messaging the mach port for IMKCFRunLoopWakeUpReliable` 은 세 번째 — 새 source·새 client 와의 첫 상호작용마다 나오고, 매번 무해했다. ✅
+- LaunchServices: app 을 죽이자마자 `open` 하면 -600 — 죽어가는 process 에 붙으려 한다. 종료를 기다린 뒤 연다 (`scripts/probe.sh`). ✅
+
 ## 관측 기록
 
 | 날짜 | 실험 | 비고 |
@@ -113,3 +127,4 @@ keyDown return     → insertText "글" repl={1,1} → doCommand insertNewline: 
 | 2026-09-25 | `tis list`·`current` | 주인 환경: ABC + Apple 두벌식 |
 | 2026-09-25 | probe run 1 — Caps Lock 전환, `gks`, `한글` + Return | Apple 두벌식, NSTextView (probe 초판, bundle 없이 실행) |
 | 2026-09-25 | probe run 2 — `한글` + space + Return, `닭` + Backspace, Caps Lock 직후 입력, 중간중간 ⌘Tab | handleEvent 중첩·질문 기록 추가, bundle 로 실행. 첫 글자 영문은 재현 안 됨 (전환 후 200ms 넘게 뒤에 쳤다) |
+| 2026-09-25 | M0 — homi(빈 입력기) 등록·선택, probe 에 알파벳·Shift+Space·Caps Lock | homi 의 lifecycle log(`log stream`)와 probe log 를 함께 봤다 |
