@@ -185,16 +185,17 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 - 입력기가 고장나면 타이핑 자체가 막힌다. 개발 중에는 `ABC` 를 input source 에 남겨 menu bar 로 탈출할 수 있게 한다.
 - key event 처리 안에서 block 하지 않는다 — IPC·file I/O·lock 대기 금지. 입력기가 멈추면 client 앱의 입력이 멈춘다.
 
-## 주인 환경 (일상 사용으로 넘어갈 때 한 번)
+## 주인 환경 (일상 사용으로 넘어갈 때)
 
-입력기가 한/영의 유일한 주인이 되려면 system 쪽 전환 경로를 끈다. **agent 가 임의로 바꾸지 않는다 — 주인에게 확인받는다.**
+입력기가 한/영의 유일한 주인이 되려면 system 쪽 전환 경로를 정리한다. **agent 가 임의로 바꾸지 않는다 — 주인에게 확인받는다.**
 
-- Apple 한국어 입력기 제거. `ABC` 는 남긴다.
-- "Caps Lock 키로 ABC 입력 소스 전환" 끄기 — `defaults write` 가 아니라 System Settings 에서.
-- "문서의 입력 소스로 자동 전환" 끄기 — 지금 켜져 있다 (`TextInputGlobalPropertyPerContextInput = 1`).
-  켜 두면 system 이 문서마다 input source 를 되돌리며 입력기의 기억과 싸운다.
-- `⌃Space`·`⌃⌥Space` input source 단축키 끄기 (symbolic hotkey 60·61) — `ABC` 로 빠져나가는 길이다.
-- Hammerspoon 입력 전환 코드 제거 — 남겨 두면 `com.apple.keylayout.ABC` 로 전환해 입력기를 벗어난다.
+- ✅ "문서의 입력 소스로 자동 전환" 끄기 (2026-09-25 완료, `TextInputGlobalPropertyPerContextInput = 0`) — 켜 두면 system 이 문서마다 input source 를 되돌려 homi 를 밀어낸다.
+- ✅ 손쉬운 사용에서 homi 허가 (2026-09-25) — 조합 중 Enter·ESC 다시 보내기에 필요.
+- Hammerspoon 입력 전환 코드 제거 — 주인이 직접 (2026-09-25). 남겨 두면 ESC 마다 `com.apple.keylayout.ABC` 로 전환해 homi 를 벗어난다.
+- Apple 한국어 입력기 제거 — 일상 사용에서 세 증상이 없음을 확인한 뒤 (M5). `ABC` 는 남긴다 (비밀번호 칸, 비상용).
+- "Caps Lock 키로 ABC 입력 소스 전환" 은 **켜 둬도 된다.** homi 가 선택된 동안에는 homi 가 Caps Lock 을 remap 해서 system 이 보지 못하고,
+  homi 밖(ABC)에서는 이 옵션이 homi 로 돌아오는 길이 된다.
+- `⌃Space`·`⌃⌥Space` input source 단축키(symbolic hotkey 60·61)는 선택. 켜 두면 비상 탈출구이고, 끄면 IntelliJ 등이 `⌃Space` 를 쓸 수 있다.
 
 ## 작업 규칙
 
