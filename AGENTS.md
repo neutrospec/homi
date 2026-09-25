@@ -3,8 +3,7 @@
 **homi** (`com.unocult.inputmethod.homi`) — macOS 한글 입력기. 주인 한 사람이 매일 쓰는 도구이고,
 목표는 **두벌식 한글 입력이 완벽하게 동작하는 것** 하나다. 기능을 늘리는 프로젝트가 아니다 — 잡다한 기능·옵션·변죽은 만들지 않는다.
 
-> **현재 (2026-09-25)**: M1 완료 — 두벌식 조합 엔진(`HangulCore`)이 spec 과 test 로 고정됐다. homi 는 아직 모든 key 를 통과시킨다.
-> 다음은 M2 (엔진을 IMK 에 잇는 최소 입력기) → [진행 단계](#진행-단계)
+> **현재 (2026-09-25)**: M2 완료 — homi 가 한글을 조합한다 (한글 전용). 다음은 M3 (전환 키 셋 + menu bar 표시) → [진행 단계](#진행-단계)
 
 ## 문서
 
@@ -57,6 +56,7 @@ eventtap timeout·stale cache·비동기 전환 race 와의 싸움이다 (`~/.ha
 - 조합 규칙의 SOT 는 `docs/spec.md` 와 엔진 test. 그중 주인이 정한 것:
   - 같은 자음을 연달아 쳐도 합치지 않는다 — `ㄱㄱ` 은 `ㄱㄱ`. 된소리는 Shift 로만 (2026-09-25). Apple 은 초성에서 합친다고 보고됐다.
   - Backspace 는 자소 단위 (`닭 → 달 → 다 → ㄷ`), 모음 없는 겹자음은 합치지 않는다 (`ㄱㅅ` 은 `ㄱㅅ`) — Apple 과 같고, 주인이 지금 쓰는 그대로.
+  - ⌥(Option)+key 는 한글 모드에서도 영문일 때와 같다 — 조합을 확정하고 key 를 넘긴다 (`⌥a → å`, 2026-09-25). Apple 은 `⌥a → a`.
 - 한글 모드에서도 `` ` `` 키는 `` ` `` 를 입력한다 (Apple 두벌식은 `₩`).
 - **한자 변환**: 필요, 후순위 (M6). 키는 `⌥↩` 예정. 사전 출처·license 는 그때 정한다.
 
@@ -100,14 +100,16 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 | module | 역할 | 의존 |
 |---|---|---|
 | `HangulCore` (M1) | 두벌식 자판 mapping + 조합 state machine. 입력: 자모·편집 명령 / 출력: commit 문자열 + 조합 중 문자열 | 없음 |
-| `InputSession` (M2) | key 해석(전환 키·trigger·수식키), 모드, 앱별 기억과 규칙. client 는 protocol 로 추상화 | `HangulCore` |
+| `InputSession` | key 해석(자모·Backspace·넘길 key, M3 부터 전환 키·trigger), 모드, 앱별 기억과 규칙, 최근 기록(`Recorder`) | `HangulCore` |
 | `homi` (app, `Sources/homi`) | IMK glue — `IMKServer`, `HomiInputController`, NSEvent 변환, menu bar 표시. `Bundle/` 에 `Info.plist`·resource | 위 둘 + AppKit·InputMethodKit |
 
 - `Info.plist` 는 한국어 mode 하나(`com.unocult.inputmethod.homi.korean`, `smKorean`)만 둔다 — [열린 결정](#열린-결정)의 (a) 를 잠정 적용.
   mode 구성을 바꾸면 logout + input source 재추가가 필요하다.
 
-- 아래 두 module 은 AppKit·IMK 를 import 하지 않는다. 그래서 "key 순서 → client 호출 순서" 대부분을
-  fake client 로 `swift test` 에서 검증한다. IMK 층에 남는 것이 적을수록 좋다.
+- 아래 두 module 은 AppKit·IMK 를 import 하지 않는다. 그래서 "key 순서 → client 에게 할 일" 대부분을 `swift test` 에서 검증한다.
+  IMK 층에 남는 것이 적을수록 좋다.
+- `Session` 은 client 를 직접 부르지 않고 할 일(`Action`: mark·insert) 목록을 돌려준다. IMK 층은 상태 변경이 끝난 뒤에 적용한다 —
+  IMK 는 우리의 `insertText` 도중에 deactivate 를 끼워 부를 수 있어서, 상태를 바꾸는 중에 client 를 부르면 재진입이 겹친다.
 - 자판 mapping 은 `keyCode`(물리 위치) 기준이다. `NSEvent.characters` 는 layout 에 따라 바뀐다 (`kc=5` 가 `g`/`ㅎ`).
 - 문장부호·`` ` `` 등 한글이 아닌 key 는 조합을 확정한 뒤 통과시켜 layout 이 문자를 만들게 한다. `insertText` 로 직접 넣으면 key event 를 읽는 xterm.js·Ink(Claude Code) 가 못 본다.
 - IMK override 는 `nonisolated override` + `MainActor.assumeIsolated` — macOS 27 SDK 의 IMK header 에는 actor 표시가 없다.
@@ -139,7 +141,6 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 | 오른쪽 ⌘ 받기 | press·release 사이 `CGEventSourceCounterForEventType` 비교(권한 불필요, 전례 없음) · CGEventTap(손쉬운 사용) | 실험 | M3 |
 | Shift+Space 받기 | IMK `handle()` · event tap | iTerm2·JetBrains 는 입력기가 먹어도 space 를 친다 — 실험 | M3 |
 | terminal 의 ESC | 조합 중 ESC: 확정 → key 를 먹고 다시 보냄 · 그대로 둠 | Ghostty·iTerm2 실험 | M4 |
-| 한글 모드의 Option+key | Apple 처럼 평범한 ASCII (Option+a → a) · 영문과 같게 통과 (Option+a → å, terminal 의 Meta) | 주인 손버릇, terminal 의 Option-as-Meta 와 함께 확인 | M2 |
 | 서명 신원 | 자체 서명 인증서 · Apple Development(Apple ID) | TCC 권한(event tap 등)을 쓰게 되면 필수 | 필요해질 때 |
 | 설치 위치 | `~/Library/Input Methods` · `/Library/Input Methods` | Secure Keyboard Entry 가 켜지면 전자는 비활성된다 (macOS 15.4.1). **M0 는 전자** — sudo 가 필요 없고, 지금 Secure Keyboard Entry 가 늘 켜진 곳이 없다 | M5 |
 
@@ -225,7 +226,7 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 |---|---|---|
 | M0 ✅ | 준비 — SwiftPM package, 개발 도구 `tis`·`probe`, 선행 조사, 이름 homi·bundle ID, 설치 script, 빈 입력기 등록 | 빈 입력기가 System Settings 에 보이고 선택된다 (2026-09-25) |
 | M1 ✅ | `HangulCore` — 두벌식 조합, `docs/spec.md`, test | 조합 규칙 전부가 test 로 고정된다 (2026-09-25) |
-| M2 | 최소 입력기 — 한글 조합(marked text), 영문 통과, commit 경로, ring buffer | 주요 앱에서 한글이 쳐진다 |
+| M2 ✅ | 최소 입력기 — 한글 조합(marked text), commit 경로, 최근 기록(ring buffer) | 주요 앱에서 한글이 쳐진다 (2026-09-25) |
 | M3 | 전환 키 셋 + menu bar 표시 | "전환 → 다음 키" 순서가 test 로 고정된다 |
 | M4 | 앱별 기억 + 앱 규칙 | Hammerspoon 입력 전환 코드를 지운다 |
 | M5 | 앱 호환성 검증 → 일상 사용 | 일상 사용 기간 동안 세 증상이 한 번도 없다 → Apple 한국어 입력기를 지운다 |

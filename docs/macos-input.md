@@ -125,6 +125,23 @@ keyDown return     → insertText "글" repl={1,1} → doCommand insertNewline: 
 - **TIS API 는 main thread 에서만 부른다.** test 들이 병렬로 돌며 여러 thread 에서 `TISCreateInputSourceList` 를 부르자 process 가 abort(signal 6)했다. 직렬로는 통과했다. ✅
 - Apple 의 `2SetHangul` layout 은 key 26개 × Shift 유무 52가지 모두 homi 의 두벌식 표와 같다 — Shift 는 ㅃㅉㄸㄲㅆㅒㅖ 만 바꾸고, 나머지 key 는 Shift 여도 같은 자모다. ✅ (`UCKeyTranslate` 대조 test)
 
+## homi 가 한글을 조합하다 (M2)
+
+- homi 는 조합 중인 글자를 `setMarkedText` 로 보이고, 음절이 넘어갈 때만 `insertText` 로 확정한다. `replacementRange` 는 늘 NSNotFound. ✅ (probe run 3)
+
+  ```
+  ㅇ ㅜ ㄹ   → setMarked "ㅇ" → "우" → "울"
+  ㅣ         → insertText "우" + setMarked "리"     도깨비불
+  space      → insertText "가" → (app 이) " "
+  ㄴ ⌫       → setMarked ""                        조합 중 Backspace 는 homi 가
+  ⌫          → doCommand deleteBackward:           조합이 없으면 app 이
+  ```
+
+- homi 는 marked text 안의 선택을 `{글자 수, 0}`(커서를 글자 뒤로 — ongeul 과 같은 값)으로 보냈는데, app 은 `{0, 글자 수}`(전체 선택)로 받았다.
+  IMK 가 중간에서 바꾼 것으로 보인다. 🔶 원인 미확인 — 화면에 드러난 문제는 아직 없다.
+- **Telegram(`ru.keepcoder.Telegram` 12.9, native AppKit)에서 Apple 두벌식이 초성을 잃었다**: `아` 를 치면 `ㅏ` 만 남는다 (주인 관측, 2026-09-25).
+  같은 곳에서 homi 로는 재현되지 않았다. Apple 입력기의 바꿔치기 방식이 app 의 문서 위치 답과 어긋날 때의 모양으로 보인다 🔶 — 결정 5(marked text)의 근거 하나.
+
 ## 관측 기록
 
 | 날짜 | 실험 | 비고 |
@@ -133,3 +150,4 @@ keyDown return     → insertText "글" repl={1,1} → doCommand insertNewline: 
 | 2026-09-25 | probe run 1 — Caps Lock 전환, `gks`, `한글` + Return | Apple 두벌식, NSTextView (probe 초판, bundle 없이 실행) |
 | 2026-09-25 | probe run 2 — `한글` + space + Return, `닭` + Backspace, Caps Lock 직후 입력, 중간중간 ⌘Tab | handleEvent 중첩·질문 기록 추가, bundle 로 실행. 첫 글자 영문은 재현 안 됨 (전환 후 200ms 넘게 뒤에 쳤다) |
 | 2026-09-25 | M0 — homi(빈 입력기) 등록·선택, probe 에 알파벳·Shift+Space·Caps Lock | homi 의 lifecycle log(`log stream`)와 probe log 를 함께 봤다 |
+| 2026-09-25 | M2 — homi 로 probe 와 여러 app 에서 한글 입력 (probe run 3) | Telegram 의 Apple 입력기 초성 유실을 주인이 관측, homi 로는 재현 안 됨 |
