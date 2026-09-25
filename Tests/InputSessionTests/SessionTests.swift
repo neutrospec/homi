@@ -16,14 +16,27 @@ func key(_ letter: Character, _ modifiers: Modifiers = []) -> KeyEvent {
 let space = KeyEvent(keyCode: 49)
 let backspace = KeyEvent(keyCode: KeyCode.delete)
 
-/// key 들을 차례로 넣은 결과 — 각 key 를 먹었는지와, client 에게 한 일을 이어 붙인 것.
-func press(_ keys: [KeyEvent], _ session: inout Session) -> (handled: [Bool], actions: [Action]) {
-    let outcomes = keys.map { session.handle($0) }
-    return (outcomes.map(\.handled), outcomes.flatMap(\.actions))
+/// key 들을 차례로 넣은 결과 — 각 key 를 먹었는지, client 에게 한 일을 이어 붙인 것, 마지막 모드.
+/// 앞 key 가 돌려준 모드로 다음 key 를 처리한다 (app 층이 하는 그대로).
+func press(_ keys: [KeyEvent], _ session: inout Session, mode: Mode = .korean)
+    -> (handled: [Bool], actions: [Action], mode: Mode)
+{
+    var mode = mode
+    var handled: [Bool] = []
+    var actions: [Action] = []
+    for key in keys {
+        let outcome = session.handle(key, mode: mode)
+        handled.append(outcome.handled)
+        actions += outcome.actions
+        mode = outcome.mode
+    }
+    return (handled, actions, mode)
 }
 
-func press(_ letters: String, _ session: inout Session) -> (handled: [Bool], actions: [Action]) {
-    press(letters.map { key($0) }, &session)
+func press(_ letters: String, _ session: inout Session, mode: Mode = .korean)
+    -> (handled: [Bool], actions: [Action], mode: Mode)
+{
+    press(letters.map { key($0) }, &session, mode: mode)
 }
 
 @Test("자모 key 는 먹고, 조합 중인 글자를 marked text 로 보인다")
@@ -45,8 +58,8 @@ func syllableCommits() {
 func dokkaebibul() {
     var session = Session()
     _ = press("rkr", &session)  // 각
-    let outcome = session.handle(key("k"))  // + ㅏ
-    #expect(outcome == Outcome(handled: true, actions: [.insert("가"), .mark("가")]))
+    let outcome = session.handle(key("k"), mode: .korean)  // + ㅏ
+    #expect(outcome == Outcome(handled: true, actions: [.insert("가"), .mark("가")], mode: .korean))
 }
 
 @Test("Shift 는 쌍자음, Caps Lock 은 무시", arguments: [
@@ -57,8 +70,8 @@ func dokkaebibul() {
 ])
 func shiftAndCapsLock(event: KeyEvent, expected: String) {
     var session = Session()
-    let outcome = session.handle(event)
-    #expect(outcome == Outcome(handled: true, actions: [.mark(expected)]))
+    let outcome = session.handle(event, mode: .korean)
+    #expect(outcome == Outcome(handled: true, actions: [.mark(expected)], mode: .korean))
 }
 
 @Test("자모가 아닌 key 는 조합을 확정하고 app 으로 넘긴다", arguments: [
@@ -71,8 +84,8 @@ func shiftAndCapsLock(event: KeyEvent, expected: String) {
 func nonJamoCommits(keyCode: UInt16) {
     var session = Session()
     _ = press("gks", &session)
-    let outcome = session.handle(KeyEvent(keyCode: keyCode))
-    #expect(outcome == Outcome(handled: false, actions: [.insert("한")]))
+    let outcome = session.handle(KeyEvent(keyCode: keyCode), mode: .korean)
+    #expect(outcome == Outcome(handled: false, actions: [.insert("한")], mode: .korean))
     #expect(session.composing.isEmpty)
 }
 
@@ -82,8 +95,8 @@ func nonJamoCommits(keyCode: UInt16) {
 func modifiedKeysCommit(modifiers: Modifiers) {
     var session = Session()
     _ = press("gks", &session)
-    let outcome = session.handle(key("c", modifiers))
-    #expect(outcome == Outcome(handled: false, actions: [.insert("한")]))
+    let outcome = session.handle(key("c", modifiers), mode: .korean)
+    #expect(outcome == Outcome(handled: false, actions: [.insert("한")], mode: .korean))
 }
 
 @Test("조합 중인 것이 없으면 자모가 아닌 key 는 아무것도 하지 않고 넘긴다")
@@ -106,8 +119,8 @@ func backspaceWhileComposing() {
 @Test("Backspace — 조합 중인 것이 없으면 app 이 지운다")
 func backspaceWhenEmpty() {
     var session = Session()
-    let outcome = session.handle(backspace)
-    #expect(outcome == Outcome(handled: false, actions: []))
+    let outcome = session.handle(backspace, mode: .korean)
+    #expect(outcome == Outcome(handled: false, actions: [], mode: .korean))
 }
 
 @Test("commit 은 조합 중인 글자를 확정하고, 두 번째는 아무것도 하지 않는다")

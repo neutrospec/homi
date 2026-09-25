@@ -141,6 +141,23 @@ keyDown return     → insertText "글" repl={1,1} → doCommand insertNewline: 
   IMK 가 중간에서 바꾼 것으로 보인다. 🔶 원인 미확인 — 화면에 드러난 문제는 아직 없다.
 - **Telegram(`ru.keepcoder.Telegram` 12.9, native AppKit)에서 Apple 두벌식이 초성을 잃었다**: `아` 를 치면 `ㅏ` 만 남는다 (주인 관측, 2026-09-25).
   같은 곳에서 homi 로는 재현되지 않았다. Apple 입력기의 바꿔치기 방식이 app 의 문서 위치 답과 어긋날 때의 모양으로 보인다 🔶 — 결정 5(marked text)의 근거 하나.
+- **Telegram 에서 조합 중에 누른 Enter 는 전송이 아니라 줄바꿈이 된다** (주인 보고 — Apple 입력기 때부터). 원인은 Telegram 의 규칙이다 ✅ source:
+  `TelegramSwift/packages/InputView/Sources/InputView/ChatInputTextView.swift` `keyDown` (a404806, 2025-06-30) —
+  Enter 는 `!self.hasMarkedText()` 일 때만 전송하고, 조합 중이면 `super.keyDown` 으로 입력기에 넘긴다 → 입력기가 확정 → `insertNewline`.
+  일본어·중국어의 "Enter = 변환 확정" 관례다. marked text 를 쓰는 homi 도 같다.
+  고치려면: 조합 중 Enter 를 확정하고 먹은 뒤 Enter 를 다시 보낸다 → 손쉬운 사용 권한 + 고정 서명 (AGENTS.md 열린 결정, M4).
+
+## 한/영 전환 key (M3)
+
+- **Caps Lock → F18 remap 은 관리자 권한 없이 걸린다** (`hidutil property --set '{"UserKeyMapping":[…]}'`, macOS 27 26A428). ✅
+  공개 API `IOHIDEventSystemClientSetProperty(…, "UserKeyMapping", …)` 로 homi 가 직접 건다 — homi 가 선택된 동안에만.
+- remap 된 Caps Lock 은 입력기에 **평범한 keyDown** 으로 온다: `kc=79 chars=U+F715 mods=fn`. 대문자 고정을 바꾸는 flagsChanged 는 한 번도 없었다. ✅ (probe)
+  → 다음 key 와 같은 흐름이라 "전환 → 다음 key" 순서가 보장되고, 불빛·누름 지연·system 의 Caps Lock 전환이 끼어들 자리가 없다.
+- F18 은 fn 수식키를 달고 온다 — 전환 판정을 수식키 검사보다 먼저 해야 한다. ✅
+- `recognizedEvents` 가 keyDown 말고 다른 event 도 받겠다고 하면, IMK 의 기본 mouse 처리(조합 영역 밖 click → `commitComposition`)가 꺼진다.
+  그래서 homi 는 leftMouseDown 도 받아 직접 확정한다. ✅ `IMKInputController.h` (recognizedEvents 주석)
+- **전환 직후의 첫 key 는 늘 새 모드였다** — Caps Lock(F18)·오른쪽 ⌘ tap·Shift+Space 로 35번 전환, 틀린 경우 0. 조합 중 전환은 먼저 확정한다 (`insertText "아"`). ✅ (probe run 4)
+  "재현 안 됨" 이 아니라 구조가 막는 것이다 — 전환 key 와 다음 key 가 같은 흐름에서 차례로 처리된다 (`ToggleTests` 가 고정).
 
 ## 관측 기록
 
@@ -151,3 +168,5 @@ keyDown return     → insertText "글" repl={1,1} → doCommand insertNewline: 
 | 2026-09-25 | probe run 2 — `한글` + space + Return, `닭` + Backspace, Caps Lock 직후 입력, 중간중간 ⌘Tab | handleEvent 중첩·질문 기록 추가, bundle 로 실행. 첫 글자 영문은 재현 안 됨 (전환 후 200ms 넘게 뒤에 쳤다) |
 | 2026-09-25 | M0 — homi(빈 입력기) 등록·선택, probe 에 알파벳·Shift+Space·Caps Lock | homi 의 lifecycle log(`log stream`)와 probe log 를 함께 봤다 |
 | 2026-09-25 | M2 — homi 로 probe 와 여러 app 에서 한글 입력 (probe run 3) | Telegram 의 Apple 입력기 초성 유실을 주인이 관측, homi 로는 재현 안 됨 |
+| 2026-09-25 | Caps Lock → F18 remap 실험 (hidutil) | homi 가 kc=79 keyDown 으로 받음, 실험 후 되돌림 |
+| 2026-09-25 | M3 — 전환 key 셋 (probe run 4) + 주인이 여러 app 에서 확인 | Telegram 의 조합 중 Enter 는 여전히 줄바꿈 (M4 과제) |

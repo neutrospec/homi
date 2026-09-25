@@ -14,6 +14,7 @@ else {
 }
 
 log.info("started")
-withExtendedLifetime(server) {
+let watcher = SourceWatcher()
+withExtendedLifetime((server, watcher)) {
     NSApplication.shared.run()
 }

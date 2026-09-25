@@ -3,7 +3,8 @@
 **homi** (`com.unocult.inputmethod.homi`) — macOS 한글 입력기. 주인 한 사람이 매일 쓰는 도구이고,
 목표는 **두벌식 한글 입력이 완벽하게 동작하는 것** 하나다. 기능을 늘리는 프로젝트가 아니다 — 잡다한 기능·옵션·변죽은 만들지 않는다.
 
-> **현재 (2026-09-25)**: M2 완료 — homi 가 한글을 조합한다 (한글 전용). 다음은 M3 (전환 키 셋 + menu bar 표시) → [진행 단계](#진행-단계)
+> **현재 (2026-09-25)**: M3 완료 — homi 안에서 한/영 전환 (Caps Lock·오른쪽 ⌘·Shift+Space), 모드는 app 전체가 하나.
+> 다음은 M4 (app 별 기억 + app 규칙 + 조합 중 Enter·ESC) → [진행 단계](#진행-단계)
 
 ## 문서
 
@@ -62,7 +63,11 @@ eventtap timeout·stale cache·비동기 전환 race 와의 싸움이다 (`~/.ha
 
 ### 한/영 전환
 
-- 전환 키 셋 모두 동작: **Caps Lock**, **오른쪽 ⌘ 단독 tap**, **Shift+Space**. 받는 방법은 [열린 결정](#열린-결정).
+- 전환 키 셋 모두 동작: **Caps Lock**, **오른쪽 ⌘ 단독 tap**, **Shift+Space** (M3, 2026-09-25). 받는 방법:
+  - Caps Lock: homi 가 선택된 동안 F18 로 remap 해 평범한 keyDown 으로 받는다 — 다른 input source 에서는 원래대로
+  - 오른쪽 ⌘: flagsChanged + system 의 key·mouse 누름 횟수 (⌘C·⌘Tab 은 tap 이 아니다) — 권한 불필요
+  - Shift+Space: keyDown
+- 모드 표시는 homi 의 menu bar 표시(한/A)로 한다. system input menu 의 icon("호")은 고정이다 (2026-09-25 주인 결정).
 - 전환은 즉시 — 다음 키부터 새 모드. 조합 중이면 먼저 commit 하고 전환한다.
 - Caps Lock 은 전환 전용이다. 대문자 고정으로 쓰지 않는다.
 - 오른쪽 ⌘ 는 단독으로 눌렀다 뗄 때만 전환. 다른 키와 함께 쓰면 평소의 ⌘ 다.
@@ -103,7 +108,8 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 | `InputSession` | key 해석(자모·Backspace·넘길 key, M3 부터 전환 키·trigger), 모드, 앱별 기억과 규칙, 최근 기록(`Recorder`) | `HangulCore` |
 | `homi` (app, `Sources/homi`) | IMK glue — `IMKServer`, `HomiInputController`, NSEvent 변환, menu bar 표시. `Bundle/` 에 `Info.plist`·resource | 위 둘 + AppKit·InputMethodKit |
 
-- `Info.plist` 는 한국어 mode 하나(`com.unocult.inputmethod.homi.korean`, `smKorean`)만 둔다 — [열린 결정](#열린-결정)의 (a) 를 잠정 적용.
+- `Info.plist` 는 한국어 mode 하나(`com.unocult.inputmethod.homi.korean`, `smKorean`)만 둔다 — 한/영은 homi 안의 모드이고
+  표시도 homi 가 하므로 system 에 mode 를 알릴 일이 없다 (결정 4). 비밀번호 칸에서는 system 이 ABC 로 바꾼다.
   mode 구성을 바꾸면 logout + input source 재추가가 필요하다.
 
 - 아래 두 module 은 AppKit·IMK 를 import 하지 않는다. 그래서 "key 순서 → client 에게 할 일" 대부분을 `swift test` 에서 검증한다.
@@ -136,12 +142,8 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 
 | 결정 | 선택지 | 근거 · 할 실험 | 때 |
 |---|---|---|---|
-| system 에 보일 mode | (a) 한국어 mode 하나 + 우리 status item 으로 한/A 표시 · (b) 한국어·영문 두 mode, `selectInputMode` 는 key 가 멈췄을 때만 | (a) 는 결정 4 와 맞고 비밀번호 칸은 system 이 ABC 로 대체한다. 대가는 cursor 옆 system 표시가 없다는 것. (b) 는 ongeul 방식. **M0 는 (a) 로 등록했다** | M3 |
-| Caps Lock 받기 | (A) flagsChanged + IOKit 으로 lock 되돌리기 + delay override · (B) Caps Lock → F18 remap, F18 keyDown 이 전환 키 | (B) 가 결정적. macOS 27 에서 권한 없이 걸리는지 실험 | M3 |
-| 오른쪽 ⌘ 받기 | press·release 사이 `CGEventSourceCounterForEventType` 비교(권한 불필요, 전례 없음) · CGEventTap(손쉬운 사용) | 실험 | M3 |
-| Shift+Space 받기 | IMK `handle()` · event tap | iTerm2·JetBrains 는 입력기가 먹어도 space 를 친다 — 실험 | M3 |
-| terminal 의 ESC | 조합 중 ESC: 확정 → key 를 먹고 다시 보냄 · 그대로 둠 | Ghostty·iTerm2 실험 | M4 |
-| 서명 신원 | 자체 서명 인증서 · Apple Development(Apple ID) | TCC 권한(event tap 등)을 쓰게 되면 필수 | 필요해질 때 |
+| 조합 중 Enter·ESC | 확정 → 그 key 는 먹고 **다시 보냄** · 그대로 둠 (두 번 누르기) | Telegram 은 조합 중 Enter 를 줄바꿈으로 쓴다(source 확인), terminal 은 조합 중 ESC·Enter 를 버린다(조사). 다시 보내기는 손쉬운 사용 권한 + 고정 서명이 필요 | M4 |
+| 서명 신원 | 자체 서명 인증서 · Apple Development(Apple ID) | TCC 권한(event tap, key 다시 보내기)을 쓰게 되면 필수 — 조합 중 Enter·ESC 때문에 M4 에서 필요해진다 | M4 |
 | 설치 위치 | `~/Library/Input Methods` · `/Library/Input Methods` | Secure Keyboard Entry 가 켜지면 전자는 비활성된다 (macOS 15.4.1). **M0 는 전자** — sudo 가 필요 없고, 지금 Secure Keyboard Entry 가 늘 켜진 곳이 없다 | M5 |
 
 ## 선행 사례
@@ -156,6 +158,7 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 
 - `swift build` — 전부 build. `swift test` — 모든 변경의 최소 관문. 지금은 `HangulCore`: spec 의 예 전부, Apple `2SetHangul` layout 과의 대조, 무작위 입력 불변식.
   TIS 를 부르는 test 는 `@MainActor` 여야 한다 (병렬 test 에서 다른 thread 로 부르면 abort).
+  Swift Testing 의 `#expect(...)` 안에서는 mutating method 를 부를 수 없다 — 결과를 변수에 먼저 받는다 (세 번 되풀이한 실수).
 - 개발 도구 (`tools/`, 제품 아님):
   - `swift run tis list|current|watch|register|enable|disable|select` — input source 조회·관찰·조작
   - `scripts/probe.sh` — test client 창을 띄운다 (log: `build/probe.log`). key event, `handleEvent` 의 handled 여부,
@@ -227,7 +230,7 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 | M0 ✅ | 준비 — SwiftPM package, 개발 도구 `tis`·`probe`, 선행 조사, 이름 homi·bundle ID, 설치 script, 빈 입력기 등록 | 빈 입력기가 System Settings 에 보이고 선택된다 (2026-09-25) |
 | M1 ✅ | `HangulCore` — 두벌식 조합, `docs/spec.md`, test | 조합 규칙 전부가 test 로 고정된다 (2026-09-25) |
 | M2 ✅ | 최소 입력기 — 한글 조합(marked text), commit 경로, 최근 기록(ring buffer) | 주요 앱에서 한글이 쳐진다 (2026-09-25) |
-| M3 | 전환 키 셋 + menu bar 표시 | "전환 → 다음 키" 순서가 test 로 고정된다 |
+| M3 ✅ | 전환 키 셋 + menu bar 표시 | "전환 → 다음 키" 순서가 test 로 고정된다 (2026-09-25) |
 | M4 | 앱별 기억 + 앱 규칙 | Hammerspoon 입력 전환 코드를 지운다 |
 | M5 | 앱 호환성 검증 → 일상 사용 | 일상 사용 기간 동안 세 증상이 한 번도 없다 → Apple 한국어 입력기를 지운다 |
 | M6 | 한자 변환 | |
