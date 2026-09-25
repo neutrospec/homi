@@ -120,6 +120,11 @@ keyDown return     → insertText "글" repl={1,1} → doCommand insertNewline: 
 - IMK 의 `error messaging the mach port for IMKCFRunLoopWakeUpReliable` 은 세 번째 — 새 source·새 client 와의 첫 상호작용마다 나오고, 매번 무해했다. ✅
 - LaunchServices: app 을 죽이자마자 `open` 하면 -600 — 죽어가는 process 에 붙으려 한다. 종료를 기다린 뒤 연다 (`scripts/probe.sh`). ✅
 
+## HangulCore 를 만들며 (M1)
+
+- **TIS API 는 main thread 에서만 부른다.** test 들이 병렬로 돌며 여러 thread 에서 `TISCreateInputSourceList` 를 부르자 process 가 abort(signal 6)했다. 직렬로는 통과했다. ✅
+- Apple 의 `2SetHangul` layout 은 key 26개 × Shift 유무 52가지 모두 homi 의 두벌식 표와 같다 — Shift 는 ㅃㅉㄸㄲㅆㅒㅖ 만 바꾸고, 나머지 key 는 Shift 여도 같은 자모다. ✅ (`UCKeyTranslate` 대조 test)
+
 ## 관측 기록
 
 | 날짜 | 실험 | 비고 |

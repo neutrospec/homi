@@ -3,7 +3,8 @@
 **homi** (`com.unocult.inputmethod.homi`) — macOS 한글 입력기. 주인 한 사람이 매일 쓰는 도구이고,
 목표는 **두벌식 한글 입력이 완벽하게 동작하는 것** 하나다. 기능을 늘리는 프로젝트가 아니다 — 잡다한 기능·옵션·변죽은 만들지 않는다.
 
-> **현재 (2026-09-25)**: M0 완료 — 빈 homi 가 등록되어 선택되고, 모든 key 를 통과시킨다. 다음은 M1 (두벌식 조합 엔진) → [진행 단계](#진행-단계)
+> **현재 (2026-09-25)**: M1 완료 — 두벌식 조합 엔진(`HangulCore`)이 spec 과 test 로 고정됐다. homi 는 아직 모든 key 를 통과시킨다.
+> 다음은 M2 (엔진을 IMK 에 잇는 최소 입력기) → [진행 단계](#진행-단계)
 
 ## 문서
 
@@ -52,8 +53,10 @@ eventtap timeout·stale cache·비동기 전환 race 와의 싸움이다 (`~/.ha
 
 ### 한글 입력
 
-- **두벌식 표준만.** 세벌식·옛한글·모아치기·자동 순서 교정 없음. Apple 과 다른 세부(ㅅㅅ → ㅆ 등)는 [열린 결정](#열린-결정).
-- 조합 규칙의 SOT 는 `docs/spec.md` 와 엔진 test (M1 에서 작성).
+- **두벌식 표준만.** 세벌식·옛한글·모아치기·자동 순서 교정 없음.
+- 조합 규칙의 SOT 는 `docs/spec.md` 와 엔진 test. 그중 주인이 정한 것:
+  - 같은 자음을 연달아 쳐도 합치지 않는다 — `ㄱㄱ` 은 `ㄱㄱ`. 된소리는 Shift 로만 (2026-09-25). Apple 은 초성에서 합친다고 보고됐다.
+  - Backspace 는 자소 단위 (`닭 → 달 → 다 → ㄷ`), 모음 없는 겹자음은 합치지 않는다 (`ㄱㅅ` 은 `ㄱㅅ`) — Apple 과 같고, 주인이 지금 쓰는 그대로.
 - 한글 모드에서도 `` ` `` 키는 `` ` `` 를 입력한다 (Apple 두벌식은 `₩`).
 - **한자 변환**: 필요, 후순위 (M6). 키는 `⌥↩` 예정. 사전 출처·license 는 그때 정한다.
 
@@ -136,7 +139,7 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 | 오른쪽 ⌘ 받기 | press·release 사이 `CGEventSourceCounterForEventType` 비교(권한 불필요, 전례 없음) · CGEventTap(손쉬운 사용) | 실험 | M3 |
 | Shift+Space 받기 | IMK `handle()` · event tap | iTerm2·JetBrains 는 입력기가 먹어도 space 를 친다 — 실험 | M3 |
 | terminal 의 ESC | 조합 중 ESC: 확정 → key 를 먹고 다시 보냄 · 그대로 둠 | Ghostty·iTerm2 실험 | M4 |
-| 두벌식 세부 | Apple 과 같게(ㅅㅅ → ㅆ 초성 합침, 홀로 선 ㄳ 없음, Option+key → ASCII) · 표준(libhangul) | 주인 손버릇 | M1 |
+| 한글 모드의 Option+key | Apple 처럼 평범한 ASCII (Option+a → a) · 영문과 같게 통과 (Option+a → å, terminal 의 Meta) | 주인 손버릇, terminal 의 Option-as-Meta 와 함께 확인 | M2 |
 | 서명 신원 | 자체 서명 인증서 · Apple Development(Apple ID) | TCC 권한(event tap 등)을 쓰게 되면 필수 | 필요해질 때 |
 | 설치 위치 | `~/Library/Input Methods` · `/Library/Input Methods` | Secure Keyboard Entry 가 켜지면 전자는 비활성된다 (macOS 15.4.1). **M0 는 전자** — sudo 가 필요 없고, 지금 Secure Keyboard Entry 가 늘 켜진 곳이 없다 | M5 |
 
@@ -150,7 +153,8 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 
 ## Build · 설치 · 검증
 
-- `swift build` — 전부 build. `swift test` — 엔진·session test (M1 부터). 모든 변경의 최소 관문.
+- `swift build` — 전부 build. `swift test` — 모든 변경의 최소 관문. 지금은 `HangulCore`: spec 의 예 전부, Apple `2SetHangul` layout 과의 대조, 무작위 입력 불변식.
+  TIS 를 부르는 test 는 `@MainActor` 여야 한다 (병렬 test 에서 다른 thread 로 부르면 abort).
 - 개발 도구 (`tools/`, 제품 아님):
   - `swift run tis list|current|watch|register|enable|disable|select` — input source 조회·관찰·조작
   - `scripts/probe.sh` — test client 창을 띄운다 (log: `build/probe.log`). key event, `handleEvent` 의 handled 여부,
@@ -220,7 +224,7 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 | | 내용 | 완료 기준 |
 |---|---|---|
 | M0 ✅ | 준비 — SwiftPM package, 개발 도구 `tis`·`probe`, 선행 조사, 이름 homi·bundle ID, 설치 script, 빈 입력기 등록 | 빈 입력기가 System Settings 에 보이고 선택된다 (2026-09-25) |
-| M1 | `HangulCore` — 두벌식 조합, `docs/spec.md`, test | 조합 규칙 전부가 test 로 고정된다 |
+| M1 ✅ | `HangulCore` — 두벌식 조합, `docs/spec.md`, test | 조합 규칙 전부가 test 로 고정된다 (2026-09-25) |
 | M2 | 최소 입력기 — 한글 조합(marked text), 영문 통과, commit 경로, ring buffer | 주요 앱에서 한글이 쳐진다 |
 | M3 | 전환 키 셋 + menu bar 표시 | "전환 → 다음 키" 순서가 test 로 고정된다 |
 | M4 | 앱별 기억 + 앱 규칙 | Hammerspoon 입력 전환 코드를 지운다 |
