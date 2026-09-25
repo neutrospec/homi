@@ -202,6 +202,53 @@ keyDown return     → insertText "글" repl={1,1} → doCommand insertNewline: 
 - **대문자 고정은 누르고 있는 동안 켜진다**: Caps Lock 을 단독으로 0.5초 누르고 있으면 그때 뒤집는다 (timer + `ModifierTap.holdReached`) — 뗄 때 판정했더니
   macOS 와 달리 떼야 켜졌다 (주인). 그 사이에 다른 key 가 눌리면(system 누름 횟수가 변하면) 아니다. ✅
 
+## 한자 변환 — 확정한 글자는 바꾸지 않는다 (M6)
+
+- **Apple 식(선택 없이 커서 앞 단어)을 해 보고 뺐다** (2026-09-25). homi 가 이어서 친 한글을 기억해 두었다가, ⌥↩ 때 app 에게 그 자리 글자를
+  확인하고(`markedRange`·`attributedSubstring`) 조합 중인 글자를 확정한 뒤 `setMarkedText(단어, replacementRange: 그 자리)` 로 단어를 marked text 로 되돌렸다 —
+  일본어 입력기의 재변환과 같은 호출. 주인 관측 ✅:
+
+  | app | 결과 |
+  |---|---|
+  | TextEdit · Telegram | 맞다 — 단어에만 밑줄, 고르면 한자 |
+  | Chrome | 되는 입력칸과 안 되는 입력칸이 있다 |
+  | VS Code · Orca | 단어가 선택된 듯 보이지만 고르면 `나는한자漢字` — 조합을 커서에 따로 만들었다 |
+  | IntelliJ | 고르면 단어가 지워지고 한자도 생기지 않는다 |
+  | Word | 한 글자만 (Office 는 위치를 준 교체에 깨진다는 조사 때문에 조합 중인 글자만 바꾸게 했다) |
+
+- 왜 app 마다 다른가:
+  - IntelliJ: JBR 은 교체 범위를 `SelectTextRangeEvent` 로 넘기는데, IntelliJ 는 그것을 speed search 에만 쓴다 — editor 는 범위를 무시한다 ✅
+    (source: `intellij-community` `IdeEventQueue.kt` `handleSelectTextRangeEvent`, JBR `CInputMethod.java` `selectRange`).
+    JBR 의 `markedRange` 도 Java 의 입력 위치(`getInsertPositionOffset`)를 문서 위치처럼 빌려 쓴다 ✅. 한자가 사라진 까닭까지는 가르지 못했다.
+  - Chromium 은 교체 범위를 지원한다고 알린다 — `validAttributesForMarkedText` 에 `NSTextInputReplacementRangeAttributeName`(공개 header 에 없는 AppKit symbol) ✅.
+    Blink 는 그 범위를 선택하고 조합을 시작하지만, VS Code(Monaco) 같은 JS editor 는 자기가 모르는 선택에서 시작한 조합을 커서 자리의 새 입력으로 다룬다 🔶.
+    입력기는 page 안의 JS 를 알 수 없다. JBR 은 빈 목록을 돌려준다 ✅.
+  - 결론: 확정한 글자를 바꾸는 호출은 app(과 그 안의 JS)마다 다르게 다뤄진다 — 결정 5 가 맞았다.
+- **되는 조건에서는 살렸다** (2026-09-25 주인 요청). 된 곳(TextEdit·Telegram)은 macOS text 엔진(NSTextView)이고,
+  client 가 알리는 `validAttributesForMarkedText` 로 가려진다 ✅ (NSTextView 는 실험, 나머지는 source):
+
+  | client | 알리는 attribute |
+  |---|---|
+  | NSTextView (TextEdit, Telegram 의 입력칸) | `NSFont` `NSUnderline` `NSColor` `NSBackgroundColor` `NSUnderlineColor` `NSMarkedClauseSegment` `NSLanguage` **`NSTextInputReplacementRangeAttributeName`** `NSGlyphInfo` **`NSTextAlternatives`** `NSTextInsertionUndoable` `NSAttachment` |
+  | Chromium · WebKit | `NSUnderline` `NSUnderlineColor` `NSMarkedClauseSegment` `NSTextInputReplacementRangeAttributeName` (Chromium 이 WebKit 것을 옮겼다) |
+  | JetBrains Runtime · Ghostty | 없음 |
+
+  교체 범위와 받아쓰기 대안(`NSTextAlternatives`)을 함께 알리는 client 에서만 Apple 식을 쓴다. app 목록이 아니라 client 가 스스로 밝힌 입력 지원이다.
+  terminal 과 Office 는 이와 별도로 app 규칙(`convertsEnteredText`)으로 뺀다.
+- **입력기가 먹는 key 는 marked text 가 있는 채로 와야 한다** — 그래야 app 이 그 key 를 입력기의 것으로 본다:
+  - JBR: key 처리 중 marked text 없이 온 `insertText` 는 누른 key 의 입력으로 Java 에 간다 — 누른 key 의 KEY_PRESSED 다음에 글자마다 KEY_TYPED ✅
+    (`AWTView.m` `insertText:replacementRange:`·`keyDown:`, `CPlatformResponder.java` `handleKeyEvent`). Enter 로 골랐다면 IntelliJ 는 Enter 동작을 할 것이다 🔶.
+  - Chromium: key 전에 marked text 가 없었고 넣는 글자가 한 글자면 원래 keydown 을 page 에 보낸다 ✅ (`render_widget_host_view_cocoa.mm` `keyEvent:`).
+    key 처리 중의 `setMarkedText` 는 모아 두었다가 key 처리 뒤에 마지막 것 하나만 보낸다 ✅.
+  - M4 의 terminal 규칙(Ghostty·iTerm2)과 같은 규칙이다.
+  - 그래서 선택 영역도 ⌥↩ 때 `setMarkedText(글자)`(위치 없이 — 선택 영역에 한글을 칠 때와 같은 길)로 marked text 로 만들고, 고르면 `insertText` 한다.
+- terminal 도 선택 영역을 알려 준다 — Ghostty 의 `selectedRange`·`attributedSubstring` 은 화면의 선택을 돌려준다 ✅. 그 선택은 입력이 아니라 출력이라
+  거기서 조합을 시작하면 prompt 에 들어간다. 그래서 terminal 에서는 선택 영역을 바꾸지 않는다.
+- 선택 영역이 안 되는 곳 ✅ 주인 확인 (조합 중인 글자는 둘 다 된다):
+  - **Word**: 선택만 있을 때 ⌥↩ 가 homi 에 오지 않는다 — mouse 선택 뒤로 homi 기록에 key 가 없다. marked text 가 없을 때는 Word 가 key 를 먼저 가져가는 듯하다 🔶.
+  - **IntelliJ + IdeaVim**: mouse 로 선택하면 IdeaVim 은 Visual mode 가 된다. 조합을 시작하며 선택이 지워지면 Visual 을 나오는데,
+    Insert 로 돌아가지 않으면 고른 한자는 Normal mode 명령으로 읽혀 사라진다 (source: `IdeaSelectionControl.controlNonVimSelectionChange`). vim 의 의미다.
+
 ## 알려진 화면 문제
 
 - **Ghostty**: 한글 조합 중에 수식키(Caps Lock·오른쪽 ⌘)로 전환하면, 확정된 마지막 글자가 선택된 것처럼 보이다가 다음 key 에 사라진다. 글자는 제대로 들어간다(`한a`). ✅ 주인 관측
@@ -219,3 +266,4 @@ keyDown return     → insertText "글" repl={1,1} → doCommand insertNewline: 
 | 2026-09-25 | Caps Lock → F18 remap 실험 (hidutil) | homi 가 kc=79 keyDown 으로 받음, 실험 후 되돌림 |
 | 2026-09-25 | M3 — 전환 key 셋 (probe run 4) + 주인이 여러 app 에서 확인 | Telegram 의 조합 중 Enter 는 여전히 줄바꿈 (M4 과제) |
 | 2026-09-25 | M4 — app 별 기억·규칙, 다시 보내기, 전환 key 재설계 (주인이 여러 app 에서 확인, homi 기록 1건) | Ghostty·iTerm2·IntelliJ·Telegram 의 key 처리 source 확인 |
+| 2026-09-25 | M6 — Apple 식 한자 변환(커서 앞 단어)을 주인이 여러 app 에서 | TextEdit·Telegram 만 맞음 → macOS text 엔진 client 에서만 쓰기로. JBR·IntelliJ·IdeaVim·Chromium source 확인, Word 는 homi 기록 |

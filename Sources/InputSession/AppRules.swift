@@ -7,11 +7,19 @@ public struct AppProfile: Sendable, Equatable {
     /// 조합 중에 치면 app 이 그 key 를 잃거나 다르게 쓰는 key (key code).
     /// 조합을 확정한 뒤 그 key 는 먹고 **다시 보낸다** — 두 번째로 도착할 때는 조합이 없다.
     public var resendWhileComposing: Set<UInt16> = []
+    /// ⌥↩ 가 이미 입력된 글자(방금 친 단어·선택 영역)를 한자로 바꾸는가. false 면 조합 중인 글자만.
+    /// terminal: 선택 영역은 입력이 아니라 화면의 출력이고(Ghostty 는 그것을 `selectedRange` 로 알려 준다), 보낸 글자는 고칠 수 없다.
+    /// Office: 위치를 준 교체에 깨진다 (docs/research/app-compat-and-hangul.md).
+    public var convertsEnteredText = true
 
-    public init(startsInEnglish: Bool = false, englishTriggers: [Trigger] = [], resendWhileComposing: Set<UInt16> = []) {
+    public init(
+        startsInEnglish: Bool = false, englishTriggers: [Trigger] = [], resendWhileComposing: Set<UInt16> = [],
+        convertsEnteredText: Bool = true
+    ) {
         self.startsInEnglish = startsInEnglish
         self.englishTriggers = englishTriggers
         self.resendWhileComposing = resendWhileComposing
+        self.convertsEnteredText = convertsEnteredText
     }
 }
 
@@ -50,7 +58,8 @@ public enum AppRules {
 
     /// native terminal 은 조합 중에 누른 Enter·ESC·Tab 을 음절 확정에만 쓰고 key 를 버린다
     /// (source 확인: Ghostty `SurfaceView_AppKit.keyDown` — markedTextBefore 면 확정 글자만 보내고 화살표만 다시 보낸다).
-    private static let terminal = AppProfile(englishTriggers: [esc], resendWhileComposing: [returnKey, enter, escape, tab])
+    private static let terminal = AppProfile(
+        englishTriggers: [esc], resendWhileComposing: [returnKey, enter, escape, tab], convertsEnteredText: false)
 
     private static let table: [String: AppProfile] = [
         // 활성화될 때마다 영문 (Hammerspoon 규칙에서 옮김)
@@ -62,12 +71,19 @@ public enum AppRules {
         "com.microsoft.VSCode": AppProfile(englishTriggers: [esc]),
         "com.microsoft.VSCodeInsiders": AppProfile(englishTriggers: [esc]),
         "md.obsidian": AppProfile(englishTriggers: [esc]),
-        "dev.commandline.waveterm": AppProfile(englishTriggers: [esc]),
+        "dev.commandline.waveterm": AppProfile(englishTriggers: [esc], convertsEnteredText: false),  // terminal
 
         "com.googlecode.iterm2": terminal,
         // Ghostty 는 tmux prefix 도 (Ctrl-B, Ctrl-A — Ctrl 단독일 때만)
         "com.mitchellh.ghostty": AppProfile(
-            englishTriggers: [esc, ctrlB, ctrlA], resendWhileComposing: terminal.resendWhileComposing),
+            englishTriggers: [esc, ctrlB, ctrlA], resendWhileComposing: terminal.resendWhileComposing,
+            convertsEnteredText: false),
+        "com.apple.Terminal": AppProfile(convertsEnteredText: false),
+
+        // ⌥↩ 는 조합 중인 글자만 (`convertsEnteredText` 의 설명)
+        "com.microsoft.Word": AppProfile(convertsEnteredText: false),
+        "com.microsoft.Excel": AppProfile(convertsEnteredText: false),
+        "com.microsoft.Powerpoint": AppProfile(convertsEnteredText: false),
 
         // 조합 중 Enter 는 marked text 가 있으면 전송 대신 줄바꿈 — TelegramSwift ChatInputTextView.keyDown (source 확인)
         "ru.keepcoder.Telegram": AppProfile(resendWhileComposing: [returnKey, enter]),

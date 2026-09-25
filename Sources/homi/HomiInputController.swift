@@ -11,7 +11,7 @@ import Synchronization
 /// IMK header 에는 actor 표시가 없어 override 들이 nonisolated 여야 한다. 불리는 곳은 main thread 다.
 @objc(HomiInputController)
 nonisolated final class HomiInputController: IMKInputController {
-    private var session = Session()
+    private var session = Session(hanja: hanjaDictionary)
     private var commandTap = ModifierTap()
     private var capsLockTap = ModifierTap()
     private var capsLockHold: DispatchWorkItem?
@@ -85,7 +85,9 @@ nonisolated final class HomiInputController: IMKInputController {
         record("key \(key)")
         let mode = memory.withLock { $0.mode(for: app) }
         // 상태 변경을 끝낸 뒤에 client 를 부른다 — insertText 도중에 IMK 가 deactivate 를 끼워 부를 수 있다.
-        var outcome = session.handle(key, mode: mode, profile: AppRules.profile(for: app))
+        var outcome = session.handle(
+            key, mode: mode, profile: AppRules.profile(for: app), selectedText: { client.selectedText() },
+            textBefore: { client.textBefore($0) })
         if outcome.resend && !Resend.allowed() {
             // 다시 보낼 수 없으면 먹지 않는다 — key 를 잃는 것보다 예전처럼 넘기는 게 낫다.
             outcome.handled = false

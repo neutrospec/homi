@@ -1,4 +1,5 @@
 import Foundation
+import HangulCore
 import InputSession
 import Synchronization
 
@@ -17,3 +18,12 @@ nonisolated enum Memory {
         UserDefaults.standard.set(memory.modes.mapValues { $0 == .korean ? "korean" : "english" }, forKey: key)
     }
 }
+
+/// 한자 사전 — 번들의 hanja.txt 를 map 한다 (memory 에 올리지 않는다). 없으면 한자 변환만 꺼진다.
+nonisolated let hanjaDictionary: HanjaDictionary? = {
+    guard let url = Bundle.main.url(forResource: "hanja", withExtension: "txt") else {
+        log.error("hanja.txt missing from bundle")
+        return nil
+    }
+    return try? HanjaDictionary(contentsOf: url)
+}()

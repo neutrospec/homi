@@ -3,8 +3,8 @@
 **homi** (`com.unocult.inputmethod.homi`) — macOS 한글 입력기. 주인 한 사람이 매일 쓰는 도구이고,
 목표는 **두벌식 한글 입력이 완벽하게 동작하는 것** 하나다. 기능을 늘리는 프로젝트가 아니다 — 잡다한 기능·옵션·변죽은 만들지 않는다.
 
-> **현재 (2026-09-25)**: M4 — app 별 기억, app 규칙(`AppRules.swift`), 조합 중 Enter·ESC 다시 보내기, 수식키 전환(Caps Lock 짧게/길게, 오른쪽 ⌘)을
-> 주인이 확인했다 (Hammerspoon 입력 전환 코드는 주인이 직접 정리). 다음은 M5 — 일상 사용과 app 호환성 → [진행 단계](#진행-단계)
+> **현재 (2026-09-25)**: M0–M4 와 M6(한자 변환 `⌥↩`)을 주인이 확인했다 (Hammerspoon 입력 전환 코드는 주인이 직접 정리).
+> 지금은 M5 — 일상 사용과 app 호환성. 이상하면 주인이 곧바로 "최근 key 기록 저장" 을 누른다 → [진행 단계](#진행-단계)
 
 ## 문서
 
@@ -46,6 +46,10 @@ eventtap timeout·stale cache·비동기 전환 race 와의 싸움이다 (`~/.ha
      system 에 모드를 알리는 일(menu bar)은 key 처리 밖에서 한다.
 5. **조합 중인 글자는 marked text 로 보인다.** 이미 확정한 text 를 `replacementRange` 로 고쳐 쓰지 않고, `replacementRange` 는 NSNotFound 로 둔다.
    - 왜: Chromium·Electron·terminal·Office 는 문서 위치 질의에 비동기로 또는 틀리게 답한다. 교과서 경로(marked text)는 CJK 입력 때문에 모든 app 이 구현한다.
+   - 한자 변환도 marked text 를 바꾼다 — 조합 중인 글자, 또는 ⌥↩ 때 선택 영역에서 시작한 조합.
+   - 예외 하나 — Apple 식(선택 없이 커서 앞 단어): 교체를 제대로 받는 client 에서만, homi 가 기억한 글자를 그 자리에서 확인하고
+     `replacementRange` 로 marked text 로 되돌린다. 제대로 받는 client = macOS text 엔진(NSTextView) 수준을 알리는 것 —
+     `validAttributesForMarkedText` 에 교체 범위와 `NSTextAlternatives` 가 함께 있다. 다른 app 에서는 app 마다 다르게 깨졌다 (2026-09-25, docs/macos-input.md).
 6. **조합 엔진은 순수하다.** AppKit/IMK 를 모르는 결정적 state machine. 한글 조합의 정확성은 여기서 test 로 증명한다.
 7. **IMK 층은 얇다.** NSEvent 해석 → 엔진 → client 반영. 앱별 우회는 재현 증거가 있을 때만, 사유와 함께.
 
@@ -59,7 +63,17 @@ eventtap timeout·stale cache·비동기 전환 race 와의 싸움이다 (`~/.ha
   - Backspace 는 자소 단위 (`닭 → 달 → 다 → ㄷ`), 모음 없는 겹자음은 합치지 않는다 (`ㄱㅅ` 은 `ㄱㅅ`) — Apple 과 같고, 주인이 지금 쓰는 그대로.
   - ⌥(Option)+key 는 한글 모드에서도 영문일 때와 같다 — 조합을 확정하고 key 를 넘긴다 (`⌥a → å`, 2026-09-25). Apple 은 `⌥a → a`.
 - 한글 모드에서도 `` ` `` 키는 `` ` `` 를 입력한다 (Apple 두벌식은 `₩`).
-- **한자 변환**: 필요, 후순위 (M6). 키는 `⌥↩` 예정. 사전 출처·license 는 그때 정한다.
+- **한자 변환** `⌥↩` (M6) — 방금 친 단어, 없으면 조합 중인 글자, 그것도 없으면 선택한 한글.
+  - **방금 친 단어**(Apple 입력기처럼 선택 없이)는 macOS text 엔진을 쓰는 app(TextEdit·Telegram 등)에서만 — 되는 조건에서는 살린다 (2026-09-25 주인).
+    판별은 app 목록이 아니라 client 가 알리는 입력 지원이다 (결정 5 의 예외). VS Code·Orca·IntelliJ·Word 에서는 틀어졌다.
+    단어는 homi 가 이어서 친 한글 + 조합 중인 글자의 끝부분 중 사전에 있는 가장 긴 것 (`나는한자` → `한자`), `⌥↩` 를 다시 누르면 더 짧은 단어로.
+    한글이 아닌 key·수식키 조합·click·입력칸 이동·전환이 끼면 거기서 끊긴다 — app 의 문서를 뒤지지 않는다.
+  - 후보 창: 1–9 고르기, ↑↓ 옮기기, ←→ 쪽 넘기기, Enter·Space 확정, ESC 취소(한글 그대로), 다른 key 는 한글 그대로 두고 평소처럼.
+  - terminal(iTerm2·Ghostty·Wave·Terminal)과 Office(Word·Excel·PowerPoint)에서는 조합 중인 글자만 (`AppRules` 의 `convertsEnteredText`) —
+    terminal 의 선택 영역은 출력이고 보낸 글자는 고칠 수 없다. Office 는 위치를 준 교체에 깨진다.
+  - 선택 영역이 안 되는 곳 (2026-09-25 주인 확인): Word 는 선택만 있을 때 ⌥↩ 를 입력기에 주지 않는다(homi 기록에 key 가 없다).
+    IntelliJ + IdeaVim 은 mouse 선택이 Visual mode 라 고른 한자가 명령으로 읽힌다. 둘 다 조합 중인 글자는 된다.
+  - 사전: libhangul `data/hanja/hanja.txt` (BSD 3-clause, Choe Hwanjin — 저작권 표시가 file 머리에 있다). bundle 에 넣고 map 해서 이진 탐색한다.
 
 ### 한/영 전환
 
@@ -148,6 +162,12 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
     그래서 전환 key 는 글자를 만들지 않는 수식키여야 한다 — 규칙표는 docs/macos-input.md.
 11. **다시 보낸 key 는 event 대기열의 끝에 붙는다.** 조합 중 Enter·ESC 를 누르고 수 ms 안에 다음 key 를 이미 눌렀다면 둘의 순서가 바뀔 수 있다.
     일상 사용에서 지켜본다.
+12. **입력기가 먹는 key 는 marked text 가 있는 채로 와야 한다.** app 은 key 앞에 marked text 가 있었을 때만 그 key 를 입력기의 것으로 본다 —
+    JetBrains Runtime 은 marked text 없이 온 `insertText` 를 누른 key 의 입력으로 Java 에 보내고(Enter 로 골랐다면 Enter 동작까지),
+    Chromium 은 한 글자면 원래 keydown 을 page 에 보낸다. 10 의 terminal 규칙과 같은 이야기다. 그래서 선택 영역도 ⌥↩ 때 marked text 로 만든다.
+13. **확정한 글자를 marked text 로 되돌리는 재변환(`replacementRange`)은 app 마다 다르게 깨진다.** VS Code·Orca 는 조합을 커서에 따로 만들고,
+    IntelliJ editor 는 범위를 무시하고(source), Office 는 위치를 준 교체에 깨진다. Chromium 처럼 지원한다고 알려도 그 위의 JS editor 가 모른다 —
+    그래서 macOS text 엔진 수준을 알리는 client 에서만 한다 — 결정 5 의 예외가 좁은 이유다 (docs/macos-input.md).
 
 ## 열린 결정
 
@@ -243,4 +263,4 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 | M3 ✅ | 전환 키 셋 + menu bar 표시 | "전환 → 다음 키" 순서가 test 로 고정된다 (2026-09-25) |
 | M4 ✅ | 앱별 기억 + 앱 규칙 + 조합 중 Enter·ESC 다시 보내기 + 수식키 전환 | 주인 확인 (2026-09-25). Hammerspoon 입력 전환 코드는 주인이 직접 정리 |
 | M5 | 앱 호환성 검증 → 일상 사용 | 일상 사용 기간 동안 세 증상이 한 번도 없다 → Apple 한국어 입력기를 지운다 |
-| M6 | 한자 변환 | |
+| M6 ✅ | 한자 변환 — `⌥↩`: 방금 친 단어(macOS text 엔진 app)·조합 중인 글자·선택한 한글, libhangul 사전 | 주인 확인 (2026-09-25) |

@@ -10,11 +10,11 @@ let package = Package(
         .testTarget(name: "HangulCoreTests", dependencies: ["HangulCore"]),
         // key → client 호출. 역시 AppKit·IMK 를 모른다 — fake client 로 test 한다.
         .target(name: "InputSession", dependencies: ["HangulCore"]),
-        .testTarget(name: "InputSessionTests", dependencies: ["InputSession"]),
+        .testTarget(name: "InputSessionTests", dependencies: ["InputSession", "HangulCore"]),
         // 입력기 app. Bundle/ 은 Info.plist·resource — scripts/app.sh 가 bundle 에 넣는다.
         .executableTarget(
             name: "homi",
-            dependencies: ["InputSession"],
+            dependencies: ["InputSession", "HangulCore"],
             path: "Sources/homi",
             exclude: ["Bundle"],
             swiftSettings: [.defaultIsolation(MainActor.self)]
