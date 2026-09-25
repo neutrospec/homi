@@ -3,8 +3,8 @@
 **homi** (`com.unocult.inputmethod.homi`) — macOS 한글 입력기. 주인 한 사람이 매일 쓰는 도구이고,
 목표는 **두벌식 한글 입력이 완벽하게 동작하는 것** 하나다. 기능을 늘리는 프로젝트가 아니다 — 잡다한 기능·옵션·변죽은 만들지 않는다.
 
-> **현재 (2026-09-25)**: M3 완료 — homi 안에서 한/영 전환 (Caps Lock·오른쪽 ⌘·Shift+Space), 모드는 app 전체가 하나.
-> 다음은 M4 (app 별 기억 + app 규칙 + 조합 중 Enter·ESC) → [진행 단계](#진행-단계)
+> **현재 (2026-09-25)**: M4 — app 별 기억, app 규칙(`AppRules.swift`), 조합 중 Enter·ESC 다시 보내기, 수식키 전환(Caps Lock 짧게/길게, 오른쪽 ⌘)을
+> 주인이 확인했다 (Hammerspoon 입력 전환 코드는 주인이 직접 정리). 다음은 M5 — 일상 사용과 app 호환성 → [진행 단계](#진행-단계)
 
 ## 문서
 
@@ -63,14 +63,14 @@ eventtap timeout·stale cache·비동기 전환 race 와의 싸움이다 (`~/.ha
 
 ### 한/영 전환
 
-- 전환 키 셋 모두 동작: **Caps Lock**, **오른쪽 ⌘ 단독 tap**, **Shift+Space** (M3, 2026-09-25). 받는 방법:
-  - Caps Lock: homi 가 선택된 동안 F18 로 remap 해 평범한 keyDown 으로 받는다 — 다른 input source 에서는 원래대로
-  - 오른쪽 ⌘: flagsChanged + system 의 key·mouse 누름 횟수 (⌘C·⌘Tab 은 tap 이 아니다) — 권한 불필요
-  - Shift+Space: keyDown
+- 전환 키: **Caps Lock**, **오른쪽 ⌘ 단독 tap** (2026-09-25). 받는 방법:
+  - Caps Lock: homi 가 선택된 동안 오른쪽 Control 로 remap 해 flagsChanged 로 받는다. **짧게 = 전환, 길게(0.5초 이상) = 대문자 고정** — macOS 와 같다.
+    다른 input source 에서는 원래대로다.
+  - 오른쪽 ⌘: 짧게 = 전환. 사이에 다른 key·mouse 가 있었으면(⌘C·⌘Tab) 아니다 — system 의 누름 횟수로 판정, 권한 불필요
+  - 전환 key 가 수식키인 이유: terminal 은 입력기가 글자 없이 먹은 key 를 스스로 보낸다 (docs/macos-input.md). Shift+Space 전환은 그래서 없앴다.
 - 모드 표시는 homi 의 menu bar 표시(한/A)로 한다. system input menu 의 icon("호")은 고정이다 (2026-09-25 주인 결정).
 - 전환은 즉시 — 다음 키부터 새 모드. 조합 중이면 먼저 commit 하고 전환한다.
-- Caps Lock 은 전환 전용이다. 대문자 고정으로 쓰지 않는다.
-- 오른쪽 ⌘ 는 단독으로 눌렀다 뗄 때만 전환. 다른 키와 함께 쓰면 평소의 ⌘ 다.
+- 오른쪽 ⌘·Caps Lock 을 다른 키와 함께 쓰면 평소의 ⌘·Ctrl 이다.
 
 ### 앱별 상태
 
@@ -91,7 +91,11 @@ eventtap timeout·stale cache·비동기 전환 race 와의 싸움이다 (`~/.ha
   수식키 조건은 Hammerspoon 규칙 그대로: ESC 는 수식키 무관, Ctrl-B·Ctrl-A 는 Ctrl **단독**일 때만 (Ctrl-Shift-B 는 아님).
   - ⚠️ terminal(Ghostty·iTerm2)은 조합 중에 누른 ESC 를 음절 확정에 쓰고 key 자체는 버린다 — Apple 입력기에서 vim 에 ESC 를 두 번 누르게 되는 이유다. 정책은 [열린 결정](#열린-결정).
   - iTerm2 는 조합 중이 아니면 Ctrl 키를 입력기에 보여주지 않는다. Ctrl-B·Ctrl-A 규칙이 Ghostty 전용인 것과 맞는다.
-- 규칙 표는 source 안의 file 하나에 둔다. 설정 UI·설정 file 은 없다 — 바꾸면 다시 build·설치한다.
+- 규칙 표는 source 안의 file 하나(`Sources/InputSession/AppRules.swift`)에 둔다. 설정 UI·설정 file 은 없다 — 바꾸면 다시 build·설치한다.
+- 모드는 key 마다 그 입력칸의 app 으로 읽는다 (`ModeMemory`) — activate 알림이 늦거나 빠져도 틀리지 않는다. UserDefaults 에 남아 재시작해도 유지.
+- 조합 중 Enter·ESC 를 app 이 잃거나 다르게 쓰는 곳(Telegram 의 Enter, terminal 의 Enter·ESC·Tab)에서는 확정한 뒤 그 key 를 먹고 **다시 보낸다**.
+  손쉬운 사용 권한이 없으면 먹지 않고 예전처럼 넘긴다 — key 를 잃지 않는다.
+  다시 보낼 때는 **새 event** 를 만들어 원래 key 처리가 끝난 뒤 HID 경로로 보낸다 — 원래 event 를 복사해 보내면 app 에 닿지 않았다 (docs/macos-input.md).
 
 ### 하지 않는 것
 
@@ -136,14 +140,17 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 6. **`activateServer`·`setValue` 안에서 client 호출·block 금지.** Chrome 과 deadlock, Spotlight 멈춤 사례. `setValue` 는 focus 가 바뀔 때마다 같은 값으로 다시 온다 — echo 로 무시.
 7. **영문 mode 를 system 에 노출하면 비밀번호 칸에서도 그 mode 가 살아 key 를 받는다.** 완전 통과여야 한다. 한국어 mode 만 있으면 system 이 ABC 로 대체한다.
 8. **등록** — parent input method 를 먼저 enable, 첫 등록엔 logout 을 각오, `ComponentInputModeDict` 를 바꾸면 logout + 재추가. **`imklaunchagent` 는 절대 죽이지 않는다** (실행 중인 app 들이 모든 입력기를 잃는다).
-9. **ad-hoc 서명은 build 마다 신원이 바뀐다** — 손쉬운 사용·입력 모니터링 허가가 매번 풀린다.
+9. **ad-hoc 서명은 build 마다 신원이 바뀐다** — 손쉬운 사용·입력 모니터링 허가가 매번 풀린다. 그래서 login keychain 의 자체 서명 인증서
+   "homi code signing" 으로 서명한다 (`scripts/app.sh`, 2026-09-25 생성, 2036 만료). 신원 조건 = bundle ID + 이 인증서.
+10. **app 마다 "입력기가 먹었다" 판정이 다르다.** Ghostty·iTerm2 는 입력기의 YES 를 보지 않고, 조합도 글자도 없이 먹은 key 를 스스로 보낸다.
+    그래서 전환 key 는 글자를 만들지 않는 수식키여야 한다 — 규칙표는 docs/macos-input.md.
+11. **다시 보낸 key 는 event 대기열의 끝에 붙는다.** 조합 중 Enter·ESC 를 누르고 수 ms 안에 다음 key 를 이미 눌렀다면 둘의 순서가 바뀔 수 있다.
+    일상 사용에서 지켜본다.
 
 ## 열린 결정
 
 | 결정 | 선택지 | 근거 · 할 실험 | 때 |
 |---|---|---|---|
-| 조합 중 Enter·ESC | 확정 → 그 key 는 먹고 **다시 보냄** · 그대로 둠 (두 번 누르기) | Telegram 은 조합 중 Enter 를 줄바꿈으로 쓴다(source 확인), terminal 은 조합 중 ESC·Enter 를 버린다(조사). 다시 보내기는 손쉬운 사용 권한 + 고정 서명이 필요 | M4 |
-| 서명 신원 | 자체 서명 인증서 · Apple Development(Apple ID) | TCC 권한(event tap, key 다시 보내기)을 쓰게 되면 필수 — 조합 중 Enter·ESC 때문에 M4 에서 필요해진다 | M4 |
 | 설치 위치 | `~/Library/Input Methods` · `/Library/Input Methods` | Secure Keyboard Entry 가 켜지면 전자는 비활성된다 (macOS 15.4.1). **M0 는 전자** — sudo 가 필요 없고, 지금 Secure Keyboard Entry 가 늘 켜진 곳이 없다 | M5 |
 
 ## 선행 사례
@@ -231,6 +238,6 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 | M1 ✅ | `HangulCore` — 두벌식 조합, `docs/spec.md`, test | 조합 규칙 전부가 test 로 고정된다 (2026-09-25) |
 | M2 ✅ | 최소 입력기 — 한글 조합(marked text), commit 경로, 최근 기록(ring buffer) | 주요 앱에서 한글이 쳐진다 (2026-09-25) |
 | M3 ✅ | 전환 키 셋 + menu bar 표시 | "전환 → 다음 키" 순서가 test 로 고정된다 (2026-09-25) |
-| M4 | 앱별 기억 + 앱 규칙 | Hammerspoon 입력 전환 코드를 지운다 |
+| M4 ✅ | 앱별 기억 + 앱 규칙 + 조합 중 Enter·ESC 다시 보내기 + 수식키 전환 | 주인 확인 (2026-09-25). Hammerspoon 입력 전환 코드는 주인이 직접 정리 |
 | M5 | 앱 호환성 검증 → 일상 사용 | 일상 사용 기간 동안 세 증상이 한 번도 없다 → Apple 한국어 입력기를 지운다 |
 | M6 | 한자 변환 | |

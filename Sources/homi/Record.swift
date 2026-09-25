@@ -19,14 +19,14 @@ nonisolated func saveRecord() throws -> URL {
     let directory = FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/Logs/homi")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
-    let clock = Date.FormatStyle().hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).second(.twoDigits)
-        .secondFraction(.fractional(3)).locale(Locale(identifier: "en_US_POSIX"))
-    let lines = entries.map { "\($0.time.formatted(clock))  \($0.event)" }
+    let clock = DateFormatter()
+    clock.locale = Locale(identifier: "en_US_POSIX")
+    clock.dateFormat = "HH:mm:ss.SSS"  // 24시간제, 이 Mac 의 시각
+    let lines = entries.map { "\(clock.string(from: $0.time))  \($0.event)" }
     let header = "# homi 최근 기록 — 친 key 와 조합 결과가 들어 있다. 주인이 요청해서 저장했다."
 
-    let stamp = Date().formatted(.iso8601.year().month().day().time(includingFractionalSeconds: false))
-        .replacingOccurrences(of: ":", with: "")
-    let file = directory.appending(path: "record-\(stamp).txt")
+    clock.dateFormat = "yyyy-MM-dd'T'HHmmss"
+    let file = directory.appending(path: "record-\(clock.string(from: Date())).txt")
     try ([header] + lines).joined(separator: "\n").appending("\n").write(to: file, atomically: true, encoding: .utf8)
     return file
 }

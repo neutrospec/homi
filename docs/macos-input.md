@@ -159,6 +159,39 @@ keyDown return     → insertText "글" repl={1,1} → doCommand insertNewline: 
 - **전환 직후의 첫 key 는 늘 새 모드였다** — Caps Lock(F18)·오른쪽 ⌘ tap·Shift+Space 로 35번 전환, 틀린 경우 0. 조합 중 전환은 먼저 확정한다 (`insertText "아"`). ✅ (probe run 4)
   "재현 안 됨" 이 아니라 구조가 막는 것이다 — 전환 key 와 다음 key 가 같은 흐름에서 차례로 처리된다 (`ToggleTests` 가 고정).
 
+## app 은 "입력기가 key 를 먹었다" 를 제각각 판정한다 (M4)
+
+입력기가 `handle` 에서 YES(먹었다)를 돌려줘도, app 이 그 대답을 보지 않고 key 를 스스로 처리하는 경우가 있다. source 로 확인한 규칙:
+
+| app | key 를 app 이 처리하지 않는 조건 (그 밖에는 key 를 스스로 보낸다) | source |
+|---|---|---|
+| Ghostty | ① 이 key 전에 조합 중이었다 (그때는 확정 글자만 보내고, 화살표 말고는 key 를 버린다) ② 입력기가 **비지 않은** 글자를 `insertText` ③ key 처리 중 **keyboard layout 이 바뀌었다** ("an input method grabbed it") | `macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` `keyDown`, `String.keyEventText` |
+| iTerm2 (기본 설정) | ① 조합 중이었다 ② 입력기가 **1글자 이상** `insertText` ③ 처리 뒤 marked text 가 남았다. 입력기의 YES 는 실험 설정(experimentalKeyHandling)에서만 본다 | `sources/Keyboard/iTermKeyboardHandler.m` `shouldPassPostCocoaEventToDelegate`, `insertText` |
+| IntelliJ (JetBrains Runtime) | marked text 가 있거나, 입력기가 **빈 marked text 를 세웠거나** `insertText` 로 넣었다 (`fKeyEventsNeeded = NO`) | `src/java.desktop/macosx/native/libawt_lwawt/awt/AWTView.m` `keyDown`, `setMarkedText` |
+| Telegram | Enter 는 marked text 가 없을 때만 전송 | `TelegramSwift/packages/InputView/…/ChatInputTextView.swift` `keyDown` |
+
+그래서 관측된 것 ✅ (주인, 2026-09-25):
+- 영문 → 한글 전환처럼 **조합도 글자도 없이 먹은 key** 는 terminal 로 샌다 — Caps Lock 을 F18 로 받았을 때 Ghostty 에 F18 의 문자 U+F715(``)가, Shift+Space 로 전환하면 space 가 들어갔다.
+  한글 → 영문 전환은 조합 중이던 글자를 확정하는 `insertText` 가 곧 "먹었다" 가 되어 새지 않았다.
+- 빈 `insertText("")` 는 Ghostty·iTerm2 둘 다 "글자 없음" 으로 본다. marked text 를 세웠다 지우는 신호(macSKK 방식)도 Ghostty·iTerm2 에는 통하지 않는다.
+- 결론: **전환 key 는 글자를 만들지 않는 수식키여야 한다.** Caps Lock 은 오른쪽 Control 로 remap 해 tap 으로 받고, Shift+Space 전환은 없앴다.
+
+## key 다시 보내기 (M4)
+
+- 조합 중 Enter(Telegram)·ESC(terminal vim)는 확정한 뒤 그 key 를 먹고 **다시 보낸다** — 두 번째 key 가 도착할 때는 marked text 가 없다. ✅ 주인 확인 (Telegram 전송, Ghostty·iTerm2 vim ESC 한 번)
+- **원래 event 를 복사해 보내면 닿지 않는다**: `NSEvent.cgEvent.copy()` 를 key 처리 도중에 `post` 했더니 Telegram 에서 "틱" 소리만 나고 Enter 가 사라졌다.
+  Telegram 의 전송 조건(`flags == 0` + 입력칸에 글자)은 맞았으므로 event 가 입력칸에 닿지 않은 것이다. ✅ (homi 기록 + TelegramSwift source)
+  → **새 event** 를 만들어(`CGEvent(keyboardEventSource:virtualKey:keyDown:)`, key code 와 수식키만 옮김) **원래 key 처리가 끝난 뒤**(`DispatchQueue.main.async`) HID 경로(`.cghidEventTap`)로 보내니 됐다. ✅
+  원인이 복사본에 딸린 창·시각 정보인지, 처리 도중에 보낸 시점인지는 가르지 않았다. 🔶
+- 다시 보내려면 **손쉬운 사용** 허가가 있어야 한다(`CGPreflightPostEventAccess`). macOS 27 의 System Settings 에서는 개인정보 보호 및 보안의 **Device & Data Access** 아래에 있다 (주인 확인).
+  `x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility` 가 그 화면을 연다. homi 가 목록에 없으면 "+" 로 `~/Library/Input Methods/homi.app` 을 넣는다.
+- 허가는 서명 신원(bundle ID + 인증서)에 붙는다 — 자체 서명 인증서로 서명하니 다시 build·설치해도 유지됐다. ✅
+
+## 알려진 화면 문제
+
+- **Ghostty**: 한글 조합 중에 수식키(Caps Lock·오른쪽 ⌘)로 전환하면, 확정된 마지막 글자가 선택된 것처럼 보이다가 다음 key 에 사라진다. 글자는 제대로 들어간다(`한a`). ✅ 주인 관측
+  전환이 flagsChanged 처리 중이라 확정이 keyDown 밖에서 일어나는 경우의 Ghostty 쪽 다시 그리기 문제로 보인다 🔶 — M5 에서 다시 본다.
+
 ## 관측 기록
 
 | 날짜 | 실험 | 비고 |
@@ -170,3 +203,4 @@ keyDown return     → insertText "글" repl={1,1} → doCommand insertNewline: 
 | 2026-09-25 | M2 — homi 로 probe 와 여러 app 에서 한글 입력 (probe run 3) | Telegram 의 Apple 입력기 초성 유실을 주인이 관측, homi 로는 재현 안 됨 |
 | 2026-09-25 | Caps Lock → F18 remap 실험 (hidutil) | homi 가 kc=79 keyDown 으로 받음, 실험 후 되돌림 |
 | 2026-09-25 | M3 — 전환 key 셋 (probe run 4) + 주인이 여러 app 에서 확인 | Telegram 의 조합 중 Enter 는 여전히 줄바꿈 (M4 과제) |
+| 2026-09-25 | M4 — app 별 기억·규칙, 다시 보내기, 전환 key 재설계 (주인이 여러 app 에서 확인, homi 기록 1건) | Ghostty·iTerm2·IntelliJ·Telegram 의 key 처리 source 확인 |
