@@ -12,6 +12,8 @@
 |---|---|
 | `AGENTS.md` | 목적·결정·규칙. 이 file 이 SOT 다 |
 | `docs/macos-input.md` | 배운 macOS 입력 구조와 실험 기록 (✅ 확인 / 🔶 추정) |
+| `docs/lessons.md` | 고친 결함의 증상·원인·증거·대응, homi 의 결함이 아니었던 것 |
+| `docs/apps/` | app 원장 — app 마다 입력 구현·특징·homi 의 우회와 확인한 version. 같은 엔진의 공통 사실은 `docs/apps/engines/` |
 | `docs/research/imk-platform.md` | 조사 — bundle·등록·menu bar 표시·전환 키 받기 |
 | `docs/research/app-compat-and-hangul.md` | 조사 — IMK lifecycle·앱별 호환성·Apple 입력기 결함의 원인·두벌식 규칙 |
 
@@ -232,7 +234,8 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 - **입력 내용을 log·file 에 남기지 않는다.** 상태 전이·bundle ID 까지만 — key code 도 모이면 입력 내용이다 (key 는 memory 의 ring buffer 에만).
   타이핑은 곧 비밀번호이고 대화다. (예외: `probe` 는 test 창에 친 것만 `build/` 에 남긴다.)
 - IMK 층을 바꿨으면 설치해서 해당 앱에서 직접 확인하고, 무엇을 확인했는지 보고한다. `swift test` 통과만으로 "된다"고 하지 않는다.
-- 앱별 우회 코드에는 증상·재현 절차·앱 version 을 함께 남긴다.
+- app 에 관해 알게 된 것(특징·우회·재현 절차)은 그 app 의 원장 `docs/apps/<app>.md` 에 version·날짜·근거와 함께 적는다.
+  `AppRules.swift` 를 바꾸기 전에 그 원장을 읽고, 바꾼 뒤에 갱신한다. app 이 update 되면 원장의 "다시 확인할 것" 을 해 본다.
 - system 설정 변경(`defaults write`, `hidutil`, input source 추가·제거, 인증서)은 주인에게 먼저 확인받는다.
 - runtime 외부 dependency 없음. test 용이라도 추가하려면 먼저 묻는다.
 

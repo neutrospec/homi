@@ -42,6 +42,7 @@ public struct Trigger: Sendable, Equatable {
 }
 
 /// app 별 규칙 표 — 주인의 요구사항(AGENTS.md "앱별 상태")과 재현 증거가 있는 우회만 둔다. 바꾸면 다시 build·설치한다.
+/// 각 app 의 사실과 까닭, 확인한 version 은 원장 `docs/apps/<app>.md` 에 있다 — 바꾸기 전에 읽고, 바꾼 뒤에 갱신한다.
 public enum AppRules {
     public static func profile(for app: String) -> AppProfile {
         table[app] ?? AppProfile()
