@@ -249,6 +249,30 @@ keyDown return     → insertText "글" repl={1,1} → doCommand insertNewline: 
   - **IntelliJ + IdeaVim**: mouse 로 선택하면 IdeaVim 은 Visual mode 가 된다. 조합을 시작하며 선택이 지워지면 Visual 을 나오는데,
     Insert 로 돌아가지 않으면 고른 한자는 Normal mode 명령으로 읽혀 사라진다 (source: `IdeaSelectionControl.controlNonVimSelectionChange`). vim 의 의미다.
 
+## click 때 음절이 두 번 들어가는 문제 (M6 중 발견)
+
+- VS Code 에서 `자`를 조합하던 중 mouse 로 선택하면 가끔 `자자`가 됐다 ✅ 주인 관측. 조사에서 알던 함정이다 (gureum#87, 미해결).
+- 길 ✅ (source: `render_widget_host_view_cocoa.mm`):
+  - Chromium 의 view 는 mouse event 를 입력기에 넘기지 않는다(`mouseEvent:` 에 `inputContext handleEvent` 가 없다) — homi 의 mouse-down 확정은 Chrome 에서 불리지 않는다.
+  - page(renderer)가 click 때 조합을 스스로 확정하고, 그 소식에 view 가 `cancelComposition` → `[inputContext discardMarkedText]` 를 부른다. 이것이 입력기의 `commitComposition` 으로 온다.
+    homi 가 그때 `insertText` 하면 이미 확정된 음절이 한 번 더 들어간다.
+  - Chromium 의 `markedRange` 는 조합이 없으면 `NSNotFound` 다(`_hasMarkedText`).
+  - click(`mouseEvent:`)이면 `finishComposingText` — page 에 확정을 보내고(`ImeFinishComposingText`) `cancelComposition` 한다. first responder 를 넘길 때,
+    창이 key 를 잃을 때도 `cancelComposition` 한다 ✅.
+- 첫 대응 — `commitComposition` 때 client 에 marked text 가 남아 있을 때만 넣기(조사의 설계 5번) — 는 **통하지 않았다** ✅ (homi 기록):
+  `commitComposition` 안에서 물은 `markedRange` 가 "있다" 였다. `discardMarkedText` 는 입력기의 처리를 기다리는 호출이고,
+  Chromium 은 그것이 끝난 뒤에야 `_hasMarkedText = NO` 한다. 결과: 확정된 음절이 mouse 를 누른 자리에 한 번 더 들어갔다.
+- 지금의 대응: **Chromium 계열 app 의 `commitComposition` 은, homi 가 아직 선택된 입력기라면 넣지 않는다.**
+  - Chromium 이 이것을 부르는 길(click·blur)은 모두 page 가 조합을 스스로 확정한 뒤다. 입력 소스를 바꿀 때는 system 이 부르고 Chromium 은 모르므로,
+    그때(homi 가 더는 선택되어 있지 않다)만 넣는다. 전환 순간에 TIS 가 이미 새 입력 소스를 가리키는지는 아직 확인하지 않았다 🔶.
+  - Chromium 계열인지는 app bundle 안의 renderer helper(`… Helper (Renderer).app`)로 가린다 — Electron 은 `Frameworks/` 바로 아래,
+    Chrome 은 `… Framework.framework/Helpers/` ✅ (이 Mac: Chrome·VS Code·Obsidian·Orca·Wave·Claude 가 해당, Word·Telegram·Safari·IntelliJ·Ghostty 는 아님).
+- 그 뒤에도 VS Code 에서 **가끔** `한자`(자 조합 중)를 mouse 로 선택하면 누른 자리에 `자`가 한 번 더 들어간다(`자한자`) ✅ 주인 관측.
+  homi 기록으로는 그 click 의 `commitComposition` 에 넣지 않았고(`finished by client — not inserting`) 그 뒤로도 아무것도 넣지 않았다 ✅ —
+  **VS Code(또는 Chromium)가 스스로 만든 중복이다.** 매번이 아니라 가끔인 것도 homi 의 정해진 경로가 아니라 app 안의 타이밍이라는 표시다.
+  비슷한 계열: VS Code 에서 조합 중에 EditContext 가 선택을 바꾸면 확정 글자가 엉뚱한 자리에 들어가는 문제(microsoft/vscode#337197),
+  click 때 한글 중복(#13818, Linux IBus, `upstream`) 🔶.
+
 ## 알려진 화면 문제
 
 - **Ghostty**: 한글 조합 중에 수식키(Caps Lock·오른쪽 ⌘)로 전환하면, 확정된 마지막 글자가 선택된 것처럼 보이다가 다음 key 에 사라진다. 글자는 제대로 들어간다(`한a`). ✅ 주인 관측
@@ -267,3 +291,4 @@ keyDown return     → insertText "글" repl={1,1} → doCommand insertNewline: 
 | 2026-09-25 | M3 — 전환 key 셋 (probe run 4) + 주인이 여러 app 에서 확인 | Telegram 의 조합 중 Enter 는 여전히 줄바꿈 (M4 과제) |
 | 2026-09-25 | M4 — app 별 기억·규칙, 다시 보내기, 전환 key 재설계 (주인이 여러 app 에서 확인, homi 기록 1건) | Ghostty·iTerm2·IntelliJ·Telegram 의 key 처리 source 확인 |
 | 2026-09-25 | M6 — Apple 식 한자 변환(커서 앞 단어)을 주인이 여러 app 에서 | TextEdit·Telegram 만 맞음 → macOS text 엔진 client 에서만 쓰기로. JBR·IntelliJ·IdeaVim·Chromium source 확인, Word 는 homi 기록 |
+| 2026-09-25 | VS Code click 때 음절 중복 — homi 기록 2건 | `markedRange` 확인은 통하지 않음 → Chromium 규칙. 남은 가끔의 중복은 VS Code 쪽 (homi 는 넣지 않았다) |

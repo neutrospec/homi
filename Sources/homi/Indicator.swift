@@ -49,11 +49,16 @@ final class SourceWatcher: NSObject {
         update()
     }
 
-    private func update() {
+    /// 지금 선택된 input source 가 homi 인가.
+    static func homiSelected() -> Bool {
         let source = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
         let id = TISGetInputSourceProperty(source, kTISPropertyInputSourceID)
             .map { Unmanaged<CFString>.fromOpaque($0).takeUnretainedValue() as String } ?? ""
-        let selected = id.hasPrefix("com.unocult.inputmethod.homi")
+        return id.hasPrefix("com.unocult.inputmethod.homi")
+    }
+
+    private func update() {
+        let selected = Self.homiSelected()
         if selected != remapped {
             CapsLockRemap.apply(selected)
             remapped = selected

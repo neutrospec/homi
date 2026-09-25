@@ -56,7 +56,12 @@ nonisolated final class HomiInputController: IMKInputController {
     /// client 가 조합을 끝내 달라고 할 때 — focus 이동, input source 전환.
     override func commitComposition(_ sender: Any!) {
         record("commitComposition \(clientID(sender))")
-        commit()
+        // Chromium 은 click·blur 때 page 가 조합을 스스로 확정한 뒤 이것을 부른다 — 그때 넣으면 두 번 들어간다 (함정 3).
+        // 입력 소스를 바꿀 때 system 이 부르는 것(homi 가 더는 선택되어 있지 않다)은 넣어야 한다.
+        let finishedByClient = app.map { app in
+            MainActor.assumeIsolated { Chromium.hosts(app) && SourceWatcher.homiSelected() }
+        } ?? false
+        commit(insert: !finishedByClient)
     }
 
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
@@ -220,8 +225,13 @@ nonisolated final class HomiInputController: IMKInputController {
 
     /// 조합 중인 글자를 이 controller 가 맡은 client 에 확정한다.
     /// deactivate·commitComposition 의 sender 는 이미 다른 client 일 수 있어 쓰지 않는다 (docs/research).
-    private func commit() {
-        let actions = session.commit()
+    /// `insert` 가 false 면 client 가 조합을 이미 확정했다 — homi 의 조합만 버리고 글자는 넣지 않는다.
+    private func commit(insert: Bool = true) {
+        var actions = session.commit()
+        if !insert, actions.contains(where: { if case .insert = $0 { true } else { false } }) {
+            record("  finished by client — not inserting")
+            actions.removeAll { if case .insert = $0 { true } else { false } }
+        }
         guard !actions.isEmpty, let proxy = client() else { return }
         Client(proxy: proxy).apply(actions)
     }

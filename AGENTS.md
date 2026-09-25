@@ -150,7 +150,10 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 1. **IMK lifecycle 은 뒤바뀌고 빠진다.** activate/deactivate 순서 보장이 없고, 중첩되어 오기도 하며, macOS 26 부터는 다른 process 의 전환에 `deactivateServer` 가 오지 않는다.
    상태는 controller·client 단위로 두고, 확정은 두 번 불려도 안전하게, 앱별 규칙은 첫 `handle()` 에서 다시 적용한다.
 2. **확정이 엉뚱한 client 로 간다.** 새 session 이 먼저 key 를 받고 옛 session 의 확정이 뒤늦게 온다. init 때 묶인 client 로 넣는다.
-3. **Chromium 은 click·blur 때 스스로 확정한 뒤 `commitComposition` 을 부른다.** 그대로 넣으면 음절이 두 번 들어간다.
+3. **Chromium 은 click·blur 때 스스로 확정한 뒤 `commitComposition` 을 부른다.** 그대로 넣으면 음절이 두 번 들어간다 (VS Code 에서 `자자`, 주인 관측).
+   Chromium 은 입력기를 부른 뒤에야 자기 상태를 바꾸므로 `markedRange` 로는 가릴 수 없다 (homi 기록). 그래서 Chromium 계열 app(bundle 안의
+   renderer helper 로 판별)의 `commitComposition` 은, homi 가 아직 선택된 입력기라면 넣지 않는다 — 입력 소스 전환 때 system 이 부르는 것만 넣는다.
+   그 뒤에도 VS Code 에서 가끔 click 한 자리에 한 번 더 들어가는 것은 VS Code 쪽이다 (homi 기록에 넣은 것이 없다).
 4. **입력기는 ⌘ 단축키의 key 를 못 본다.** menu 가 먼저 가져가고, ⌘Tab 의 Tab 은 system 이 가져간다 (probe run 2). 되돌아올 때 `flagsChanged kc=0` 같은 합성 event 도 온다.
 5. **Caps Lock** — system 전환 옵션, Apple keyboard 의 activation delay, lock 상태 echo·LED·cursor 옆 bubble, text client 가 없으면 못 받는 문제가 있다.
 6. **`activateServer`·`setValue` 안에서 client 호출·block 금지.** Chrome 과 deadlock, Spotlight 멈춤 사례. `setValue` 는 focus 가 바뀔 때마다 같은 값으로 다시 온다 — echo 로 무시.
