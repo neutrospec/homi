@@ -136,3 +136,36 @@ func modifierCancelled() {
     #expect(afterCancel == .none)
     #expect(withoutPress == .none)
 }
+
+@Test("누르고 있는 채로 hold 시간이 지나면 그때 hold — 뗄 때는 아무것도 아니다 (macOS 의 Caps Lock 처럼)")
+func holdReachedWhilePressed() {
+    var tap = ModifierTap()
+    tap.press(at: 10.0, activity: [1])
+    let reached = tap.holdReached(activity: [1])
+    let again = tap.holdReached(activity: [1])
+    let released = tap.release(at: 11.0, activity: [1])
+    #expect(reached)
+    #expect(!again)
+    #expect(released == .none)
+}
+
+@Test("hold 시간 전에 다른 key 가 눌렸으면 hold 가 아니다")
+func holdNotReachedWithKey() {
+    var tap = ModifierTap()
+    tap.press(at: 10.0, activity: [1])
+    let reached = tap.holdReached(activity: [2])
+    let released = tap.release(at: 10.1, activity: [2])
+    #expect(!reached)
+    #expect(released == .none)
+}
+
+@Test("누른 적 없거나 이미 뗀 뒤의 timer 는 아무것도 아니다")
+func holdReachedAfterRelease() {
+    var tap = ModifierTap()
+    let before = tap.holdReached(activity: [1])
+    tap.press(at: 10.0, activity: [1])
+    _ = tap.release(at: 10.1, activity: [1])
+    let after = tap.holdReached(activity: [1])
+    #expect(!before)
+    #expect(!after)
+}

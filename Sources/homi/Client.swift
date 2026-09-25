@@ -39,6 +39,15 @@ nonisolated struct Client {
     }
 }
 
+extension Client {
+    /// 커서가 있는 줄의 사각형 (화면 좌표) — 입력기가 후보 창을 띄울 때 쓰는 IMK 의 질의. 모르는 client 는 빈 사각형.
+    nonisolated func caretLine() -> NSRect {
+        var line = NSRect.zero
+        _ = proxy.attributes(forCharacterIndex: 0, lineHeightRectangle: &line)
+        return line
+    }
+}
+
 nonisolated func clientID(_ sender: Any?) -> String {
     (sender as? IMKTextInput)?.bundleIdentifier() ?? "nil"
 }

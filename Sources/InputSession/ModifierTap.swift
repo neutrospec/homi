@@ -21,23 +21,38 @@ public struct ModifierTap: Sendable {
     public static let holdAfter = 0.5
 
     private var armed: (time: Double, activity: [UInt32])?
+    /// 누르고 있는 동안 이미 hold 로 처리했다 — 뗄 때 다시 처리하지 않는다.
+    private var held = false
 
     public init() {}
 
     /// 수식키를 (다른 수식키 없이) 눌렀다.
     public mutating func press(at time: Double, activity: [UInt32]) {
         armed = (time, activity)
+        held = false
     }
 
     /// 사이에 다른 수식키가 끼었다.
     public mutating func cancel() {
         armed = nil
+        held = false
     }
 
-    /// 수식키를 뗐다.
+    /// 누른 지 `holdAfter` 가 지났다 (app 층의 timer). 아직 단독으로 누르고 있으면 hold 이고 true — 한 번만.
+    /// macOS 의 Caps Lock 처럼 떼기 전에 대문자 고정이 켜지게 하려고 쓴다.
+    public mutating func holdReached(activity: [UInt32]) -> Bool {
+        guard let armed, !held, armed.activity == activity else { return false }
+        held = true
+        return true
+    }
+
+    /// 수식키를 뗐다. 누르고 있는 동안 이미 hold 로 처리했다면 `.none`.
     public mutating func release(at time: Double, activity: [UInt32]) -> Result {
-        defer { armed = nil }
-        guard let armed, armed.activity == activity else { return .none }
+        defer {
+            armed = nil
+            held = false
+        }
+        guard let armed, !held, armed.activity == activity else { return .none }
         return time - armed.time < Self.holdAfter ? .tap : .hold
     }
 }

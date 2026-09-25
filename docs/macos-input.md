@@ -187,6 +187,21 @@ keyDown return     → insertText "글" repl={1,1} → doCommand insertNewline: 
   `x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility` 가 그 화면을 연다. homi 가 목록에 없으면 "+" 로 `~/Library/Input Methods/homi.app` 을 넣는다.
 - 허가는 서명 신원(bundle ID + 인증서)에 붙는다 — 자체 서명 인증서로 서명하니 다시 build·설치해도 유지됐다. ✅
 
+## 모드 표시 (M4)
+
+- **menu bar 표시(NSStatusItem)는 앱 객체(`NSApplication.shared`)가 있은 뒤에 만들어야 한다.** 먼저 만들면 오류 없이 **아무것도 생기지 않는다** —
+  homi 가 창을 하나도 갖지 않은 것(`CGWindowListCopyWindowInfo`)으로 확인했다. ✅ (2026-09-25)
+- **커서 옆 말풍선**: 모드가 실제로 바뀔 때(전환 key, ESC trigger) 커서 줄 아래에 "한"/"A" 를 잠깐 띄운다 — Apple 입력기의 표시처럼. ✅ 주인 확인
+  - 위치는 `attributes(forCharacterIndex: 0, lineHeightRectangle:)` 로 묻는다 — 입력기가 후보 창을 띄울 때 쓰는 질의.
+    **key 처리 도중에만** 묻는다: app 이 homi 를 기다리는 그때가 안전하고, 그 밖에서 client 를 부르면 Chrome 과 교착한 사례가 있다 (조사: az#317).
+  - 그리기는 key 처리 뒤로 미룬다 (`Task @MainActor`). NSPanel(borderless·nonactivating, `.popUpMenu` level) + NSVisualEffectView(`.popover`).
+- **대문자 고정 표시는 macOS 에 맡긴다.** homi 가 IOKit 으로 Caps Lock 상태를 바꾸면 macOS 가 자기 표시를 띄운다 — homi 가 따로 띄우면 겹쳤다 (주인). ✅
+- **macOS 는 대문자 고정이 켜진 동안 입력을 멈출 때마다 커서 아래에 표시를 띄운다** (Sonoma 부터의 표준 동작 — homi 와 무관). ✅ 주인 관측
+  끄는 방법은 `sudo defaults write /Library/Preferences/FeatureFlags/Domain/UIKit.plist redesigned_text_cursor -dict-add Enabled -bool NO` + 재부팅이라고 한다 🔶
+  (macobserver·macmost). 입력 소스 전환 popup 을 끄는 `TSMLanguageIndicatorEnabled` 와는 다른 설정이다. 주인은 끄지 않기로 했다 (2026-09-25).
+- **대문자 고정은 누르고 있는 동안 켜진다**: Caps Lock 을 단독으로 0.5초 누르고 있으면 그때 뒤집는다 (timer + `ModifierTap.holdReached`) — 뗄 때 판정했더니
+  macOS 와 달리 떼야 켜졌다 (주인). 그 사이에 다른 key 가 눌리면(system 누름 횟수가 변하면) 아니다. ✅
+
 ## 알려진 화면 문제
 
 - **Ghostty**: 한글 조합 중에 수식키(Caps Lock·오른쪽 ⌘)로 전환하면, 확정된 마지막 글자가 선택된 것처럼 보이다가 다음 key 에 사라진다. 글자는 제대로 들어간다(`한a`). ✅ 주인 관측

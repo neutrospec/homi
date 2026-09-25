@@ -86,18 +86,21 @@ enum CapsLockRemap {
 
 /// 대문자 고정 — Caps Lock 을 길게 누르면 homi 가 직접 뒤집는다 (macOS 의 Caps Lock 과 같게). 불빛도 따라 바뀐다.
 nonisolated enum CapsLockState {
-    static func toggle() {
+    /// 뒤집고 새 상태(켜졌으면 true)를 돌려준다.
+    @discardableResult
+    static func toggle() -> Bool {
         let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching(kIOHIDSystemClass))
         defer { IOObjectRelease(service) }
         var connect: io_connect_t = 0
         guard IOServiceOpen(service, mach_task_self_, UInt32(kIOHIDParamConnectType), &connect) == KERN_SUCCESS else {
             log.error("caps lock state: cannot open IOHIDSystem")
-            return
+            return false
         }
         defer { IOServiceClose(connect) }
         var on = false
         IOHIDGetModifierLockState(connect, Int32(kIOHIDCapsLockState), &on)
         IOHIDSetModifierLockState(connect, Int32(kIOHIDCapsLockState), !on)
         record("caps lock state \(on ? "off" : "on")")
+        return !on
     }
 }

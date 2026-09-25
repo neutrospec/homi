@@ -14,6 +14,7 @@ nonisolated final class HomiInputController: IMKInputController {
     private var session = Session()
     private var commandTap = ModifierTap()
     private var capsLockTap = ModifierTap()
+    private var capsLockHold: DispatchWorkItem?
     /// 이 controller 가 맡은 입력칸의 app — controller 는 client 하나에 묶여 있어 바뀌지 않는다.
     private var app: String?
 
@@ -48,6 +49,7 @@ nonisolated final class HomiInputController: IMKInputController {
         record("deactivate \(clientID(sender))")
         commandTap.cancel()
         capsLockTap.cancel()
+        capsLockHold?.cancel()
         commit()
     }
 
@@ -78,6 +80,7 @@ nonisolated final class HomiInputController: IMKInputController {
     private func keyDown(_ event: NSEvent, app: String, client: Client) -> Bool {
         commandTap.cancel()
         capsLockTap.cancel()
+        capsLockHold?.cancel()
         let key = KeyEvent(event)
         record("key \(key)")
         let mode = memory.withLock { $0.mode(for: app) }
@@ -91,6 +94,7 @@ nonisolated final class HomiInputController: IMKInputController {
         }
         switchMode(to: outcome.mode, from: mode, app: app)
         client.apply(outcome.actions)
+        if outcome.mode != mode { showMode(outcome.mode, near: client) }
         if outcome.resend {
             record("  resend")
             Resend.post(event)
@@ -113,13 +117,21 @@ nonisolated final class HomiInputController: IMKInputController {
             }
         case Self.capsLock:
             commandTap.cancel()
+            let down = flags.contains(.control)
             let others: NSEvent.ModifierFlags = [.shift, .command, .option, .function]
-            switch track(&capsLockTap, event, down: flags.contains(.control), others: others) {
+            let result = track(&capsLockTap, event, down: down, others: others)
+            if down {
+                scheduleCapsLockHold()
+            } else {
+                capsLockHold?.cancel()
+            }
+            switch result {
             case .tap:
                 record("caps lock tap")
                 toggle(app: app, client: client)
             case .hold:
-                record("caps lock hold")
+                // 누르고 있는 동안 timer 가 처리하지 못했을 때만 여기로 온다.
+                record("caps lock hold (on release)")
                 CapsLockState.toggle()
             case .none:
                 break
@@ -128,7 +140,24 @@ nonisolated final class HomiInputController: IMKInputController {
             // 다른 수식키가 끼었다. (대문자 고정을 뒤집을 때 오는 echo 도 여기로 — 이미 판정이 끝난 뒤다.)
             commandTap.cancel()
             capsLockTap.cancel()
+            capsLockHold?.cancel()
         }
+    }
+
+    /// Caps Lock 을 누르고 `holdAfter` 가 지나면, 아직 단독으로 누르고 있을 때 대문자 고정을 뒤집는다 — 떼기 전에 (macOS 처럼).
+    /// 표시는 macOS 의 Caps Lock 표시에 맡긴다 — homi 가 따로 띄우면 겹친다 (주인, 2026-09-25).
+    private func scheduleCapsLockHold() {
+        capsLockHold?.cancel()
+        let controller = Unchecked(self)
+        let work = DispatchWorkItem { controller.value.capsLockHeld() }
+        capsLockHold = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + ModifierTap.holdAfter, execute: work)
+    }
+
+    private func capsLockHeld() {
+        guard capsLockTap.holdReached(activity: Activity.now()) else { return }
+        record("caps lock hold")
+        CapsLockState.toggle()
     }
 
     /// 수식키 하나의 누름·뗌을 판정기에 넘긴다. 누를 때 다른 수식키가 함께면 tap 이 아니다.
@@ -151,6 +180,15 @@ nonisolated final class HomiInputController: IMKInputController {
         let outcome = session.toggle(from: mode)
         switchMode(to: outcome.mode, from: mode, app: app)
         client.apply(outcome.actions)
+        showMode(outcome.mode, near: client)
+    }
+
+    /// 커서 옆 말풍선. 커서 줄의 위치는 지금(key 처리 도중, app 이 homi 를 기다리는 동안) 묻고 — 그 밖에서 client 를 부르면
+    /// app 과 교착할 수 있다 (조사: Chrome) — 그리는 일은 key 처리 뒤로 미룬다.
+    private func showMode(_ mode: Mode, near client: Client) {
+        let line = client.caretLine()
+        let text = mode.glyph
+        Task { @MainActor in ModeHUD.shared.show(text, below: line) }
     }
 
     private func switchMode(to mode: Mode, from old: Mode, app: String) {
@@ -201,6 +239,12 @@ nonisolated final class HomiInputController: IMKInputController {
             log.error("record save failed: \(error.localizedDescription, privacy: .public)")
         }
     }
+}
+
+/// Sendable 이 아닌 것을 main thread 의 지연 작업에 넘길 때 — controller 는 늘 main thread 에서만 쓴다.
+nonisolated struct Unchecked<Value>: @unchecked Sendable {
+    let value: Value
+    init(_ value: Value) { self.value = value }
 }
 
 /// system 전체의 key·mouse 누름 횟수. 입력기가 못 본 key(⌘C 의 C, ⌘Tab 의 Tab)도 센다 — 권한이 필요 없다.

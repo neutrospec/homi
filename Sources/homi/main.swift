@@ -7,6 +7,9 @@
 import AppKit
 import InputMethodKit
 
+// 앱 객체가 먼저 있어야 한다 — 없을 때 만든 menu bar 표시(NSStatusItem)는 조용히 생기지 않는다 (2026-09-25).
+let app = NSApplication.shared
+
 guard let connection = Bundle.main.infoDictionary?["InputMethodConnectionName"] as? String,
     let server = IMKServer(name: connection, bundleIdentifier: Bundle.main.bundleIdentifier)
 else {
@@ -16,5 +19,5 @@ else {
 log.info("started")
 let watcher = SourceWatcher()
 withExtendedLifetime((server, watcher)) {
-    NSApplication.shared.run()
+    app.run()
 }

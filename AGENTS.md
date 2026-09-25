@@ -65,10 +65,12 @@ eventtap timeout·stale cache·비동기 전환 race 와의 싸움이다 (`~/.ha
 
 - 전환 키: **Caps Lock**, **오른쪽 ⌘ 단독 tap** (2026-09-25). 받는 방법:
   - Caps Lock: homi 가 선택된 동안 오른쪽 Control 로 remap 해 flagsChanged 로 받는다. **짧게 = 전환, 길게(0.5초 이상) = 대문자 고정** — macOS 와 같다.
+    대문자 고정은 누르고 있는 채로 0.5초가 되는 순간 켜진다 (뗄 때가 아니라).
     다른 input source 에서는 원래대로다.
   - 오른쪽 ⌘: 짧게 = 전환. 사이에 다른 key·mouse 가 있었으면(⌘C·⌘Tab) 아니다 — system 의 누름 횟수로 판정, 권한 불필요
   - 전환 key 가 수식키인 이유: terminal 은 입력기가 글자 없이 먹은 key 를 스스로 보낸다 (docs/macos-input.md). Shift+Space 전환은 그래서 없앴다.
-- 모드 표시는 homi 의 menu bar 표시(한/A)로 한다. system input menu 의 icon("호")은 고정이다 (2026-09-25 주인 결정).
+- 모드 표시: homi 의 menu bar 표시(한/A) + 모드가 바뀔 때 **커서 옆 말풍선**(한/A, Apple 입력기처럼 — 주인 요청).
+  system input menu 의 icon("호")은 고정이다. 대문자 고정 표시는 macOS 에 맡긴다 — 겹치면 불편하다 (2026-09-25 주인 결정).
 - 전환은 즉시 — 다음 키부터 새 모드. 조합 중이면 먼저 commit 하고 전환한다.
 - 오른쪽 ⌘·Caps Lock 을 다른 키와 함께 쓰면 평소의 ⌘·Ctrl 이다.
 
