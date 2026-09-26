@@ -1,4 +1,4 @@
-/// app 하나에 대한 규칙.
+/// 이 입력칸에서 homi 가 따를 규칙 — 주인의 설정(`Preferences`)과 app 의 결함에 맞춘 우회를 합친 것 (`AppRules.profile`).
 public struct AppProfile: Sendable, Equatable {
     /// 입력칸이 활성화될 때마다 영문으로 시작한다.
     public var startsInEnglish = false
@@ -11,15 +11,28 @@ public struct AppProfile: Sendable, Equatable {
     /// terminal: 선택 영역은 입력이 아니라 화면의 출력이고(Ghostty 는 그것을 `selectedRange` 로 알려 준다), 보낸 글자는 고칠 수 없다.
     /// Office: 위치를 준 교체에 깨진다 (docs/research/app-compat-and-hangul.md).
     public var convertsEnteredText = true
+    /// 한/영 전환 없는 app — homi 가 한/영 전환도 조합도 하지 않고 key 를 그대로 넘긴다 (주인 설정).
+    public var passThrough = false
+    /// Shift+Space 로 한/영 전환 (주인 설정).
+    public var shiftSpaceToggles = false
+    /// 한자 변환 key (주인 설정 — 한/영 전환과 겹치지 않게 정리된 것).
+    public var hanjaKey: Preferences.HanjaKey = .optionReturn
+    /// 방금 친 단어도 한자로 (Apple 방식, 주인 설정).
+    public var hanjaRecentWord = true
 
     public init(
         startsInEnglish: Bool = false, englishTriggers: [Trigger] = [], resendWhileComposing: Set<UInt16> = [],
-        convertsEnteredText: Bool = true
+        convertsEnteredText: Bool = true, passThrough: Bool = false, shiftSpaceToggles: Bool = false,
+        hanjaKey: Preferences.HanjaKey = .optionReturn, hanjaRecentWord: Bool = true
     ) {
         self.startsInEnglish = startsInEnglish
         self.englishTriggers = englishTriggers
         self.resendWhileComposing = resendWhileComposing
         self.convertsEnteredText = convertsEnteredText
+        self.passThrough = passThrough
+        self.shiftSpaceToggles = shiftSpaceToggles
+        self.hanjaKey = hanjaKey
+        self.hanjaRecentWord = hanjaRecentWord
     }
 }
 
@@ -41,11 +54,19 @@ public struct Trigger: Sendable, Equatable {
     }
 }
 
-/// app 별 규칙 표 — 주인의 요구사항(AGENTS.md "앱별 상태")과 재현 증거가 있는 우회만 둔다. 바꾸면 다시 build·설치한다.
+/// app 별 규칙 — 주인의 설정(`Preferences`)에 app 의 결함에 맞춘 우회를 더한다.
+/// 우회는 주인이 고르는 것이 아니라 app 의 동작에 딸린 것이라 source 의 표(`quirks`)에 둔다 — 재현 증거가 있는 것만, 바꾸면 다시 build·설치한다.
 /// 각 app 의 사실과 까닭, 확인한 version 은 원장 `docs/apps/<app>.md` 에 있다 — 바꾸기 전에 읽고, 바꾼 뒤에 갱신한다.
 public enum AppRules {
-    public static func profile(for app: String) -> AppProfile {
-        table[app] ?? AppProfile()
+    public static func profile(for app: String, preferences: Preferences = .standard) -> AppProfile {
+        var profile = quirks[app] ?? AppProfile()
+        profile.startsInEnglish = preferences.englishStartApps.contains(app)
+        if preferences.escapeApps.contains(app) { profile.englishTriggers.insert(esc, at: 0) }
+        profile.passThrough = preferences.passThroughApps.contains(app)
+        profile.shiftSpaceToggles = preferences.toggleKeys.contains(.shiftSpace)
+        profile.hanjaKey = preferences.effectiveHanjaKey
+        profile.hanjaRecentWord = preferences.hanjaRecentWord
+        return profile
     }
 
     private static let escape: UInt16 = 53
@@ -59,26 +80,17 @@ public enum AppRules {
 
     /// native terminal 은 조합 중에 누른 Enter·ESC·Tab 을 음절 확정에만 쓰고 key 를 버린다
     /// (source 확인: Ghostty `SurfaceView_AppKit.keyDown` — markedTextBefore 면 확정 글자만 보내고 화살표만 다시 보낸다).
+    /// 이미 보낸 글자는 고칠 수 없으니 한자는 조합 중인 글자만.
     private static let terminal = AppProfile(
-        englishTriggers: [esc], resendWhileComposing: [returnKey, enter, escape, tab], convertsEnteredText: false)
+        resendWhileComposing: [returnKey, enter, escape, tab], convertsEnteredText: false)
 
-    private static let table: [String: AppProfile] = [
-        // 활성화될 때마다 영문 (Hammerspoon 규칙에서 옮김)
-        "at.obdev.LaunchBar": AppProfile(startsInEnglish: true),
-        "com.apple.RemoteDesktop": AppProfile(startsInEnglish: true),
-        "com.microsoft.rdc.macos": AppProfile(startsInEnglish: true),  // Windows App
-
-        // ESC → 영문 (Hammerspoon 규칙에서 옮김). Chromium 계열은 조합 중 ESC 도 page 에 한 번 간다 (조사).
-        "com.microsoft.VSCode": AppProfile(englishTriggers: [esc]),
-        "com.microsoft.VSCodeInsiders": AppProfile(englishTriggers: [esc]),
-        "md.obsidian": AppProfile(englishTriggers: [esc]),
-        "dev.commandline.waveterm": AppProfile(englishTriggers: [esc], convertsEnteredText: false),  // terminal
-
+    private static let quirks: [String: AppProfile] = [
         "com.googlecode.iterm2": terminal,
-        // Ghostty 는 tmux prefix 도 (Ctrl-B, Ctrl-A — Ctrl 단독일 때만)
+        // tmux prefix(Ctrl-B, Ctrl-A — Ctrl 단독일 때만)도 영문으로 — Hammerspoon 에서 옮긴 주인의 규칙, 설정 창에는 두지 않았다
         "com.mitchellh.ghostty": AppProfile(
-            englishTriggers: [esc, ctrlB, ctrlA], resendWhileComposing: terminal.resendWhileComposing,
+            englishTriggers: [ctrlB, ctrlA], resendWhileComposing: terminal.resendWhileComposing,
             convertsEnteredText: false),
+        "dev.commandline.waveterm": AppProfile(convertsEnteredText: false),  // terminal (xterm.js)
         "com.apple.Terminal": AppProfile(convertsEnteredText: false),
 
         // ⌥↩ 는 조합 중인 글자만 (`convertsEnteredText` 의 설명)
@@ -88,9 +100,5 @@ public enum AppRules {
 
         // 조합 중 Enter 는 marked text 가 있으면 전송 대신 줄바꿈 — TelegramSwift ChatInputTextView.keyDown (source 확인)
         "ru.keepcoder.Telegram": AppProfile(resendWhileComposing: [returnKey, enter]),
-
-        // ESC → 영문 (주인 요청, 2026-09-25 — IdeaVim 등)
-        "com.jetbrains.intellij": AppProfile(englishTriggers: [esc]),
-        "com.jetbrains.intellij.ce": AppProfile(englishTriggers: [esc]),
     ]
 }

@@ -34,9 +34,12 @@ homi 를 바꿀 때(특히 `Sources/InputSession/AppRules.swift`) 그 app 의 �
 | [Word](word.md) | `com.microsoft.Word` | Office | 16.113.2 | 한자는 조합 중인 글자만 |
 | [Excel](excel.md) | `com.microsoft.Excel` | Office | 16.113.2 | 한자는 조합 중인 글자만 |
 | [PowerPoint](powerpoint.md) | `com.microsoft.Powerpoint` | Office | 16.113.2 | 한자는 조합 중인 글자만 |
-| [LaunchBar](launchbar.md) | `at.obdev.LaunchBar` | — | 6.24 | 늘 영문으로 시작 |
-| [Remote Desktop](remote-desktop.md) | `com.apple.RemoteDesktop` | — | 3.10 | 늘 영문으로 시작 |
-| [Windows App](windows-app.md) | `com.microsoft.rdc.macos` | — | 11.4.2 | 늘 영문으로 시작 |
+| [LaunchBar](launchbar.md) | `at.obdev.LaunchBar` | — | 6.24 | 늘 영문으로 시작* |
+| [Remote Desktop](remote-desktop.md) | `com.apple.RemoteDesktop` | — | 3.10 | 한/영 전환 없음* |
+| [Windows App](windows-app.md) | `com.microsoft.rdc.macos` | — | 11.4.2 | 한/영 전환 없음* |
+| [Emacs](emacs.md) | `org.gnu.Emacs` | — | (이 Mac 에 없다) | 한/영 전환 없음* |
+
+\* 설정 창의 기본값 — 주인이 바꿀 수 있다. ESC → 영문도 설정의 기본값이다. 나머지(다시 보내기, 한자 제한, Ghostty 의 Ctrl-B·Ctrl-A)는 source(`AppRules.swift`)의 우회다.
 
 ## 엔진
 

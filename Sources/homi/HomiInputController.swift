@@ -13,12 +13,14 @@ import Synchronization
 nonisolated final class HomiInputController: IMKInputController {
     private var session = Session(hanja: hanjaDictionary)
     private var commandTap = ModifierTap()
+    private var optionTap = ModifierTap()
     private var capsLockTap = ModifierTap()
     private var capsLockHold: DispatchWorkItem?
     /// 이 controller 가 맡은 입력칸의 app — controller 는 client 하나에 묶여 있어 바뀌지 않는다.
     private var app: String?
 
     private static let rightCommand: UInt16 = 54
+    private static let rightOption: UInt16 = 61
     /// Caps Lock 은 homi 가 선택된 동안 오른쪽 Control 로 remap 되어 온다 (`CapsLockRemap`).
     private static let capsLock: UInt16 = 62
 
@@ -32,7 +34,7 @@ nonisolated final class HomiInputController: IMKInputController {
         // homi 가 넘긴 key 는 이 layout 으로 문자가 된다 — 늘 ABC (한글 모드의 ` 도 ` 가 된다).
         (sender as? IMKTextInput)?.overrideKeyboard(withKeyboardNamed: "com.apple.keylayout.ABC")
         let app = resolveApp(sender)
-        let profile = AppRules.profile(for: app)
+        let profile = profile(for: app)
         let (mode, changed) = memory.withLock { memory in
             let before = memory
             let mode = memory.activate(app, profile: profile)
@@ -40,16 +42,15 @@ nonisolated final class HomiInputController: IMKInputController {
         }
         if let changed { Memory.save(changed) }
         log.info("activate \(app, privacy: .public)")
-        record("activate \(app) \(mode)")
-        Task { @MainActor in Indicator.shared.show(mode) }
+        record("activate \(app) \(profile.passThrough ? "pass-through" : "\(mode)")")
+        let shown: Mode? = profile.passThrough ? nil : mode
+        Task { @MainActor in Indicator.shared.show(shown) }
     }
 
     override func deactivateServer(_ sender: Any!) {
         log.info("deactivate \(clientID(sender), privacy: .public)")
         record("deactivate \(clientID(sender))")
-        commandTap.cancel()
-        capsLockTap.cancel()
-        capsLockHold?.cancel()
+        cancelTaps()
         commit()
     }
 
@@ -83,15 +84,13 @@ nonisolated final class HomiInputController: IMKInputController {
     }
 
     private func keyDown(_ event: NSEvent, app: String, client: Client) -> Bool {
-        commandTap.cancel()
-        capsLockTap.cancel()
-        capsLockHold?.cancel()
+        cancelTaps()
         let key = KeyEvent(event)
         record("key \(key)")
         let mode = memory.withLock { $0.mode(for: app) }
         // 상태 변경을 끝낸 뒤에 client 를 부른다 — insertText 도중에 IMK 가 deactivate 를 끼워 부를 수 있다.
         var outcome = session.handle(
-            key, mode: mode, profile: AppRules.profile(for: app), selectedText: { client.selectedText() },
+            key, mode: mode, profile: profile(for: app), selectedText: { client.selectedText() },
             textBefore: { client.textBefore($0) })
         if outcome.resend && !Resend.allowed() {
             // 다시 보낼 수 없으면 먹지 않는다 — key 를 잃는 것보다 예전처럼 넘기는 게 낫다.
@@ -110,20 +109,37 @@ nonisolated final class HomiInputController: IMKInputController {
         return outcome.handled
     }
 
-    /// 수식키 tap — 오른쪽 ⌘: 짧게 = 전환. Caps Lock: 짧게 = 전환, 길게 = 대문자 고정 (macOS 와 같게).
+    /// 수식키 tap — 주인이 고른 역할대로 (설정): 오른쪽 ⌘·⌥ 는 한/영 전환이나 한자, Caps Lock 은 짧게 = 전환·길게 = 대문자 고정 (macOS 와 같게).
     /// 판정은 `ModifierTap` — ⌘C·⌘Tab 처럼 사이에 key 가 눌린 것은 system 의 key 누름 횟수로 걸러진다.
     private func modifiersChanged(_ event: NSEvent, app: String, client: Client) {
+        let settings = preferences.withLock { $0 }
+        let profile = AppRules.profile(for: app, preferences: settings)
+        guard !profile.passThrough else {
+            // 한/영 전환 없는 app — 수식키도 그대로 둔다. Caps Lock 은 이 app 이 앞에 있는 동안 remap 이 풀려 원래대로 온다.
+            cancelTaps()
+            return
+        }
         let flags = event.modifierFlags
         switch event.keyCode {
         case Self.rightCommand:
+            optionTap.cancel()
             capsLockTap.cancel()
             let others: NSEvent.ModifierFlags = [.shift, .control, .option, .function]
             if track(&commandTap, event, down: flags.contains(.command), others: others) == .tap {
                 record("right command tap")
-                toggle(app: app, client: client)
+                tapped(.rightCommand, .rightCommand, settings: settings, profile: profile, app: app, client: client)
             }
-        case Self.capsLock:
+        case Self.rightOption:
             commandTap.cancel()
+            capsLockTap.cancel()
+            let others: NSEvent.ModifierFlags = [.shift, .control, .command, .function]
+            if track(&optionTap, event, down: flags.contains(.option), others: others) == .tap {
+                record("right option tap")
+                tapped(.rightOption, .rightOption, settings: settings, profile: profile, app: app, client: client)
+            }
+        case Self.capsLock where settings.toggleKeys.contains(.capsLock):
+            commandTap.cancel()
+            optionTap.cancel()
             let down = flags.contains(.control)
             let others: NSEvent.ModifierFlags = [.shift, .command, .option, .function]
             let result = track(&capsLockTap, event, down: down, others: others)
@@ -145,10 +161,31 @@ nonisolated final class HomiInputController: IMKInputController {
             }
         default:
             // 다른 수식키가 끼었다. (대문자 고정을 뒤집을 때 오는 echo 도 여기로 — 이미 판정이 끝난 뒤다.)
-            commandTap.cancel()
-            capsLockTap.cancel()
-            capsLockHold?.cancel()
+            cancelTaps()
         }
+    }
+
+    /// 오른쪽 ⌘·⌥ 의 tap — 한/영 전환으로 골랐으면 전환, 한자 key 로 골랐으면 한자, 둘 다 아니면 아무 일도 없다.
+    private func tapped(
+        _ toggleKey: Preferences.ToggleKey, _ hanjaKey: Preferences.HanjaKey, settings: Preferences,
+        profile: AppProfile, app: String, client: Client
+    ) {
+        if settings.toggleKeys.contains(toggleKey) {
+            toggle(app: app, client: client)
+        } else if profile.hanjaKey == hanjaKey {
+            let mode = memory.withLock { $0.mode(for: app) }
+            let outcome = session.hanjaTapped(
+                mode: mode, profile: profile, selectedText: { client.selectedText() },
+                textBefore: { client.textBefore($0) })
+            if let outcome { client.apply(outcome.actions) }
+        }
+    }
+
+    private func cancelTaps() {
+        commandTap.cancel()
+        optionTap.cancel()
+        capsLockTap.cancel()
+        capsLockHold?.cancel()
     }
 
     /// Caps Lock 을 누르고 `holdAfter` 가 지나면, 아직 단독으로 누르고 있을 때 대문자 고정을 뒤집는다 — 떼기 전에 (macOS 처럼).
@@ -210,6 +247,11 @@ nonisolated final class HomiInputController: IMKInputController {
         Task { @MainActor in Indicator.shared.show(mode) }
     }
 
+    /// 이 입력칸의 규칙 — 주인의 설정과 app 규칙 표를 합친다.
+    private func profile(for app: String) -> AppProfile {
+        AppRules.profile(for: app, preferences: preferences.withLock { $0 })
+    }
+
     /// 이 입력칸의 app. client 가 bundle ID 를 모르면 맨 앞 app 으로 (조사: nil 일 수 있다).
     private func resolveApp(_ sender: Any?) -> String {
         if let app { return app }
@@ -238,8 +280,13 @@ nonisolated final class HomiInputController: IMKInputController {
 
     override func menu() -> NSMenu! {
         let menu = NSMenu()
+        menu.addItem(withTitle: "설정…", action: #selector(openSettings(_:)), keyEquivalent: "")
         menu.addItem(withTitle: "최근 key 기록 저장", action: #selector(saveRecentRecord(_:)), keyEquivalent: "")
         return menu
+    }
+
+    @objc func openSettings(_ sender: Any?) {
+        MainActor.assumeIsolated { SettingsWindow.shared.show() }
     }
 
     @objc func saveRecentRecord(_ sender: Any?) {

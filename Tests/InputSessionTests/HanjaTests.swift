@@ -288,3 +288,51 @@ func recentWordAfterBackspace() {
     let nothing = session.handle(optionReturn, mode: .korean, textBefore: document("한"))
     #expect(nothing == Outcome(handled: false, actions: [], mode: .korean))
 }
+
+// MARK: - 한자 key 와 방식 (주인 설정)
+
+@Test("한자 key 가 수식키 tap 이면 ⌥↩ 는 평소대로 넘어가고, tap 이 후보를 연다")
+func hanjaKeyTap() {
+    let profile = AppProfile(hanjaKey: .rightOption)
+    var session = hanjaSession(typing: "gks")  // 한
+    let passed = session.handle(optionReturn, mode: .korean, profile: profile)
+    #expect(!passed.handled)  // ⌥ 조합은 확정하고 넘긴다
+
+    var tapped = hanjaSession(typing: "gks")
+    guard let opened = tapped.hanjaTapped(mode: .korean, profile: profile),
+        case .showCandidates(let list, _) = opened.actions.last
+    else {
+        Issue.record("tap 이 후보를 열어야 한다")
+        return
+    }
+    #expect(list.first?.hanja == "韓")
+    #expect(tapped.hanjaTapped(mode: .english, profile: profile) != nil)  // 열린 채 다시 — 먹는다
+}
+
+@Test("tap 으로 방금 친 단어 — 다시 tap 하면 더 짧은 단어로")
+func hanjaKeyTapCycles() {
+    let profile = AppProfile(hanjaKey: .rightCommand)
+    var session = hanjaSession(typing: "gkswk")
+    let opened = session.hanjaTapped(mode: .korean, profile: profile, textBefore: document("한"))
+    #expect(opened?.actions.prefix(2).elementsEqual([.insert("자"), .markCommitted("한자", range: range(10, 2))]) == true)
+    let shorter = session.hanjaTapped(mode: .korean, profile: profile)
+    #expect(shorter?.actions.prefix(2).elementsEqual([.insert("한자"), .markCommitted("자", range: range(11, 1))]) == true)
+}
+
+@Test("영문 모드에서 한자 tap 은 아무 일도 없다")
+func hanjaKeyTapInEnglish() {
+    var session = Session(hanja: dictionary)
+    #expect(session.hanjaTapped(mode: .english, profile: AppProfile(hanjaKey: .rightOption)) == nil)
+}
+
+@Test("Apple 방식을 끄면 방금 친 단어를 보지 않는다 — 조합 중인 글자만, app 에게 묻지도 않는다")
+func recentWordOff() {
+    var session = hanjaSession(typing: "gkswk")
+    var asked = false
+    let opened = session.handle(
+        optionReturn, mode: .korean, profile: AppProfile(hanjaRecentWord: false),
+        textBefore: { _ in asked = true; return nil })
+    #expect(!asked)
+    #expect(opened.actions.count == 1)
+    #expect(session.composing == "자")
+}

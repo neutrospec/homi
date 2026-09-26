@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import InputSession
@@ -9,13 +10,19 @@ func ctrl(_ letter: Character, _ extra: Modifiers = []) -> KeyEvent {
     key(letter, extra.union(.control))
 }
 
-// MARK: - 규칙 표 (AGENTS.md "앱별 상태" 와 같아야 한다)
+// MARK: - 기본 설정과 규칙 표 (AGENTS.md "앱별 상태" 와 같아야 한다)
 
-@Test("활성화될 때마다 영문으로 시작하는 app", arguments: [
-    "at.obdev.LaunchBar", "com.apple.RemoteDesktop", "com.microsoft.rdc.macos",
+@Test("활성화될 때마다 영문으로 시작하는 app — 기본은 LaunchBar")
+func startsInEnglish() {
+    #expect(AppRules.profile(for: "at.obdev.LaunchBar").startsInEnglish)
+    #expect(!AppRules.profile(for: "com.example.unknown").startsInEnglish)
+}
+
+@Test("한/영 전환 없는 app — 기본은 원격 화면과 Emacs", arguments: [
+    "com.apple.RemoteDesktop", "com.microsoft.rdc.macos", "org.gnu.Emacs",
 ])
-func startsInEnglish(app: String) {
-    #expect(AppRules.profile(for: app).startsInEnglish)
+func passThroughApps(app: String) {
+    #expect(AppRules.profile(for: app).passThrough)
 }
 
 @Test("ESC 가 영문 trigger 인 app — 수식키 무관", arguments: [
@@ -123,4 +130,70 @@ func activation() {
     let other = memory.activate("com.example.a", profile: AppRules.profile(for: "com.example.a"))
     #expect(launchBar == .english)
     #expect(other == .korean)
+}
+
+// MARK: - 주인의 설정
+
+@Test("설정이 app 목록을 바꾼다 — 우회 표(다시 보내기·Ghostty 의 tmux prefix)는 그대로")
+func preferencesChangeLists() {
+    var preferences = Preferences.standard
+    preferences.englishStartApps = ["com.example.a"]
+    preferences.escapeApps = []
+    preferences.passThroughApps = ["com.example.b"]
+    #expect(AppRules.profile(for: "com.example.a", preferences: preferences).startsInEnglish)
+    #expect(!AppRules.profile(for: "at.obdev.LaunchBar", preferences: preferences).startsInEnglish)
+    #expect(AppRules.profile(for: "com.example.b", preferences: preferences).passThrough)
+    #expect(!AppRules.profile(for: "com.microsoft.rdc.macos", preferences: preferences).passThrough)
+
+    let ghostty = AppRules.profile(for: "com.mitchellh.ghostty", preferences: preferences)
+    #expect(!ghostty.englishTriggers.contains { $0.matches(escape) })  // ESC 는 설정에서 뺐다
+    #expect(ghostty.englishTriggers.contains { $0.matches(ctrl("b")) })  // tmux prefix 는 표에
+    #expect(ghostty.resendWhileComposing.contains(53))
+}
+
+@Test("한자 key 는 한/영 전환과 겹치지 않는다 — 겹치면 ⌥↩")
+func hanjaKeyConflict() {
+    var preferences = Preferences.standard
+    preferences.hanjaKey = .rightOption
+    #expect(preferences.effectiveHanjaKey == .rightOption)
+    preferences.toggleKeys.insert(.rightOption)
+    #expect(preferences.effectiveHanjaKey == .optionReturn)
+    preferences.hanjaKey = .rightCommand  // 기본에서 오른쪽 ⌘ 는 전환 key
+    #expect(preferences.effectiveHanjaKey == .optionReturn)
+}
+
+@Test("저장된 설정에 없는 항목은 기본값으로 읽는다")
+func preferencesDecodeMissing() throws {
+    let data = Data(#"{"toggleKeys":["shiftSpace"]}"#.utf8)
+    let decoded = try JSONDecoder().decode(Preferences.self, from: data)
+    #expect(decoded.toggleKeys == [.shiftSpace])
+    #expect(decoded.hanjaKey == Preferences.standard.hanjaKey)
+    #expect(decoded.passThroughApps == Preferences.standard.passThroughApps)
+    let roundTrip = try JSONDecoder().decode(Preferences.self, from: JSONEncoder().encode(Preferences.standard))
+    #expect(roundTrip == Preferences.standard)
+}
+
+@Test("한/영 전환 없는 app 에서는 한글 모드여도 key 를 그대로 넘긴다")
+func passThroughPassesEverything() {
+    var session = Session(hanja: dictionary)
+    let profile = AppProfile(passThrough: true)
+    let typed = session.handle(key("g"), mode: .korean, profile: profile)
+    #expect(typed == Outcome(handled: false, actions: [], mode: .korean))
+    let hanja = session.handle(optionReturn, mode: .korean, profile: profile)
+    #expect(hanja == Outcome(handled: false, actions: [], mode: .korean))
+    #expect(session.hanjaTapped(mode: .korean, profile: profile) == nil)
+}
+
+@Test("Shift+Space — 켜면 전환(조합 중이면 먼저 확정), 끄면 평소의 space")
+func shiftSpaceToggle() {
+    let shiftSpace = KeyEvent(keyCode: 49, modifiers: .shift)
+    let on = AppProfile(shiftSpaceToggles: true)
+    var session = Session()
+    #expect(session.handle(shiftSpace, mode: .english, profile: on) == Outcome(handled: true, actions: [], mode: .korean))
+    _ = press("gks", &session)
+    let toEnglish = session.handle(shiftSpace, mode: .korean, profile: on)
+    #expect(toEnglish == Outcome(handled: true, actions: [.insert("한")], mode: .english))
+
+    var off = Session()
+    #expect(off.handle(shiftSpace, mode: .english) == Outcome(handled: false, actions: [], mode: .english))
 }

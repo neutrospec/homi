@@ -48,10 +48,13 @@ public enum KeyCode {
 }
 
 extension KeyEvent {
-    /// ⌥↩ — 한자 변환 (Apple 입력기와 같다).
+    /// ⌥↩ — 한자 변환 key 의 기본값 (Apple 입력기와 같다).
     var isHanjaKey: Bool {
         (keyCode == KeyCode.returnKey || keyCode == KeyCode.enter) && modifiers.subtracting(.capsLock) == .option
     }
+
+    /// Shift+Space — 주인이 켜면 한/영 전환 key.
+    var isShiftSpace: Bool { keyCode == KeyCode.space && modifiers.subtracting(.capsLock) == .shift }
 }
 
 extension Unicode.Scalar {

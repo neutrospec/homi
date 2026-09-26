@@ -3,7 +3,7 @@
 **homi** (`com.unocult.inputmethod.homi`) — macOS 한글 입력기. 주인 한 사람이 매일 쓰는 도구이고,
 목표는 **두벌식 한글 입력이 완벽하게 동작하는 것** 하나다. 기능을 늘리는 프로젝트가 아니다 — 잡다한 기능·옵션·변죽은 만들지 않는다.
 
-> **현재 (2026-09-25)**: M0–M4 와 M6(한자 변환 `⌥↩`)을 주인이 확인했다 (Hammerspoon 입력 전환 코드는 주인이 직접 정리).
+> **현재 (2026-09-25)**: M0–M4 와 M6(한자 변환 `⌥↩`)을 주인이 확인했다 (Hammerspoon 입력 전환 코드는 주인이 직접 정리). M7 설정 창을 주인이 확인하는 중이다.
 > 지금은 M5 — 일상 사용과 app 호환성. 이상하면 주인이 곧바로 "최근 key 기록 저장" 을 누른다 → [진행 단계](#진행-단계)
 
 ## 문서
@@ -66,6 +66,7 @@ eventtap timeout·stale cache·비동기 전환 race 와의 싸움이다 (`~/.ha
   - ⌥(Option)+key 는 한글 모드에서도 영문일 때와 같다 — 조합을 확정하고 key 를 넘긴다 (`⌥a → å`, 2026-09-25). Apple 은 `⌥a → a`.
 - 한글 모드에서도 `` ` `` 키는 `` ` `` 를 입력한다 (Apple 두벌식은 `₩`).
 - **한자 변환** `⌥↩` (M6) — 방금 친 단어, 없으면 조합 중인 글자, 그것도 없으면 선택한 한글.
+  - 변환 key(⌥↩ 기본, 오른쪽 ⌥·⌘ 짧게 — 한/영 전환 key 와 겹치면 ⌥↩)와 "방금 친 단어" 를 쓸지는 설정에서 고른다 (M7, 2026-09-25 주인).
   - **방금 친 단어**(Apple 입력기처럼 선택 없이)는 macOS text 엔진을 쓰는 app(TextEdit·Telegram 등)에서만 — 되는 조건에서는 살린다 (2026-09-25 주인).
     판별은 app 목록이 아니라 client 가 알리는 입력 지원이다 (결정 5 의 예외). VS Code·Orca·IntelliJ·Word 에서는 틀어졌다.
     단어는 homi 가 이어서 친 한글 + 조합 중인 글자의 끝부분 중 사전에 있는 가장 긴 것 (`나는한자` → `한자`), `⌥↩` 를 다시 누르면 더 짧은 단어로.
@@ -79,23 +80,29 @@ eventtap timeout·stale cache·비동기 전환 race 와의 싸움이다 (`~/.ha
 
 ### 한/영 전환
 
-- 전환 키: **Caps Lock**, **오른쪽 ⌘ 단독 tap** (2026-09-25). 받는 방법:
-  - Caps Lock: homi 가 선택된 동안 오른쪽 Control 로 remap 해 flagsChanged 로 받는다. **짧게 = 전환, 길게(0.5초 이상) = 대문자 고정** — macOS 와 같다.
+- 전환 키는 설정에서 고른다 (여럿 함께, 하나는 남긴다) — **Caps Lock**, **오른쪽 ⌘**, **오른쪽 ⌥** 의 단독 tap, **Shift+Space**. 기본은 Caps Lock·오른쪽 ⌘ (2026-09-25). 받는 방법:
+  - Caps Lock: 전환 key 로 쓸 때만, homi 가 선택된 동안 오른쪽 Control 로 remap 해 flagsChanged 로 받는다. **짧게 = 전환, 길게(0.5초 이상) = 대문자 고정** — macOS 와 같다.
     대문자 고정은 누르고 있는 채로 0.5초가 되는 순간 켜진다 (뗄 때가 아니라).
-    다른 input source 에서는 원래대로다.
-  - 오른쪽 ⌘: 짧게 = 전환. 사이에 다른 key·mouse 가 있었으면(⌘C·⌘Tab) 아니다 — system 의 누름 횟수로 판정, 권한 불필요
-  - 전환 key 가 수식키인 이유: terminal 은 입력기가 글자 없이 먹은 key 를 스스로 보낸다 (docs/macos-input.md). Shift+Space 전환은 그래서 없앴다.
+    다른 input source 와 한/영 전환 없는 app 에서는 원래대로다.
+  - 오른쪽 ⌘·⌥: 짧게 = 전환. 사이에 다른 key·mouse 가 있었으면(⌘C·⌘Tab) 아니다 — system 의 누름 횟수로 판정, 권한 불필요.
+    전환에 쓰지 않는 쪽은 한자 key 로 고를 수 있다.
+  - Shift+Space: keyDown 으로 받는다. terminal(Ghostty·iTerm2)은 입력기가 글자 없이 먹은 key 를 스스로 보내서 영문 → 한글 전환 때 space 가 샌다
+    (docs/macos-input.md). 그래서 한때 없앴다가, 주인이 알고 고를 수 있게 설정에 두었다 (2026-09-25).
+  - 수식키 tap 은 어느 app 에도 새지 않는다 — 전환 key 의 기본이 수식키인 이유.
 - 모드 표시: homi 의 menu bar 표시(한/A) + 모드가 바뀔 때 **커서 옆 말풍선**(한/A, Apple 입력기처럼 — 주인 요청).
   system input menu 의 icon("호")은 고정이다. 대문자 고정 표시는 macOS 에 맡긴다 — 겹치면 불편하다 (2026-09-25 주인 결정).
 - 전환은 즉시 — 다음 키부터 새 모드. 조합 중이면 먼저 commit 하고 전환한다.
-- 오른쪽 ⌘·Caps Lock 을 다른 키와 함께 쓰면 평소의 ⌘·Ctrl 이다.
+- 오른쪽 ⌘·⌥·Caps Lock 을 다른 키와 함께 쓰면 평소의 ⌘·⌥·Ctrl 이다.
 
 ### 앱별 상태
 
 - 앱(client bundle ID)마다 마지막 모드를 기억해 그 앱으로 돌아오면 복원한다. 입력기가 재시작해도 유지.
 - 처음 보는 앱은 **영문**으로 시작.
-- 활성화될 때마다 영문으로 시작하는 앱: `at.obdev.LaunchBar` · `com.apple.RemoteDesktop` · `com.microsoft.rdc.macos` (Windows App)
-- 영문 전환 trigger 키 — 조합 중이면 commit → 영문으로 전환 → **키는 앱에 그대로 전달**:
+- 활성화될 때마다 영문으로 시작하는 앱 (설정, 기본값): `at.obdev.LaunchBar`
+- **한/영 전환 없는 app** (설정, 기본값): `com.apple.RemoteDesktop` · `com.microsoft.rdc.macos`(Windows App) · `org.gnu.Emacs` (2026-09-25 주인).
+  한/영 전환도 조합도 하지 않고 key 를 그대로 넘긴다 — 원격 컴퓨터의 입력기나 app 자체의 입력기(Emacs 의 것이 좋다)가 한/영을 맡는다.
+  Caps Lock 도 원래대로 — 그 app 이 앞에 있는 동안 remap 을 푼다. menu bar 표시는 `–`.
+- 영문 전환 trigger 키 — 조합 중이면 commit → 영문으로 전환 → **키는 앱에 그대로 전달**. ESC 의 app 목록은 설정에서 고친다 (아래는 기본값):
 
   | 앱 | bundle ID | trigger |
   |---|---|---|
@@ -109,7 +116,9 @@ eventtap timeout·stale cache·비동기 전환 race 와의 싸움이다 (`~/.ha
   수식키 조건은 Hammerspoon 규칙 그대로: ESC 는 수식키 무관, Ctrl-B·Ctrl-A 는 Ctrl **단독**일 때만 (Ctrl-Shift-B 는 아님).
   - ⚠️ terminal(Ghostty·iTerm2)은 조합 중에 누른 ESC 를 음절 확정에 쓰고 key 자체는 버린다 — Apple 입력기에서 vim 에 ESC 를 두 번 누르게 되는 이유다. 정책은 [열린 결정](#열린-결정).
   - iTerm2 는 조합 중이 아니면 Ctrl 키를 입력기에 보여주지 않는다. Ctrl-B·Ctrl-A 규칙이 Ghostty 전용인 것과 맞는다.
-- 규칙 표는 source 안의 file 하나(`Sources/InputSession/AppRules.swift`)에 둔다. 설정 UI·설정 file 은 없다 — 바꾸면 다시 build·설치한다.
+- 주인이 고르는 것(전환 key, 한자 key·방식, 시작할 때 영문·ESC 로 영문·한/영 전환 없는 app)은 **설정 창**에 둔다 — input menu 의 "설정…"·menu bar 의 한/A.
+  바꾸는 즉시 저장되고(UserDefaults 의 `preferences`) 다음 key 부터 쓰인다. app 의 결함에 맞춘 우회(다시 보내기, 한자 제한, Ghostty 의 Ctrl-B·Ctrl-A)는
+  주인이 고를 것이 아니라서 source 의 `Sources/InputSession/AppRules.swift` 에 둔다 — 바꾸면 다시 build·설치한다.
 - 모드는 key 마다 그 입력칸의 app 으로 읽는다 (`ModeMemory`) — activate 알림이 늦거나 빠져도 틀리지 않는다. UserDefaults 에 남아 재시작해도 유지.
 - 조합 중 Enter·ESC 를 app 이 잃거나 다르게 쓰는 곳(Telegram 의 Enter, terminal 의 Enter·ESC·Tab)에서는 확정한 뒤 그 key 를 먹고 **다시 보낸다**.
   손쉬운 사용 권한이 없으면 먹지 않고 예전처럼 넘긴다 — key 를 잃지 않는다.
@@ -117,8 +126,8 @@ eventtap timeout·stale cache·비동기 전환 race 와의 싸움이다 (`~/.ha
 
 ### 하지 않는 것
 
-세벌식 등 다른 자판, 옛한글, 자동완성·예측, 특수문자 palette, 설정 창, App Store 배포와 sandbox.
-명시적 요청 없이 옵션이나 기능을 늘리지 않는다.
+세벌식 등 다른 자판, 옛한글, 자동완성·예측, 특수문자 palette, App Store 배포와 sandbox.
+명시적 요청 없이 옵션이나 기능을 늘리지 않는다. 설정 창도 주인이 고르겠다고 한 것만 둔다 (2026-09-25).
 
 ## 구조
 
@@ -127,8 +136,8 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 | module | 역할 | 의존 |
 |---|---|---|
 | `HangulCore` (M1) | 두벌식 자판 mapping + 조합 state machine. 입력: 자모·편집 명령 / 출력: commit 문자열 + 조합 중 문자열 | 없음 |
-| `InputSession` | key 해석(자모·Backspace·넘길 key, M3 부터 전환 키·trigger), 모드, 앱별 기억과 규칙, 최근 기록(`Recorder`) | `HangulCore` |
-| `homi` (app, `Sources/homi`) | IMK glue — `IMKServer`, `HomiInputController`, NSEvent 변환, menu bar 표시. `Bundle/` 에 `Info.plist`·resource | 위 둘 + AppKit·InputMethodKit |
+| `InputSession` | key 해석(자모·Backspace·넘길 key, M3 부터 전환 키·trigger), 모드, 앱별 기억과 규칙, 주인의 설정(`Preferences`), 최근 기록(`Recorder`) | `HangulCore` |
+| `homi` (app, `Sources/homi`) | IMK glue — `IMKServer`, `HomiInputController`, NSEvent 변환, menu bar 표시, 설정 창(SwiftUI). `Bundle/` 에 `Info.plist`·resource | 위 둘 + AppKit·InputMethodKit |
 
 - `Info.plist` 는 한국어 mode 하나(`com.unocult.inputmethod.homi.korean`, `smKorean`)만 둔다 — 한/영은 homi 안의 모드이고
   표시도 homi 가 하므로 system 에 mode 를 알릴 일이 없다 (결정 4). 비밀번호 칸에서는 system 이 ABC 로 바꾼다.
@@ -270,3 +279,4 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 | M4 ✅ | 앱별 기억 + 앱 규칙 + 조합 중 Enter·ESC 다시 보내기 + 수식키 전환 | 주인 확인 (2026-09-25). Hammerspoon 입력 전환 코드는 주인이 직접 정리 |
 | M5 | 앱 호환성 검증 → 일상 사용 | 일상 사용 기간 동안 세 증상이 한 번도 없다 → Apple 한국어 입력기를 지운다 |
 | M6 ✅ | 한자 변환 — `⌥↩`: 방금 친 단어(macOS text 엔진 app)·조합 중인 글자·선택한 한글, libhangul 사전 | 주인 확인 (2026-09-25) |
+| M7 | 설정 창 — 전환 key(Caps Lock·오른쪽 ⌘·⌥·Shift+Space), 한자 key·방식, app 목록(시작할 때 영문·ESC 로 영문·한/영 전환 없는 app) | 주인 확인 |

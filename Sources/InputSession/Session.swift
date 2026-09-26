@@ -109,8 +109,13 @@ public struct Session: Sendable {
         _ key: KeyEvent, mode: Mode, profile: AppProfile = AppProfile(), selectedText: () -> String? = { nil },
         textBefore: (Int) -> (text: String, end: Int)? = { _ in nil }
     ) -> Outcome {
+        if profile.passThrough {
+            // 한/영 전환 없는 app — 전환도 조합도 하지 않는다. (조합이 남아 있을 수 없지만, 있다면 잃지 않게 확정한다.)
+            return Outcome(handled: false, actions: commit(), mode: mode)
+        }
         if choosing != nil { return choose(key, mode: mode, profile: profile) }
-        if mode == .korean, key.isHanjaKey,
+        if profile.shiftSpaceToggles, key.isShiftSpace { return toggle(from: mode) }
+        if mode == .korean, profile.hanjaKey == .optionReturn, key.isHanjaKey,
             let outcome = openHanja(profile: profile, selectedText: selectedText, textBefore: textBefore)
         {
             return outcome
@@ -164,7 +169,7 @@ public struct Session: Sendable {
         // 낱자모가 조합 중이면 한자가 없다 — 그래도 먹는다 (⌥↩ 가 조합을 확정하고 줄을 바꾸지 않게).
         guard composing.unicodeScalars.allSatisfy(\.isHangulSyllable) else { return consume }
 
-        if profile.convertsEnteredText, let outcome = openRecent(textBefore) { return outcome }
+        if profile.convertsEnteredText, profile.hanjaRecentWord, let outcome = openRecent(textBefore) { return outcome }
         if !composing.isEmpty {
             let candidates = hanja.candidates(for: composing)
             guard !candidates.isEmpty else { return consume }
@@ -227,19 +232,7 @@ public struct Session: Sendable {
         let count = state.current.candidates.count
         let pageStart = state.index / Self.page * Self.page
 
-        if key.isHanjaKey {
-            // ⌥↩ 를 다시 — 방금 친 단어면 다음(더 짧은) 단어로, 마지막 다음은 처음으로 (한자 → 자 → 한자).
-            // 그 밖에는 이미 열려 있으니 먹기만 한다 — 넘기면 app 이 ⌥↩ 를 받는다 (IntelliJ 의 context action 등).
-            guard case .committed(let end) = state.target, state.options.count > 1 else {
-                return Outcome(handled: true, actions: [], mode: mode)
-            }
-            let restore = state.restore
-            state.option = (state.option + 1) % state.options.count
-            state.index = 0
-            choosing = state
-            let actions = restore + [Self.mark(state.current.word, endingAt: end), Self.show(state)]
-            return Outcome(handled: true, actions: actions, mode: mode)
-        }
+        if profile.hanjaKey == .optionReturn, key.isHanjaKey { return again(mode: mode) }
         if key.modifiers.subtracting([.capsLock, .function]).isEmpty {
             if let digit = KeyCode.digits.firstIndex(of: key.keyCode), digit > 0 {
                 let index = pageStart + digit - 1
@@ -267,6 +260,32 @@ public struct Session: Sendable {
             return Outcome(handled: true, actions: [Self.show(state)], mode: mode)
         }
         return closeAndHandle(key, mode: mode, profile: profile)
+    }
+
+    /// 한자 key 를 다시 — 방금 친 단어면 다음(더 짧은) 단어로, 마지막 다음은 처음으로 (한자 → 자 → 한자).
+    /// 그 밖에는 이미 열려 있으니 먹기만 한다 — 넘기면 app 이 그 key 를 받는다 (IntelliJ 의 ⌥↩ = context action 등).
+    private mutating func again(mode: Mode) -> Outcome {
+        guard var state = choosing, case .committed(let end) = state.target, state.options.count > 1 else {
+            return Outcome(handled: true, actions: [], mode: mode)
+        }
+        let restore = state.restore
+        state.option = (state.option + 1) % state.options.count
+        state.index = 0
+        choosing = state
+        let actions = restore + [Self.mark(state.current.word, endingAt: end), Self.show(state)]
+        return Outcome(handled: true, actions: actions, mode: mode)
+    }
+
+    /// 한자 key 가 수식키 tap(오른쪽 ⌥·⌘)일 때 — tap 의 판정은 homi app 층이 하고, 여기서 연다. 후보가 열려 있으면 다시 누른 것과 같다.
+    /// nil 이면 한자 변환이 아니다 — tap 은 아무 일도 하지 않는다.
+    public mutating func hanjaTapped(
+        mode: Mode, profile: AppProfile, selectedText: () -> String? = { nil },
+        textBefore: (Int) -> (text: String, end: Int)? = { _ in nil }
+    ) -> Outcome? {
+        guard !profile.passThrough else { return nil }
+        if choosing != nil { return again(mode: mode) }
+        guard mode == .korean else { return nil }
+        return openHanja(profile: profile, selectedText: selectedText, textBefore: textBefore)
     }
 
     private mutating func closeAndHandle(_ key: KeyEvent, mode: Mode, profile: AppProfile) -> Outcome {

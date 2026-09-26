@@ -4,20 +4,32 @@ import IOKit.hidsystem
 import InputSession
 import Synchronization
 
-/// menu bar 의 한/A 표시. homi 가 선택된 동안에만 보인다.
+/// menu bar 의 한/A 표시. homi 가 선택된 동안에만 보인다. 한/영 전환 없는 app 에서는 "–".
 /// system 의 input menu icon 은 늘 "호" 로 고정이고, 모드는 여기서만 보인다 (AGENTS.md 열린 결정 — (a)).
-final class Indicator {
+/// 누르면 설정 menu 가 열린다.
+final class Indicator: NSObject {
     static let shared = Indicator()
 
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
-    private init() {
+    private override init() {
+        super.init()
         item.isVisible = false
+        let menu = NSMenu()
+        let settings = NSMenuItem(title: "homi 설정…", action: #selector(openSettings), keyEquivalent: "")
+        settings.target = self
+        menu.addItem(settings)
+        item.menu = menu
         show(.english)
     }
 
-    func show(_ mode: Mode) {
-        item.button?.title = mode == .korean ? "한" : "A"
+    /// nil 이면 한/영 전환 없는 app 이다.
+    func show(_ mode: Mode?) {
+        item.button?.title = mode.map { $0 == .korean ? "한" : "A" } ?? "–"
+    }
+
+    @objc private func openSettings() {
+        SettingsWindow.shared.show()
     }
 
     func setVisible(_ visible: Bool) {
@@ -25,8 +37,9 @@ final class Indicator {
     }
 }
 
-/// homi 가 선택됐는지 지켜본다 — 선택된 동안에만 Caps Lock 을 오른쪽 Control 로 바꾸고 한/A 를 보인다.
-/// 다른 input source(비밀번호 칸의 ABC 포함)에서는 Caps Lock 이 원래대로 동작한다.
+/// homi 가 선택됐는지 지켜본다 — 선택된 동안에만 한/A 를 보이고, Caps Lock 을 오른쪽 Control 로 바꾼다.
+/// Caps Lock 을 바꾸는 것은 주인이 Caps Lock 을 전환 key 로 쓸 때, 한/영 전환 없는 app 이 앞에 있지 않을 때뿐이다 (설정).
+/// 그 밖(다른 input source, 비밀번호 칸의 ABC, 한/영 전환 없는 app)에서는 Caps Lock 이 원래대로 동작한다.
 final class SourceWatcher: NSObject {
     private var remapped: Bool?
 
@@ -36,12 +49,21 @@ final class SourceWatcher: NSObject {
             self, selector: #selector(sourceChanged(_:)),
             name: .init(kTISNotifySelectedKeyboardInputSourceChanged as String), object: nil,
             suspensionBehavior: .deliverImmediately)
-        NSWorkspace.shared.notificationCenter.addObserver(
-            self, selector: #selector(woke(_:)), name: NSWorkspace.didWakeNotification, object: nil)
+        let workspace = NSWorkspace.shared.notificationCenter
+        workspace.addObserver(self, selector: #selector(woke(_:)), name: NSWorkspace.didWakeNotification, object: nil)
+        workspace.addObserver(
+            self, selector: #selector(appActivated(_:)), name: NSWorkspace.didActivateApplicationNotification, object: nil)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(sourceChanged(_:)), name: .homiPreferencesChanged, object: nil)
         update()
     }
 
     @objc func sourceChanged(_ note: Notification) { update() }
+
+    @objc func appActivated(_ note: Notification) {
+        let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+        update(front: app?.bundleIdentifier)
+    }
 
     /// 잠에서 깨면 key mapping 이 풀렸을 수 있다 — 다시 건다.
     @objc func woke(_ note: Notification) {
@@ -57,11 +79,14 @@ final class SourceWatcher: NSObject {
         return id.hasPrefix("com.unocult.inputmethod.homi")
     }
 
-    private func update() {
+    private func update(front: String? = nil) {
         let selected = Self.homiSelected()
-        if selected != remapped {
-            CapsLockRemap.apply(selected)
-            remapped = selected
+        let settings = preferences.withLock { $0 }
+        let app = front ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+        let remap = selected && settings.toggleKeys.contains(.capsLock) && !settings.passThroughApps.contains(app)
+        if remap != remapped {
+            CapsLockRemap.apply(remap)
+            remapped = remap
         }
         Indicator.shared.setVisible(selected)
     }
