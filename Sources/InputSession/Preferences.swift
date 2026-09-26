@@ -29,7 +29,8 @@ public struct Preferences: Sendable, Equatable, Codable {
     /// ESC 로 영문 전환하는 app — 조합 중이면 확정하고, ESC 는 app 으로 간다.
     public var escapeApps: [String]
     /// 한/영 전환 없는 app — homi 가 한/영 전환도 조합도 하지 않고 key 를 그대로 넘긴다. Caps Lock 도 원래대로.
-    /// app 자체의 입력기(Emacs)나 원격 컴퓨터의 입력기(Remote Desktop·Windows App)가 한/영을 맡는다.
+    /// app 자체의 입력기(Emacs)나 원격 컴퓨터의 입력기(Windows App)가 한/영을 맡는다.
+    /// Remote Desktop 은 여기가 아니다 — homi 가 한/영을 keyboard layout 으로 알린다 (`AppProfile.keyboardLayoutFollowsMode`).
     public var passThroughApps: [String]
 
     public init(
@@ -52,7 +53,7 @@ public struct Preferences: Sendable, Equatable, Codable {
             "com.microsoft.VSCode", "com.microsoft.VSCodeInsiders", "md.obsidian", "com.googlecode.iterm2",
             "dev.commandline.waveterm", "com.mitchellh.ghostty", "com.jetbrains.intellij", "com.jetbrains.intellij.ce",
         ],
-        passThroughApps: ["com.apple.RemoteDesktop", "com.microsoft.rdc.macos", "org.gnu.Emacs"])
+        passThroughApps: ["com.microsoft.rdc.macos", "org.gnu.Emacs"])
 
     /// 실제로 쓰는 한자 key — 한 key 는 한 가지 일만 한다. 고른 수식키를 한/영 전환에 쓰고 있으면 ⌥↩.
     public var effectiveHanjaKey: HanjaKey {

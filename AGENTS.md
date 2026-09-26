@@ -99,8 +99,11 @@ eventtap timeout·stale cache·비동기 전환 race 와의 싸움이다 (`~/.ha
 - 앱(client bundle ID)마다 마지막 모드를 기억해 그 앱으로 돌아오면 복원한다. 입력기가 재시작해도 유지.
 - 처음 보는 앱은 **영문**으로 시작.
 - 활성화될 때마다 영문으로 시작하는 앱 (설정, 기본값): `at.obdev.LaunchBar`
-- **한/영 전환 없는 app** (설정, 기본값): `com.apple.RemoteDesktop` · `com.microsoft.rdc.macos`(Windows App) · `org.gnu.Emacs` (2026-09-25 주인).
+- **한/영 전환 없는 app** (설정, 기본값): `com.microsoft.rdc.macos`(Windows App) · `org.gnu.Emacs` (2026-09-25 주인).
   한/영 전환도 조합도 하지 않고 key 를 그대로 넘긴다 — 원격 컴퓨터의 입력기나 app 자체의 입력기(Emacs 의 것이 좋다)가 한/영을 맡는다.
+- **Remote Desktop** (`com.apple.RemoteDesktop`)은 입력기의 글자를 받지 않고 key 를 이 Mac 의 keyboard layout 으로 글자로 바꿔 보낸다.
+  그래서 homi 는 한/영을 homi 아래의 layout 으로 알린다 — 한 → 두벌식 layout(`2SetHangul`, 자모), A → ABC (2026-09-26 주인 확인).
+  자모는 원격 입력기가 조합하므로 **원격 Mac 은 두벌식에 둔다** — 원격이 ABC 면 한글이 풀어쓰기로 들어간다 (docs/apps/remote-desktop.md).
   Caps Lock 도 원래대로 — 그 app 이 앞에 있는 동안 remap 을 푼다. menu bar 표시는 `–`.
 - 영문 전환 trigger 키 — 조합 중이면 commit → 영문으로 전환 → **키는 앱에 그대로 전달**. ESC 의 app 목록은 설정에서 고친다 (아래는 기본값):
 

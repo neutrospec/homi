@@ -273,6 +273,46 @@ keyDown return     → insertText "글" repl={1,1} → doCommand insertNewline: 
   비슷한 계열: VS Code 에서 조합 중에 EditContext 가 선택을 바꾸면 확정 글자가 엉뚱한 자리에 들어가는 문제(microsoft/vscode#337197),
   click 때 한글 중복(#13818, Linux IBus, `upstream`) 🔶.
 
+## 화면 공유(Remote Desktop)는 입력기의 글자가 아니라 keyboard layout 으로 만든 글자를 보낸다 (M7 중 발견)
+
+- **화면은 입력기가 만든 글자를 받지 않는다** ✅. 화면(`SSFrameBufferView`)은 `keyDown:` 으로 key 를 직접 받아 원격에 보낸다 —
+  `ScreenSharing.framework` 에 `insertText`·`setMarkedText`·`interpretKeyEvents` 가 하나도 없다 (symbol 조사).
+  ⌘Tab 같은 system key 는 helper(`EventHelperGrabKeys_rpc`)가 가로챈다. ⌃Space 는 이 Mac 의 system 이 먼저 받는다(이 Mac 의 입력 소스가 바뀐다).
+- **key 를 보내는 두 방식** ✅ (`__UpdateKeyboardInputSourceInfo_block_invoke_2` 를 disassemble + log):
+  이 Mac 과 원격의 입력 소스 ID 가 같으면 **key code**, 다르면 **keysym**(글자). 원격은 자기 입력 소스가 바뀔 때마다 ID 를 알려 온다
+  (`received keyboard input source info` — log 는 ID 를 가리지만 길이는 남긴다: ABC 23, 두벌식 39). homi 가 선택되어 있으면 원격에 homi 가 없으니 늘 keysym.
+- **keysym 은 이 Mac 의 keyboard layout 으로 만든다** ✅. `ConvertKeycodeToX11Keysym` 이 key code 를 지금의 keyboard layout
+  (`TISCopyCurrentKeyboardLayoutInputSource` 의 uchr, log 의 `KeyLayoutData size`)으로 바꾼다. 입력 소스와 keyboard layout 은 따로 있다 —
+  입력기(IMK)가 선택되어 있어도 그 아래에 layout 이 하나 있고, 입력기가 넘긴 key 는 그 layout 으로 글자가 된다.
+  Apple 두벌식의 layout 은 `com.apple.keylayout.2SetHangul`(2964 byte)이고 key 마다 자모 하나를 낸다(g → ㅎ U+314E — `UCKeyTranslate` 로 확인).
+  homi 의 layout 은 homi 가 activate 때 고정하는 ABC(5032 byte)다.
+- **원격은 keysym 을 자기 layout 에서 key 로 되돌려 치고, 없으면 글자 그대로 넣는다** ✅. 원격의 `ScreensharingAgent`(`KeyMap.c`)는
+  지금의 layout 으로 keysym → key code 를 찾아 key event 를 만들고(`KeyMapDictionary_ConvertKeysym`, `CGEventCreateKeyboardEvent`),
+  없으면 Unicode 글자로 넣는다(`CGEventKeyboardSetUnicodeString`; 비밀번호 칸에서는 넣지 않는다) — 받는 쪽 binary 의 import·문자열.
+  그래서 원격이 두벌식이면 자모가 두벌식 key 로 되돌아가 **원격 입력기가 조합**하고, 원격이 ABC 면 **자모가 그대로 들어간다**(풀어쓰기).
+  영문 글자는 원격이 두벌식이어도 영문으로 들어간다 (2026-09-26 주인).
+- **그래서 한/영을 정하는 것은 이 Mac 의 layout 이다** ✅. Apple 입력기로 원격에 한/영이 먹은 것도 이 Mac 의 입력 소스가 ABC ↔ 두벌식으로 바뀌며
+  layout 이 바뀌었기 때문이다 — ⌃Space 로 이 Mac 만 20초에 8번 바뀌는 동안 원격은 그대로였다 (2026-09-26 주인 + log).
+  homi 는 입력 소스를 바꾸지 않고 layout 만 바꾼다: IMK 의 `overrideKeyboardWithKeyboardNamed:` 로 한 → `2SetHangul`, A → ABC.
+  그러면 선택된 입력 소스 변경 알림이 가고 Remote Desktop 은 곧바로 layout 을 다시 읽는다(`local keyboard changed` → 새 `KeyLayoutData`) ✅ log.
+  override 할 layout 은 켜져 있지 않아도 된다 — `2SetHangul` 은 입력 소스 목록에 없고, Apple 한국어 입력기를 끈 뒤에도 됐다 ✅ (2026-09-26 주인).
+  남는 조건 하나: 조합은 원격 입력기가 하므로 **원격은 두벌식이어야 한다**.
+- **입력 소스 ID 동기화("키보드 언어 동기화", Sync Keyboard Language)는 Remote Desktop 에서 켤 수 없다** ✅.
+  켜져 있으면 이 Mac 의 입력 소스가 바뀔 때마다 ID(`kTISPropertyInputSourceID`)를 보내고(`RFBShareKeyboardSourceID` → `UpdateKeyboardInputSourceInfo`,
+  연결 시작 때 한 번 + `kTISNotifySelectedKeyboardInputSourceChanged` 마다), 원격의 `ScreensharingAgent` 는 `TISCopyInputSourceRefForInputSourceID` 로
+  정확히 그 ID 를 찾아 켜고 고른다 — 없으면 "Failed to select input source". 켜져 있으면 늘 key code 로 보낸다.
+  flag(`ref+0xf06`)가 꺼져 있으면 log 에 `do not set keyboard source` 만 남는다. 창의 nib 에 단추(`Keyboard`, 설명 "키보드 언어 동기화")는 있지만
+  toolbar delegate 의 기본·허용 목록에 없고 사용자화도 꺼져 있다 (nib 해독 + app 전체 disassemble, 2026-09-26).
+  이름이 헷갈리는 `handleKeyboardInputSourceEncoding:` 은 원격의 secure input(비밀번호 칸) 상태를 받는 것이다.
+- 수식키는 왼쪽·오른쪽을 가려 key code 로 보낸다 ✅ (`SSSendChangedModifierFlags` 의 표, memory 에서 읽음) —
+  device flag → key code: 왼 Control 59 · 왼 Shift 56 · 오른 Shift 60 · 왼 ⌘ 55 · **오른 ⌘ 54** · 왼 ⌥ 58 · **오른 ⌥ 61** · **오른 Control 62** · Caps Lock 57 · fn 63.
+  homi 가 Caps Lock 을 오른쪽 Control 로 바꿔 두면 원격에는 62 가 간다 — 원격의 입력 소스는 바뀌지 않는다.
+- 선행 사례: 구름은 한/영이 곧 입력 소스 mode 다 — 영문 mode(`…Gureum.qwerty`, `smRoman`, ABC layout)와 한글 mode 를 두고,
+  전환 key 에 `client.selectMode(mode)`(IMK `selectInputMode:`) ✅ source. 입력 소스 ID 동기화가 켜지는 화면 공유에서만 의미가 있다.
+- 조사 방법: `dlopen` 으로 framework 를 불러 ObjC runtime 으로 class·method 를 나열하고, lldb 로 method 와 C 함수를 disassemble 했다.
+  shared cache 의 stub(`adrp x17 / add / ldr x16,[x17] / braa`)은 GOT 의 pointer 를 읽어 이름을 풀었다. 컴파일된 nib 은 NIBArchive 형식을 직접 읽었다.
+  layout 은 `UCKeyTranslate` 로 쳐 보고, `TISGetInputSourceProperty(kTISPropertyUnicodeKeyLayoutData)` 의 크기로 log 의 `KeyLayoutData size` 와 맞췄다 (scratch script).
+
 ## 알려진 화면 문제
 
 - **Ghostty**: 한글 조합 중에 수식키(Caps Lock·오른쪽 ⌘)로 전환하면, 확정된 마지막 글자가 선택된 것처럼 보이다가 다음 key 에 사라진다. 글자는 제대로 들어간다(`한a`). ✅ 주인 관측

@@ -31,8 +31,6 @@ nonisolated final class HomiInputController: IMKInputController {
     }
 
     override func activateServer(_ sender: Any!) {
-        // homi 가 넘긴 key 는 이 layout 으로 문자가 된다 — 늘 ABC (한글 모드의 ` 도 ` 가 된다).
-        (sender as? IMKTextInput)?.overrideKeyboard(withKeyboardNamed: "com.apple.keylayout.ABC")
         let app = resolveApp(sender)
         let profile = profile(for: app)
         let (mode, changed) = memory.withLock { memory in
@@ -41,8 +39,11 @@ nonisolated final class HomiInputController: IMKInputController {
             return (mode, memory != before ? memory : nil)
         }
         if let changed { Memory.save(changed) }
+        // homi 가 넘긴 key 는 이 layout 으로 문자가 된다 — 늘 ABC, 원격 화면의 한글 모드만 두벌식 (`AppProfile.keyboardLayout`).
+        let layout = profile.keyboardLayout(in: mode)
+        (sender as? IMKTextInput)?.overrideKeyboard(withKeyboardNamed: layout)
         log.info("activate \(app, privacy: .public)")
-        record("activate \(app) \(profile.passThrough ? "pass-through" : "\(mode)")")
+        record("activate \(app) \(profile.passThrough ? "pass-through" : "\(mode)") \(layout)")
         let shown: Mode? = profile.passThrough ? nil : mode
         Task { @MainActor in Indicator.shared.show(shown) }
     }
@@ -100,7 +101,10 @@ nonisolated final class HomiInputController: IMKInputController {
         }
         switchMode(to: outcome.mode, from: mode, app: app)
         client.apply(outcome.actions)
-        if outcome.mode != mode { showMode(outcome.mode, near: client) }
+        if outcome.mode != mode {
+            followLayout(outcome.mode, app: app, client: client)
+            showMode(outcome.mode, near: client)
+        }
         if outcome.resend {
             record("  resend")
             Resend.post(event)
@@ -224,7 +228,18 @@ nonisolated final class HomiInputController: IMKInputController {
         let outcome = session.toggle(from: mode)
         switchMode(to: outcome.mode, from: mode, app: app)
         client.apply(outcome.actions)
+        followLayout(outcome.mode, app: app, client: client)
         showMode(outcome.mode, near: client)
+    }
+
+    /// 한/영을 keyboard layout 으로 알리는 app(원격 화면)에서는 모드가 바뀔 때 homi 아래의 layout 도 바꾼다 —
+    /// 그 app 은 입력기의 글자가 아니라 이 layout 으로 만든 글자를 보낸다 (`AppProfile.keyboardLayoutFollowsMode`).
+    private func followLayout(_ mode: Mode, app: String, client: Client) {
+        let profile = profile(for: app)
+        guard profile.keyboardLayoutFollowsMode else { return }
+        let layout = profile.keyboardLayout(in: mode)
+        record("  layout \(layout)")
+        client.proxy.overrideKeyboard(withKeyboardNamed: layout)
     }
 
     /// 커서 옆 말풍선. 커서 줄의 위치는 지금(key 처리 도중, app 이 homi 를 기다리는 동안) 묻고 — 그 밖에서 client 를 부르면

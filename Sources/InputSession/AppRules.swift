@@ -19,11 +19,15 @@ public struct AppProfile: Sendable, Equatable {
     public var hanjaKey: Preferences.HanjaKey = .optionReturn
     /// 방금 친 단어도 한자로 (Apple 방식, 주인 설정).
     public var hanjaRecentWord = true
+    /// app 이 입력기의 글자를 받지 않고 key 를 homi 아래의 keyboard layout 으로 직접 글자로 바꾼다 — 한/영을 layout 으로 알린다
+    /// (`keyboardLayout(in:)`). 원격 화면(Remote Desktop)이 그렇다.
+    public var keyboardLayoutFollowsMode = false
 
     public init(
         startsInEnglish: Bool = false, englishTriggers: [Trigger] = [], resendWhileComposing: Set<UInt16> = [],
         convertsEnteredText: Bool = true, passThrough: Bool = false, shiftSpaceToggles: Bool = false,
-        hanjaKey: Preferences.HanjaKey = .optionReturn, hanjaRecentWord: Bool = true
+        hanjaKey: Preferences.HanjaKey = .optionReturn, hanjaRecentWord: Bool = true,
+        keyboardLayoutFollowsMode: Bool = false
     ) {
         self.startsInEnglish = startsInEnglish
         self.englishTriggers = englishTriggers
@@ -33,6 +37,14 @@ public struct AppProfile: Sendable, Equatable {
         self.shiftSpaceToggles = shiftSpaceToggles
         self.hanjaKey = hanjaKey
         self.hanjaRecentWord = hanjaRecentWord
+        self.keyboardLayoutFollowsMode = keyboardLayoutFollowsMode
+    }
+
+    /// homi 아래에 둘 keyboard layout — homi 가 넘긴 key 는 이것으로 글자가 된다. 늘 ABC 다 (한글 모드의 ` 도 ` 가 된다).
+    /// 예외: `keyboardLayoutFollowsMode` 인 app 의 한글 모드는 두벌식 layout — key 마다 자모를 내고, 그 자모가 원격에서 한글이 된다.
+    public func keyboardLayout(in mode: Mode) -> String {
+        keyboardLayoutFollowsMode && !passThrough && mode == .korean
+            ? "com.apple.keylayout.2SetHangul" : "com.apple.keylayout.ABC"
     }
 }
 
@@ -100,5 +112,9 @@ public enum AppRules {
 
         // 조합 중 Enter 는 marked text 가 있으면 전송 대신 줄바꿈 — TelegramSwift ChatInputTextView.keyDown (source 확인)
         "ru.keepcoder.Telegram": AppProfile(resendWhileComposing: [returnKey, enter]),
+
+        // 원격 화면은 입력기의 글자를 받지 않고, key 를 이 Mac 의 keyboard layout 으로 글자로 바꿔 보낸다 —
+        // 한/영은 원격의 입력 소스가 아니라 이 layout 이 정한다 (docs/apps/remote-desktop.md, 2026-09-26 주인 + log)
+        "com.apple.RemoteDesktop": AppProfile(keyboardLayoutFollowsMode: true),
     ]
 }

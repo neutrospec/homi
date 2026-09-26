@@ -35,7 +35,7 @@ homi 를 바꿀 때(특히 `Sources/InputSession/AppRules.swift`) 그 app 의 �
 | [Excel](excel.md) | `com.microsoft.Excel` | Office | 16.113.2 | 한자는 조합 중인 글자만 |
 | [PowerPoint](powerpoint.md) | `com.microsoft.Powerpoint` | Office | 16.113.2 | 한자는 조합 중인 글자만 |
 | [LaunchBar](launchbar.md) | `at.obdev.LaunchBar` | — | 6.24 | 늘 영문으로 시작* |
-| [Remote Desktop](remote-desktop.md) | `com.apple.RemoteDesktop` | — | 3.10 | 한/영 전환 없음* |
+| [Remote Desktop](remote-desktop.md) | `com.apple.RemoteDesktop` | — | 3.10 | 한/영을 keyboard layout 으로 (원격은 두벌식) |
 | [Windows App](windows-app.md) | `com.microsoft.rdc.macos` | — | 11.4.2 | 한/영 전환 없음* |
 | [Emacs](emacs.md) | `org.gnu.Emacs` | — | (이 Mac 에 없다) | 한/영 전환 없음* |
 

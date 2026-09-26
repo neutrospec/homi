@@ -18,11 +18,10 @@ func startsInEnglish() {
     #expect(!AppRules.profile(for: "com.example.unknown").startsInEnglish)
 }
 
-@Test("한/영 전환 없는 app — 기본은 원격 화면과 Emacs", arguments: [
-    "com.apple.RemoteDesktop", "com.microsoft.rdc.macos", "org.gnu.Emacs",
-])
+@Test("한/영 전환 없는 app — 기본은 Windows App 과 Emacs", arguments: ["com.microsoft.rdc.macos", "org.gnu.Emacs"])
 func passThroughApps(app: String) {
     #expect(AppRules.profile(for: app).passThrough)
+    #expect(!AppRules.profile(for: "com.apple.RemoteDesktop").passThrough)  // homi 가 layout 으로 한/영을 알린다
 }
 
 @Test("ESC 가 영문 trigger 인 app — 수식키 무관", arguments: [
@@ -105,6 +104,21 @@ func plainEnter() {
     _ = press("gks", &session)
     let outcome = session.handle(returnKey, mode: .korean, profile: AppProfile())
     #expect(outcome == Outcome(handled: false, actions: [.insert("한")], mode: .korean))
+}
+
+@Test("homi 아래의 keyboard layout — 늘 ABC, 원격 화면의 한글 모드만 두벌식")
+func keyboardLayoutFollowsMode() {
+    let remote = AppRules.profile(for: "com.apple.RemoteDesktop")
+    #expect(remote.keyboardLayout(in: .korean) == "com.apple.keylayout.2SetHangul")
+    #expect(remote.keyboardLayout(in: .english) == "com.apple.keylayout.ABC")
+    for app in ["com.apple.TextEdit", "com.mitchellh.ghostty", "com.example.unknown"] {
+        #expect(AppRules.profile(for: app).keyboardLayout(in: .korean) == "com.apple.keylayout.ABC")
+    }
+    // 주인이 한/영 전환 없는 app 으로 두면 homi 는 비켜선다 — layout 도 ABC 그대로
+    var preferences = Preferences.standard
+    preferences.passThroughApps.append("com.apple.RemoteDesktop")
+    let passed = AppRules.profile(for: "com.apple.RemoteDesktop", preferences: preferences)
+    #expect(passed.keyboardLayout(in: .korean) == "com.apple.keylayout.ABC")
 }
 
 @Test("IntelliJ 도 ESC → 영문 (주인 요청)", arguments: ["com.jetbrains.intellij", "com.jetbrains.intellij.ce"])
