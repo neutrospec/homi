@@ -13,8 +13,8 @@ public struct AppProfile: Sendable, Equatable {
     public var convertsEnteredText = true
     /// 한/영 전환 없는 app — homi 가 한/영 전환도 조합도 하지 않고 key 를 그대로 넘긴다 (주인 설정).
     public var passThrough = false
-    /// Shift+Space 로 한/영 전환 (주인 설정).
-    public var shiftSpaceToggles = false
+    /// 한/영 전환 key (주인 설정) — 수식키 tap 은 `ModifierKeys` 가, Shift+Space 는 `Session` 이 본다.
+    public var toggleKeys: Set<Preferences.ToggleKey> = Preferences.standard.toggleKeys
     /// 한자 변환 key (주인 설정 — 한/영 전환과 겹치지 않게 정리된 것).
     public var hanjaKey: Preferences.HanjaKey = .optionReturn
     /// 방금 친 단어도 한자로 (Apple 방식, 주인 설정).
@@ -25,16 +25,16 @@ public struct AppProfile: Sendable, Equatable {
 
     public init(
         startsInEnglish: Bool = false, englishTriggers: [Trigger] = [], resendWhileComposing: Set<UInt16> = [],
-        convertsEnteredText: Bool = true, passThrough: Bool = false, shiftSpaceToggles: Bool = false,
-        hanjaKey: Preferences.HanjaKey = .optionReturn, hanjaRecentWord: Bool = true,
-        keyboardLayoutFollowsMode: Bool = false
+        convertsEnteredText: Bool = true, passThrough: Bool = false,
+        toggleKeys: Set<Preferences.ToggleKey> = Preferences.standard.toggleKeys,
+        hanjaKey: Preferences.HanjaKey = .optionReturn, hanjaRecentWord: Bool = true, keyboardLayoutFollowsMode: Bool = false
     ) {
         self.startsInEnglish = startsInEnglish
         self.englishTriggers = englishTriggers
         self.resendWhileComposing = resendWhileComposing
         self.convertsEnteredText = convertsEnteredText
         self.passThrough = passThrough
-        self.shiftSpaceToggles = shiftSpaceToggles
+        self.toggleKeys = toggleKeys
         self.hanjaKey = hanjaKey
         self.hanjaRecentWord = hanjaRecentWord
         self.keyboardLayoutFollowsMode = keyboardLayoutFollowsMode
@@ -75,7 +75,7 @@ public enum AppRules {
         profile.startsInEnglish = preferences.englishStartApps.contains(app)
         if preferences.escapeApps.contains(app) { profile.englishTriggers.insert(esc, at: 0) }
         profile.passThrough = preferences.passThroughApps.contains(app)
-        profile.shiftSpaceToggles = preferences.toggleKeys.contains(.shiftSpace)
+        profile.toggleKeys = preferences.toggleKeys
         profile.hanjaKey = preferences.effectiveHanjaKey
         profile.hanjaRecentWord = preferences.hanjaRecentWord
         return profile

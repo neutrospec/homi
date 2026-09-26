@@ -22,6 +22,8 @@ public enum Action: Sendable, Equatable {
     case showCandidates([Candidate], selected: Int)
     /// 한자 후보 창을 닫는다.
     case hideCandidates
+    /// homi 아래의 keyboard layout 을 바꾼다 — 한/영을 layout 으로 알리는 app 에서 모드가 바뀔 때 (`AppProfile.keyboardLayoutFollowsMode`).
+    case layout(String)
 }
 
 /// key 하나를 처리한 결과.
@@ -109,12 +111,20 @@ public struct Session: Sendable {
         _ key: KeyEvent, mode: Mode, profile: AppProfile = AppProfile(), selectedText: () -> String? = { nil },
         textBefore: (Int) -> (text: String, end: Int)? = { _ in nil }
     ) -> Outcome {
+        let outcome = handleKey(key, mode: mode, profile: profile, selectedText: selectedText, textBefore: textBefore)
+        return Self.following(outcome, from: mode, profile: profile)
+    }
+
+    private mutating func handleKey(
+        _ key: KeyEvent, mode: Mode, profile: AppProfile, selectedText: () -> String? = { nil },
+        textBefore: (Int) -> (text: String, end: Int)? = { _ in nil }
+    ) -> Outcome {
         if profile.passThrough {
             // 한/영 전환 없는 app — 전환도 조합도 하지 않는다. (조합이 남아 있을 수 없지만, 있다면 잃지 않게 확정한다.)
             return Outcome(handled: false, actions: commit(), mode: mode)
         }
         if choosing != nil { return choose(key, mode: mode, profile: profile) }
-        if profile.shiftSpaceToggles, key.isShiftSpace { return toggle(from: mode) }
+        if profile.toggleKeys.contains(.shiftSpace), key.isShiftSpace { return flip(from: mode) }
         if mode == .korean, profile.hanjaKey == .optionReturn, key.isHanjaKey,
             let outcome = openHanja(profile: profile, selectedText: selectedText, textBefore: textBefore)
         {
@@ -291,7 +301,7 @@ public struct Session: Sendable {
     private mutating func closeAndHandle(_ key: KeyEvent, mode: Mode, profile: AppProfile) -> Outcome {
         let restore = choosing?.restore ?? []
         choosing = nil
-        var outcome = handle(key, mode: mode, profile: profile)
+        var outcome = handleKey(key, mode: mode, profile: profile)
         outcome.actions.insert(contentsOf: [.hideCandidates] + restore, at: 0)
         return outcome
     }
@@ -314,9 +324,22 @@ public struct Session: Sendable {
         return Outcome(handled: resend, actions: actions, mode: mode, resend: resend)
     }
 
-    /// 한/영 전환 — 조합 중이면 먼저 확정한다.
-    public mutating func toggle(from mode: Mode) -> Outcome {
+    /// 한/영 전환 — 조합 중이면 먼저 확정한다. `profile` 은 이 입력칸의 app 규칙 (layout 을 따라 바꾸는 app 이 있다).
+    public mutating func toggle(from mode: Mode, profile: AppProfile = AppProfile()) -> Outcome {
+        Self.following(flip(from: mode), from: mode, profile: profile)
+    }
+
+    private mutating func flip(from mode: Mode) -> Outcome {
         Outcome(handled: true, actions: commit(), mode: mode.toggled)
+    }
+
+    /// 모드가 바뀌었으면, 한/영을 keyboard layout 으로 알리는 app(원격 화면)에서는 homi 아래의 layout 도 바꾼다 —
+    /// 그 app 은 입력기의 글자가 아니라 이 layout 으로 만든 글자를 보낸다. 확정한 글자를 넣은 뒤에.
+    private static func following(_ outcome: Outcome, from mode: Mode, profile: AppProfile) -> Outcome {
+        guard outcome.mode != mode, profile.keyboardLayoutFollowsMode, !profile.passThrough else { return outcome }
+        var outcome = outcome
+        outcome.actions.append(.layout(profile.keyboardLayout(in: outcome.mode)))
+        return outcome
     }
 
     /// 조합 중인 글자를 확정한다 — 입력칸을 떠날 때, client 가 요청할 때, 넘기는 key 앞에서.

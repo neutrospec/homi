@@ -139,7 +139,7 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 | module | 역할 | 의존 |
 |---|---|---|
 | `HangulCore` (M1) | 두벌식 자판 mapping + 조합 state machine. 입력: 자모·편집 명령 / 출력: commit 문자열 + 조합 중 문자열 | 없음 |
-| `InputSession` | key 해석(자모·Backspace·넘길 key, M3 부터 전환 키·trigger), 모드, 앱별 기억과 규칙, 주인의 설정(`Preferences`), 최근 기록(`Recorder`) | `HangulCore` |
+| `InputSession` | key 해석(자모·Backspace·넘길 key, M3 부터 전환 키·trigger), 수식키 tap 의 뜻(`ModifierKeys`), 모드, 앱별 기억과 규칙, 주인의 설정(`Preferences`), 최근 기록(`Recorder`) | `HangulCore` |
 | `homi` (app, `Sources/homi`) | IMK glue — `IMKServer`, `HomiInputController`, NSEvent 변환, menu bar 표시, 설정 창(SwiftUI). `Bundle/` 에 `Info.plist`·resource | 위 둘 + AppKit·InputMethodKit |
 
 - `Info.plist` 는 한국어 mode 하나(`com.unocult.inputmethod.homi.korean`, `smKorean`)만 둔다 — 한/영은 homi 안의 모드이고

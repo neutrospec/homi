@@ -1,8 +1,5 @@
 /// 수식키 하나를 단독으로 눌렀다 뗐는지 — 짧게(tap)인지 길게(hold)인지.
-///
-/// 전환 key 둘이 이것으로 판정된다:
-/// - 오른쪽 ⌘: tap = 한/영 전환
-/// - Caps Lock (homi 가 선택된 동안 오른쪽 Control 로 remap): tap = 한/영 전환, hold = 대문자 고정 켜기/끄기 — macOS 의 Caps Lock 과 같다
+/// 오른쪽 ⌘·⌥ 와 Caps Lock 이 이것으로 판정되고, 그 tap·hold 가 무엇을 뜻하는지는 `ModifierKeys` 가 주인의 설정대로 정한다.
 ///
 /// ⌘C·⌘Tab 의 C·Tab 은 menu·system 이 먼저 가져가 입력기에 오지 않는다 (docs/macos-input.md, probe run 2).
 /// 그래서 입력기가 본 event 가 아니라, system 전체의 key·mouse 누름 횟수(`activity`)가 누를 때와 뗄 때 같은지로 판정한다.

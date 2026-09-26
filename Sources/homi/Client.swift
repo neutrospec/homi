@@ -18,6 +18,13 @@ extension KeyEvent {
     }
 }
 
+extension ModifierEvent {
+    /// flagsChanged 에서 판단에 쓰는 것만 옮긴다. `activity` 는 지금의 system key·mouse 누름 횟수 (`Activity.now()`).
+    nonisolated init(_ event: NSEvent, activity: [UInt32]) {
+        self.init(keyCode: event.keyCode, modifiers: KeyEvent(event).modifiers, time: event.timestamp, activity: activity)
+    }
+}
+
 /// IMK 의 client proxy 에 Session 이 정한 일을 한다.
 /// replacementRange 는 NSNotFound — 문서 위치를 믿지 않는다 (AGENTS.md 결정 5).
 /// 예외는 `markCommitted` 하나: ⌥↩ 가 방금 친 단어를 바꿀 때, 교체를 제대로 받는 client 에서 그 자리 글자를 확인한 뒤에만.
@@ -47,6 +54,9 @@ nonisolated struct Client {
             case .hideCandidates:
                 record("  candidates hidden")
                 Task { @MainActor in CandidatePanel.shared.hide() }
+            case .layout(let id):
+                record("  layout \(id)")
+                proxy.overrideKeyboard(withKeyboardNamed: id)
             }
         }
     }

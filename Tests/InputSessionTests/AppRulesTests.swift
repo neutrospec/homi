@@ -121,6 +121,38 @@ func keyboardLayoutFollowsMode() {
     #expect(passed.keyboardLayout(in: .korean) == "com.apple.keylayout.ABC")
 }
 
+@Test("원격 화면에서 한/영이 바뀌면 homi 아래의 layout 도 바꾼다 — 조합 중이면 확정한 뒤")
+func toggleFollowsLayout() {
+    let remote = AppRules.profile(for: "com.apple.RemoteDesktop")
+    var session = Session()
+    let toKorean = session.toggle(from: .english, profile: remote)
+    #expect(toKorean == Outcome(handled: true, actions: [.layout("com.apple.keylayout.2SetHangul")], mode: .korean))
+    _ = press("gks", &session)
+    let toEnglish = session.toggle(from: .korean, profile: remote)
+    #expect(toEnglish == Outcome(handled: true, actions: [.insert("한"), .layout("com.apple.keylayout.ABC")], mode: .english))
+}
+
+@Test("다른 app 의 한/영 전환은 layout 을 건드리지 않는다 — 늘 ABC 그대로")
+func toggleKeepsLayout() {
+    var session = Session()
+    let outcome = session.toggle(from: .english, profile: AppRules.profile(for: "com.apple.TextEdit"))
+    #expect(outcome == Outcome(handled: true, actions: [], mode: .korean))
+}
+
+@Test("key 로 모드가 바뀌어도(Shift+Space·trigger) 원격 화면이면 layout 을 바꾼다 — 안 바뀌면 그대로")
+func keyFollowsLayout() {
+    var profile = AppRules.profile(for: "com.apple.RemoteDesktop")
+    profile.toggleKeys.insert(.shiftSpace)
+    profile.englishTriggers = [Trigger(keyCode: 53)]
+    var session = Session()
+    let toKorean = session.handle(shiftSpace, mode: .english, profile: profile)
+    let toEnglish = session.handle(escape, mode: .korean, profile: profile)
+    let stays = session.handle(escape, mode: .english, profile: profile)
+    #expect(toKorean.actions == [.layout("com.apple.keylayout.2SetHangul")])
+    #expect(toEnglish.actions == [.layout("com.apple.keylayout.ABC")])
+    #expect(stays.actions.isEmpty)
+}
+
 @Test("IntelliJ 도 ESC → 영문 (주인 요청)", arguments: ["com.jetbrains.intellij", "com.jetbrains.intellij.ce"])
 func intellijEscape(app: String) {
     #expect(AppRules.profile(for: app).englishTriggers.contains { $0.matches(escape) })
@@ -201,7 +233,7 @@ func passThroughPassesEverything() {
 @Test("Shift+Space — 켜면 전환(조합 중이면 먼저 확정), 끄면 평소의 space")
 func shiftSpaceToggle() {
     let shiftSpace = KeyEvent(keyCode: 49, modifiers: .shift)
-    let on = AppProfile(shiftSpaceToggles: true)
+    let on = AppProfile(toggleKeys: [.shiftSpace])
     var session = Session()
     #expect(session.handle(shiftSpace, mode: .english, profile: on) == Outcome(handled: true, actions: [], mode: .korean))
     _ = press("gks", &session)
