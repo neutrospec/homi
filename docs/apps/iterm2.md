@@ -26,7 +26,7 @@
   (`AppRules`, `c08572b`·`c884edd`).
 - 전환 key 는 수식키(Caps Lock → 오른쪽 Control, 오른쪽 ⌘)다 — 글자 없이 먹은 key 가 새지 않게 (`c08572b`).
 
-## 다시 확인할 것
+## 확인하는 법
 
 - vim insert mode 에서 한글 조합 중 ESC 한 번 → Normal + 영문.
 - 조합 중 Enter → 확정 + 명령 실행.

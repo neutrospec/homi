@@ -15,7 +15,7 @@
 
 - `convertsEnteredText: false` (`AppRules`, `c884edd`).
 
-## 다시 확인할 것
+## 확인하는 법
 
 - 조합 중 ESC·Enter → 확정된 뒤 key 도 간다. 잃으면 다시 보내기 규칙이 필요하다.
 - Caps Lock·오른쪽 ⌘ 전환 때 글자가 새지 않는다.

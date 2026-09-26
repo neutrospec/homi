@@ -26,7 +26,7 @@ macOS 의 text 엔진이다. `NSTextInputClient` 의 기준 구현이라 다른 
 - 없다. 이 엔진이 기준이다.
 - Apple 방식 한자는 client 가 이 엔진 수준(교체 범위 + `NSTextAlternatives`)을 알릴 때만 쓴다 (`Client.replacesLikeTextView`, `c884edd`).
 
-## 다시 확인할 것 (macOS 가 바뀌면)
+## 확인하는 법
 
 - `validAttributesForMarkedText` 목록 — Apple 방식 한자의 판별이 여기에 기댄다.
   `swift` script 로 `NSTextView` 를 만들어 `validAttributesForMarkedText()` 를 출력해 본다.

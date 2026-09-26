@@ -34,7 +34,7 @@ Java 쪽에서 marked text 는 문서 밖의 "composed text" 다.
 - 고르는 key 는 marked text 가 있는 채로 오게 한다 — 선택 영역도 ⌥↩ 때 marked text 로 만든다 (`c884edd`).
 - Apple 방식 한자는 쓰지 않는다 — 아무 attribute 도 알리지 않는다.
 
-## 다시 확인할 것 (JBR 이 바뀌면 — IntelliJ update 에 딸려 온다)
+## 확인하는 법
 
 - 조합 중 ESC → 영문 전환, IdeaVim 은 ESC 를 받는다 (Normal).
 - 조합 중인 글자 + ⌥↩ → Enter 로 고르기 → 한자로 바뀌고 줄은 바뀌지 않는다.

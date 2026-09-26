@@ -17,7 +17,7 @@
 
 - ESC 영문 trigger (`AppRules`, `c08572b`). Chromium 규칙 (`7e4c1fd`).
 
-## 다시 확인할 것
+## 확인하는 법
 
 - 조합 중 ESC → 확정 + 영문.
 - 조합 중 click → 음절이 한 번만 남는다.

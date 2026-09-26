@@ -17,7 +17,7 @@
 
 - 한/영 전환 없는 app (`Preferences.passThroughApps`, M7): key·수식키를 그대로 넘기고, 이 app 이 앞에 있는 동안 Caps Lock remap 을 푼다.
 
-## 다시 확인할 것
+## 확인하는 법
 
 - 이 app 에서 menu bar 표시가 `–` 다. 원격 쪽에서 친 한글이 원격의 입력기로 조합된다.
 - Caps Lock 이 원격 쪽에서 원래 Caps Lock 으로 동작한다. 오른쪽 ⌘·⌥ 와 Shift+Space 가 원격으로 그대로 간다.

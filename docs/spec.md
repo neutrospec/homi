@@ -18,7 +18,7 @@ Apple 두벌식과 다른 곳은 ⚠️ 로 표시한다.
 
 - key 는 물리 위치(`keyCode`)로 읽는다. 그 아래 깔린 keyboard layout 이 무엇이든 같다. Caps Lock 은 무시한다.
 - Apple 의 `com.apple.keylayout.2SetHangul` 과 같은 표다 — test 가 system 의 layout 과 대조한다.
-- 이 표에 없는 key(숫자·문장부호·`` ` ``·Space…)는 자모가 아니다. 조합을 확정하고 key 는 app 으로 넘긴다 (IMK 층의 일).
+- 이 표에 없는 key(숫자·문장부호·`` ` ``·Space…)는 자모가 아니다. 조합을 확정하고 key 는 app 으로 넘긴다 (`Session` 의 일).
 
 ## 음절의 재료
 
@@ -56,7 +56,7 @@ Apple 두벌식과 다른 곳은 ⚠️ 로 표시한다.
 
 ## 확정
 
-자모가 아닌 key, 수식키 조합(⌘·⌃·⌥), 모드 전환, focus 이동은 조합 중인 음절을 그대로 확정한다 — IMK 층이 `flush` 를 부른다.
+자모가 아닌 key, 수식키 조합(⌘·⌃·⌥), 모드 전환, focus 이동은 조합 중인 음절을 그대로 확정한다 — `Session` 이 `flush` 를 부른다.
 
 ## 출력 문자
 

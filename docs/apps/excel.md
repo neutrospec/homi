@@ -15,7 +15,7 @@
 
 - `convertsEnteredText: false` (`AppRules`, `c884edd`).
 
-## 다시 확인할 것
+## 확인하는 법
 
 - 셀에서 한글을 조합하다 Enter·Tab → 조합이 확정되고 key 도 간다 (다음 셀로).
 - 새 셀에서도 한/영 모드가 app 별 기억대로다.

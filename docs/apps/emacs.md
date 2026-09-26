@@ -18,7 +18,7 @@
 
 - 한/영 전환 없는 app (`Preferences.passThroughApps`, M7).
 
-## 다시 확인할 것 (설치하면)
+## 확인하는 법 (설치하면)
 
 - menu bar 표시가 `–` 다. Emacs 의 한글 입력기로 조합되고, Emacs 의 한/영 전환 key 가 먹힌다.
 - bundle ID 가 `org.gnu.Emacs` 가 아니면(배포판마다 다를 수 있다) 설정에서 그 app 을 더한다.

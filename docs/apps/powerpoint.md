@@ -15,7 +15,7 @@
 
 - `convertsEnteredText: false` (`AppRules`, `c884edd`).
 
-## 다시 확인할 것
+## 확인하는 법
 
 - text box 에서 한글 조합, 조합 중인 글자 + ⌥↩ → 한자.
 

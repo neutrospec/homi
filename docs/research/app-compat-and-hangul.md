@@ -1,5 +1,8 @@
 # 조사: IMK lifecycle · 앱별 호환성 · Apple 입력기 결함 · 두벌식 (2026-09-25)
 
+> 구현 전의 조사다. 그 뒤 homi 가 확인하거나 정한 것은 AGENTS.md·docs/macos-input.md·app 원장이 우선한다
+> (예: 주인 환경의 설정, 서명 신원, 전환 key 받는 방법).
+
 조사 agent 가 입력기 source·issue, app source(Chromium·Ghostty·iTerm2), 주인의 Mac(macOS 27)을 확인한 결과를 추렸다.
 표기: ✅ 확인 / 🔶 불확실. 약칭: gureum, sq=squirrel, skk=macSKK, vc=vChewing, az=azooKey, fx=fcitx5-macos,
 gt=ghostty, PT=`ghostface2232/PriType-Swift`(`Meapri/PriType-Swift` 의 fork, 2026-09-24 갱신. 같은 단일 입력기 설계의 한국어 입력기 — 가까운 선행 사례지만 주장의 출처가 하나뿐), Cr=Chromium.

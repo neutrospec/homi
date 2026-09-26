@@ -40,7 +40,7 @@
   (`HomiInputController.commitComposition`, `7e4c1fd`). 전환 순간에 TIS 가 이미 새 입력 소스를 가리키는지는 아직 확인하지 않았다 🔶.
 - Apple 방식 한자는 쓰지 않는다 — `NSTextAlternatives` 를 알리지 않는다 (`Client.replacesLikeTextView`, `c884edd`).
 
-## 다시 확인할 것 (Chromium·Electron 이 바뀌면)
+## 확인하는 법
 
 - 조합 중(`자`)에 click → 음절이 한 번만 남는다. homi 기록에 `finished by client — not inserting`.
 - `validAttributesForMarkedText` 에 `NSTextAlternatives` 가 생겼는가 — 생기면 Apple 방식 한자가 켜진다. 그 app 에서 `나는한자` + ⌥↩ 가 맞는지 본다.

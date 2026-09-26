@@ -20,7 +20,7 @@
 - ESC 영문 trigger, `convertsEnteredText: false` (`AppRules`, `c08572b`·`c884edd`). Chromium 규칙 (`7e4c1fd`).
 - 조합 중 Enter·ESC 다시 보내기는 없다 — xterm.js 가 그 key 를 잃는지 아직 모른다 🔶.
 
-## 다시 확인할 것
+## 확인하는 법
 
 - 조합 중 ESC·Enter → 확정된 뒤 key 도 terminal 에 간다. 잃으면 다시 보내기 규칙이 필요하다.
 - 조합 중인 글자 + ⌥↩ → 한자.

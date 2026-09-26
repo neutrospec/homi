@@ -24,7 +24,7 @@
 - 조합 중 Return·keypad Enter 는 확정하고 먹은 뒤 새 event 로 다시 보낸다. 두 번째 Enter 가 도착할 때는 marked text 가 없어 전송된다
   (`AppRules` 의 `resendWhileComposing`, `Resend`, `c08572b`). 손쉬운 사용 허가가 필요하다.
 
-## 다시 확인할 것
+## 확인하는 법
 
 - 한글을 조합하다 Enter → 한 번에 전송된다.
 - `나는한자` + ⌥↩ → `한자` 에만 밑줄 → 漢字 로 바뀐다. ⌥↩ 를 한 번 더 누르면 `자` 로 짧아진다.

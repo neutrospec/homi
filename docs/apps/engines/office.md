@@ -19,7 +19,7 @@ Word·Excel·PowerPoint 는 같은 text 구현을 쓸 것이다 🔶. source 가
 
 - 한자는 조합 중인 글자만 (`AppRules` 의 `convertsEnteredText: false`, `c884edd`).
 
-## 다시 확인할 것
+## 확인하는 법
 
 - Word·Excel·PowerPoint 에서 한글 조합, 조합 중인 글자 + ⌥↩.
 

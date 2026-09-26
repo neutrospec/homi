@@ -26,7 +26,7 @@
 - ESC 영문 trigger (`AppRules`, `c08572b`).
 - Chromium 규칙 — click·blur 의 `commitComposition` 에 넣지 않는다 (`7e4c1fd`).
 
-## 다시 확인할 것
+## 확인하는 법
 
 - 조합 중 ESC → 확정 + 영문, ESC 는 VS Code 에 간다.
 - 조합 중(`자`) click → 음절이 한 번만 남는다. 가끔의 `자한자` 는 알려진 것이고, 잦아지면 기록을 저장한다.

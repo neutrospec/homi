@@ -8,6 +8,21 @@
 
 ## homi 의 결함
 
+### Remote Desktop 에서 원격에 한글이 가지 않는다 (2026-09-26, M7 중)
+- **증상**: homi 로 한/영을 바꿔도 원격 입력칸에는 영문만 들어갔다. Apple 입력기로는 됐다 (주인).
+- **원인**: 화면 공유는 입력기의 글자를 받지 않고, key 를 이 Mac 의 keyboard layout 으로 글자로 바꿔 보낸다. homi 아래 layout 은 늘 ABC 였다.
+- **증거**: framework 에 입력기의 글자를 받는 method 가 없다(symbol). keysym 을 layout 으로 만든다(disassemble). Remote Desktop log 의 `KeyLayoutData size` 와
+  주인의 ⌃Space 관측 — 이 Mac 만 바뀌고 원격은 그대로인데 한/영이 됐다.
+  처음 세운 "입력 소스 ID 동기화 덕" 이라는 설명은 틀렸다 — 그 동기화는 Remote Desktop 에서 켤 수 없다.
+- **대응**: Remote Desktop 에서는 homi 가 모드에 따라 layout 을 바꾼다 (한 → `2SetHangul`, `d226abe`). 원격은 두벌식에 둔다.
+- **교훈**: binary 에서 찾은 기능이 UI 에도 있다고 가정하지 않는다. 주인의 관측이 설명과 어긋나면 관측이 맞다 — 다시 판다.
+
+### 설정 창이 보이지 않는다 (2026-09-25, M7)
+- **증상**: input menu 의 "설정…" 을 눌러도 창이 보이지 않았다 (주인).
+- **원인** 🔶: homi 는 background app 이라 `NSApp.activate()` 가 받아들여지지 않을 수 있고, 그러면 창이 다른 app 의 창 뒤에 뜬다.
+- **증거**: 주인 관측. 아래 대응 뒤로 주인이 설정을 바꿔 쓰고 있다.
+- **대응**: 활성화와 상관없이 `orderFrontRegardless` 로 맨 앞에, mouse 가 있는 화면 가운데에 띄운다 (`44e27e7`).
+
 ### Chromium 에서 조합 중에 click 하면 음절이 두 번 들어간다 (2026-09-25, M6 중)
 - **증상**: VS Code 에서 `자`를 조합하던 중 mouse 로 click·선택하면, 그 음절이 누른 자리에 한 번 더 들어갔다 (주인).
 - **원인**: Chromium 은 click·blur 때 page 가 조합을 스스로 확정한 뒤 `discardMarkedText` 로 입력기의 `commitComposition` 을 부른다.
@@ -69,7 +84,7 @@
 - **원인**: Ghostty·iTerm2 는 입력기의 YES(먹었다)를 보지 않는다. 조합도 글자도 없이 먹은 key 는 스스로 보낸다.
   marked text 를 세웠다 지우는 신호(macSKK 방식)도 통하지 않았다.
 - **증거**: source — Ghostty `keyDown`(markedTextBefore·insertText·layout 변화 세 조건), iTerm2 `shouldPassPostCocoaEventToDelegate`.
-- **대응**: 전환 key 는 글자를 만들지 않는 수식키로 — Caps Lock 은 homi 가 선택된 동안 오른쪽 Control 로 remap, Shift+Space 전환은 없앴다 (주인 결정, `c08572b`).
+- **대응**: 전환 key 는 글자를 만들지 않는 수식키로 — Caps Lock 은 homi 가 선택된 동안 오른쪽 Control 로 remap, Shift+Space 전환은 없앴다 (주인 결정, `c08572b`). Shift+Space 는 M7 에서 알고 고르는 선택지로 되살렸다.
 - **교훈**: "입력기가 key 를 먹었다" 의 판정은 app 이 한다 (docs/macos-input.md 의 표).
 
 ### system 이 homi 를 밀어낸다 (2026-09-25, M0·M4)

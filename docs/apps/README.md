@@ -8,8 +8,8 @@ homi 를 바꿀 때(특히 `Sources/InputSession/AppRules.swift`) 그 app 의 �
 - **사실마다 확인 표시**: `version · 날짜 · 근거`.
   근거는 `주인`(관측) · `기록`(homi 의 key 기록) · `source`(app·엔진의 source) · `probe` · `실험` · `조사`(docs/research).
   ✅ 확인 / 🔶 추정 — 다른 문서와 같다.
-- **app 이 update 되면** 그 file 의 "다시 확인할 것" 을 해 본다.
-  같으면 표시의 version·날짜만 새로 한다. 달라졌으면 사실을 고치고 "기록" 에 한 줄 남긴 뒤 homi 도 고친다.
+- **app 이 update 됐다고 따로 확인하지 않는다.** 문제가 생겨 분석할 때 원장의 version 과 지금 version 을 견주어 무엇이 바뀌었는지 보고,
+  "확인하는 법" 으로 사실이 아직 맞는지 본다. 달라졌으면 사실을 고치고 "기록" 에 한 줄 남긴 뒤 homi 도 고친다.
   옛 사실은 지우지 않고 기록에 남긴다 — 다시 바뀌면 되돌아갈 근거다.
 - **같은 엔진의 공통 사실**은 `engines/` 에 한 번만 적고, app file 은 그곳을 가리킨다. app 고유의 것(그 위의 editor, plugin)만 app file 에 적는다.
 - **새 app 에서 무언가 알게 되면** 아래 형식으로 file 을 만든다. 규칙도 관찰도 없는 app 은 만들지 않는다.
@@ -52,27 +52,5 @@ homi 를 바꿀 때(특히 `Sources/InputSession/AppRules.swift`) 그 app 의 �
 
 ## file 형식
 
-```markdown
-# <app 이름>
-
-| | |
-|---|---|
-| bundle ID | `…` |
-| 엔진 | … → [engines/….md](engines/….md) |
-| 확인한 version | <version> (<build>) · <날짜> · macOS <version> |
-| homi 규칙 | `AppRules.swift` 의 항목. 없으면 — |
-
-## 특징
-- **한 줄로 된 사실.** 필요하면 설명.
-  `<version> · <날짜> · <근거>` ✅
-
-## homi 의 우회
-- 무엇을, 왜 — 코드 위치와 commit
-
-## 다시 확인할 것
-- update 뒤에 해 볼 동작과 기대하는 결과
-
-## 기록
-| 날짜 | version | 내용 |
-|---|---|---|
-```
+기존 file(예: [word.md](word.md))을 따른다 — 머리 표(bundle ID·엔진·확인한 version·homi 규칙), 특징(사실마다 확인 표시), homi 의 우회(코드 위치와 commit),
+확인하는 법(해 볼 동작과 기대하는 결과), 기록(날짜·version·내용).

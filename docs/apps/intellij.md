@@ -35,7 +35,7 @@
 - ESC 영문 trigger (`AppRules`, `c08572b`).
 - 고르는 key 는 marked text 가 있는 채로 — Enter 로 골라도 IntelliJ 가 Enter 를 받지 않게 한다 ([engines/jbr.md](engines/jbr.md), `c884edd`).
 
-## 다시 확인할 것
+## 확인하는 법
 
 - IdeaVim Insert mode 에서 한글 조합 중 ESC → Normal + 영문.
 - 조합 중인 글자 + ⌥↩ → Enter 로 고르기 → 한자로 바뀌고 줄은 바뀌지 않는다.

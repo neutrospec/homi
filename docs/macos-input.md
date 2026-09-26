@@ -1,8 +1,9 @@
 # macOS 입력 구조 — 배운 것
 
 주인이 이 프로젝트로 배우는 macOS text input 의 구조. 확인된 사실과 추정을 구분하고 확인 방법을 붙인다.
+app 하나에만 딸린 사실은 app 원장(`docs/apps/`)에, 고친 결함의 경과는 `docs/lessons.md` 에 있다.
 
-- ✅ 확인 — 실험(`tis`·`probe` log, crash report)이나 source 로 봤다
+- ✅ 확인 — 실험(`tis`·`probe` log, homi 기록, crash report)이나 source 로 봤다
 - 🔶 추정 — 근거는 있으나 아직 확인하지 않았다
 
 ## key 하나가 글자가 되는 길
@@ -18,59 +19,34 @@ sequenceDiagram
     Ctx-->>App: handled? — 아니면 app 이 직접 처리 (예: insertNewline:)
 ```
 
-- input method 는 app 과 **다른 process** 다. app 안의 IMK 가 mach port 로 대화한다. ✅ (probe run 1 의 IMK error message)
-- 입력기의 호출(`insertText`·질문)은 app 의 `handleEvent` **안에서** 온다 — app 은 입력기가 답할 때까지 기다린다. 한 key 에 11–33ms (probe 의 log 비용 포함). ✅ (probe run 2 의 중첩)
-- 예외: input source 가 바뀔 때의 확정은 key 처리 **밖에서** 비동기로 온다. ✅ (run 2, 아래 Caps Lock 절)
-- keyboard layout(ABC)도 같은 길을 간다. context 가 key 를 문자로 바꿔 `insertText` 하고 "handled" 를 돌려준다. Return·Delete 는 `doCommand`(`insertNewline:`·`deleteBackward:`)가 된다. ✅ (run 2)
-
-## input source
-
-- System Settings 의 "입력 소스" 목록 항목이 TIS input source 다. 두 종류: ✅ (`tis list`)
-  - **keyboard layout** — key → 문자 표. 조합 없음. `com.apple.keylayout.ABC`
-  - **input method** — 조합하는 program. 그 안에 **mode** 가 있고, 실제로 선택되는 단위는 mode 다.
-    `com.apple.inputmethod.Korean` 안의 `com.apple.inputmethod.Korean.2SetKorean`
-- input source 아래에 **keyboard layout 이 따로 깔린다.** 한국어 mode 아래는 숨은 layout `com.apple.keylayout.2SetHangul`. ✅ (`tis current`)
-- 그래서 `NSEvent.characters` 는 layout 이 정한다 — 같은 `kc=5` 가 ABC 에서 `"g"`, 한국어 mode 에서 `"ㅎ"`. ✅ (probe run 1)
-  → 우리 엔진이 `keyCode`(물리 위치)로 판단하는 이유.
-- ASCII 입력 가능(ASCII-capable)한 것은 `ABC` 뿐이다. system 은 "가장 최근의 ASCII-capable source" 를 따로 기억한다. ✅ (`tis`)
-  그 쓰임새(비밀번호 칸 등)는 🔶.
-- TSM(Text Services Manager, HIToolbox)은 daemon 이 아니라 **app process 안의 library** 다 — Caps Lock LED 를 app 안의 TSM 이 조절하는 log 가 app 의 stderr 에 찍힌다. ✅ (probe run 1: `TSM AdjustCapsLockLEDForKeyTransitionHandling - _ISSetPhysicalKeyboardCapsLockLED Inhibit`)
+- input method 는 app 과 **다른 process** 다. app 안의 IMK 가 mach port 로 대화한다. ✅ (probe 의 IMK error message)
+  새 source·새 client 와 처음 주고받을 때마다 `error messaging the mach port for IMKCFRunLoopWakeUpReliable` 이 나왔고, 매번 무해했다. ✅
+- 입력기의 호출(`insertText`·질문)은 app 의 `handleEvent` **안에서** 온다 — app 은 입력기가 답할 때까지 기다린다. 한 key 에 11–33ms (probe 의 log 비용 포함). ✅
+- 예외: input source 가 바뀔 때의 확정은 key 처리 **밖에서** 비동기로 온다. ✅ (아래 Caps Lock)
+- 입력기가 NO(안 먹었다)를 돌려주면 context 가 key 를 그 아래 keyboard layout 으로 문자로 바꿔 `insertText` 한다.
+  Return·Delete 는 `doCommand`(`insertNewline:`·`deleteBackward:`)가 된다. ✅
 - `NSTextInputContext` 는 **생성되자마자** client 에게 `validAttributesForMarkedText` 를 묻는다. ✅ (probe crash report — 이 질문을 기록하려다 무한 재귀)
+- TSM(Text Services Manager, HIToolbox)은 daemon 이 아니라 **app process 안의 library** 다 — Caps Lock LED 를 조절하는 TSM 의 log 가 app 의 stderr 에 찍힌다. ✅
 
-## Caps Lock 한/영 전환 (system 방식)
+## input source 와 keyboard layout
 
-probe run 1, 한→영:
+- System Settings 의 "입력 소스" 목록 항목이 TIS input source 다. ✅ (`tis list`)
+  - **keyboard layout** — key → 문자 표. 조합 없음. `com.apple.keylayout.ABC`
+  - **input method** — 조합하는 program. 그 안의 **mode** 가 실제로 선택되는 단위다. `com.apple.inputmethod.Korean` 안의 `….Korean.2SetKorean`
+- **input method 아래에도 keyboard layout 이 따로 깔린다** ✅ (`tis current`). Apple 두벌식 아래는 숨은 layout `com.apple.keylayout.2SetHangul`
+  (key 마다 자모 하나를 낸다), homi 아래는 ABC. 입력기는 IMK 의 `overrideKeyboardWithKeyboardNamed:` 로 자기 아래 layout 을 고른다 —
+  homi 는 activate 때 ABC 로 둔다 (Remote Desktop 의 한글 모드만 `2SetHangul`, 아래). 고를 layout 이 입력 소스 목록에 켜져 있을 필요는 없다. ✅
+- `NSEvent.characters` 는 이 layout 이 정한다 — 같은 `kc=5` 가 ABC 에서 `"g"`, 두벌식에서 `"ㅎ"`. 그래서 homi 는 `keyCode`(물리 위치)로 판단한다. ✅ (probe)
+- ASCII 입력 가능(ASCII-capable)한 것은 `ABC` 뿐이다. system 은 "가장 최근의 ASCII-capable source" 를 따로 기억한다 — 그 쓰임새(비밀번호 칸 등)는 🔶.
+- TIS API 는 main thread 에서만 부른다 — 병렬 test 가 여러 thread 에서 `TISCreateInputSourceList` 를 부르자 process 가 abort(signal 6)했다. ✅
+- **등록**: `TISRegisterInputSource` 뒤 parent 에 `TISEnableInputSource` 가 성공(0)을 돌려주고도 parent 는 꺼진 채였고 mode 만 켜졌다
+  (조사의 qingjian#209 와 같은 증상). menu 에서 homi 를 고른 뒤에는 parent 도 켜졌다. ✅ / 이유 🔶
+- system 은 입력기를 **고르는 순간** 띄운다 (부모 process = launchd). 입력칸이 바뀔 때마다 `activateServer`·`deactivateServer` 가 오고,
+  같은 app 안에서도 3ms 안에 deactivate → activate → deactivate 가 몰려오는 일이 있다. ✅
 
-```
-41.212  flags   kc=57 capslock mods=⇪     누름 — app 은 "caps lock 켜짐" 을 받는다
-41.245  flags   kc=255 mods=-             실제 key 가 아닌 kc=255 — system 이 caps lock 을 도로 끄는 합성 event
-41.277  flags   kc=57 capslock mods=-     뗌
-41.279  sys source → com.apple.keylayout.ABC   전환 확정: 누른 지 67ms 뒤
-41.614  keyDown kc=5 chars="g"  ctx=ABC   335ms 뒤에 쳐서 새 source 로 처리됨
-```
+## Apple 한국어 입력기가 하는 일
 
-- 짧게 누르면 전환, 길게 누르면 대문자 고정이므로 system 은 떼는 순간을 봐야 전환을 확정한다. 확정이 늦게 온다. ✅ timing / 해석 🔶
-- 전환은 key event 와 **다른 통로**(TIS distributed notification → app 의 context)로 app 에 전달된다.
-  두 통로 사이에 순서 보장이 없으면, 전환 직후 친 key 가 이전 source 로 처리된다 — "한글 모드인데 첫 자음이 영문" 의 유력한 기전. 🔶
-- 영→한 전환 직후 app 안의 IMK 가 입력기에 message 를 보내다 실패했다: `error messaging the mach port for IMKCFRunLoopWakeUpReliable`.
-  run 2 에서는 새 app process 의 첫 key 에서 또 나왔다. 두 번 다 뒤 입력은 정상. app ↔ 입력기 통로가 실제로 삐끗한다는 증거. ✅ / 결함과의 관계 🔶
-- 누름 → 전환 확정: 67·46 (run 1), 106·64·43·62ms (run 2). 매번 다르다. ✅
-- **조합 중에 전환하면 확정이 key 처리 밖에서 온다** (run 2, 한→영):
-
-  ```
-  18.336  flags  kc=57 capslock mods=⇪
-  18.358  flags  kc=255 mods=-
-  18.374  insertText "글" repl={11,1}      ← 어느 handleEvent 에도 속하지 않는다
-  18.379  sys source → ABC
-  ```
-
-  입력기는 비활성화될 때 스스로 조합을 확정해 넣는다. 이 확정과 다음 key 의 순서는 보장되지 않는다. 🔶
-- **app 전환 때 system 이 문서별 input source 를 복원한다** ("문서의 입력 소스로 자동 전환"): probe 에서 ABC 로 바꾸고 나갔다 오자
-  `app active` 18ms 뒤 `ctx source → ABC`. 그 18ms 안에 친 key 는 이전 app 의 source 로 간다. 🔶 — 또 하나의 "첫 글자" 경로.
-- **⌘Tab 의 Tab 은 app 에 오지 않는다**: `flags ⌘` → `flags -` → `app inactive`. 사이에 keyDown 이 없다. 돌아오면 `flags kc=0 mods=-` 라는 합성 event 가 온다. ✅
-  → 오른쪽 ⌘ 단독 tap 판정을 입력기가 본 event 만으로 하면 ⌘Tab 도 tap 으로 오판한다.
-
-## Apple 한국어 입력기는 marked text 를 쓰지 않았다
+### marked text 없이 확정하고 바꿔치기한다
 
 probe run 1 (NSTextView), `한글` + Return:
 
@@ -86,48 +62,40 @@ keyDown return     → insertText "글" repl={1,1} → doCommand insertNewline: 
 
 - 교과서 방식(`setMarkedText` 로 밑줄 친 조합 중 글자를 보이다가 확정 때 `insertText`)이 아니다.
   **확정해서 넣고, `replacementRange` 로 앞 글자를 바꿔치기** 한다. `setMarkedText` 호출이 한 번도 없다. ✅
-- 이 방식은 입력기가 문서 위치(`{0,1}`, `{1,1}`)를 정확히 알고, client 가 `replacementRange` 를 정확히 지켜야 성립한다.
-  문서 model 이 복잡하거나 비동기인 client(웹·Electron·terminal)에서 위치가 어긋나 "앞 글자와 이어 조합할 수 없다" 고 판단하면,
-  자모가 하나씩 따로 확정된다 — **풀어쓰기와 같은 모양**. 🔶 (다른 client 에서도 이 방식인지부터 확인할 것)
-- 낱자모는 호환 자모(U+3131–318E), 음절은 완성형(U+AC00–D7A3)으로 온다. ✅
-- Return: 조합 중인 글자를 같은 자리에 다시 넣어 확정하고, Return 은 먹지 않는다 → app 이 `insertNewline:` 으로 처리. ✅
+- 이 방식은 입력기가 문서 위치를 정확히 알고, client 가 `replacementRange` 를 정확히 지켜야 성립한다. 문서 model 이 복잡하거나 비동기인
+  client(웹·Electron·terminal)에서 위치가 어긋나면 자모가 따로 확정된다 — **풀어쓰기와 같은 모양** 🔶.
+  Telegram(NSTextView)에서 Apple 두벌식이 초성을 잃은 것(`아` → `ㅏ`, 주인)도 이 방식이 어긋난 모양으로 본다 — homi 로는 재현되지 않았다 🔶. 결정 5 의 근거다.
 - 입력기가 client 에게 묻는 것은 `selectedRange`(key 마다 여러 번)·`hasMarkedText`·`validAttributesForMarkedText` 뿐이다.
-  문서 내용(`attributedSubstring`)은 한 번도 묻지 않았다 — 조합 중인 음절의 위치를 cursor 위치로 계산해 바꿔치기한다. ✅ (run 2)
-  조사: 이 입력기(KIM_Extension)는 app 의 text 를 cache 하는 비공개 IMK class 위에 있고 `unreliableApps` 같은 목록을 둔다 → `docs/research/app-compat-and-hangul.md` §3
-- **Backspace 는 자모 단위, 역시 바꿔치기로** (run 2, `닭`):
+  문서 내용은 묻지 않고 조합 중인 음절의 위치를 cursor 위치로 계산한다. ✅ (run 2)
+  이 입력기는 app 의 text 를 cache 하는 비공개 IMK class 위에 있고 `unreliableApps` 같은 목록을 둔다 (조사 → `docs/research/app-compat-and-hangul.md` §3).
+- 낱자모는 호환 자모(U+3131–318E), 음절은 완성형(U+AC00–D7A3)이다. Backspace 도 자모 단위의 바꿔치기이고 마지막 자모는 app 이 지운다(`deleteBackward:`).
+  도깨비불은 `insertText` 두 번(`일`+ㅓ → `이` 바꿔치기 + `러`). Return 은 조합 중인 글자를 같은 자리에 다시 넣어 확정하고 먹지 않는다 → app 이 `insertNewline:`. ✅ (run 2)
 
-  ```
-  ㄷ ㅏ ㄹ ㄱ → "ㄷ" → "다" {4,1} → "달" {4,1} → "닭" {4,1}
-  delete     → insertText "달" {4,1}
-  delete     → insertText "다" {4,1}
-  delete     → insertText "ㄷ" {4,1}
-  delete     → insertText "ㄷ" {4,1} (확정) → doCommand deleteBackward:   마지막 자모는 app 이 지운다
-  ```
+### Caps Lock 전환은 key 와 다른 통로로 늦게 온다
 
-- **도깨비불**은 insertText 두 번: `일` + ㅓ → `insertText "이" {16,1}` + `insertText "러"`. ✅ (run 2)
+probe run 1, 한→영:
 
-## homi 첫 설치 (M0)
+```
+41.212  flags   kc=57 capslock mods=⇪     누름 — app 은 "caps lock 켜짐" 을 받는다
+41.245  flags   kc=255 mods=-             실제 key 가 아닌 kc=255 — system 이 caps lock 을 도로 끄는 합성 event
+41.277  flags   kc=57 capslock mods=-     뗌
+41.279  sys source → com.apple.keylayout.ABC   전환 확정: 누른 지 67ms 뒤
+41.614  keyDown kc=5 chars="g"  ctx=ABC   335ms 뒤에 쳐서 새 source 로 처리됨
+```
 
-- **등록**: `TISRegisterInputSource` 뒤 parent 에 `TISEnableInputSource` 가 성공(0)을 돌려주고도 parent 는 꺼진 채였고, mode 만 켜졌다 (조사의 qingjian#209 와 같은 증상).
-  주인이 menu 에서 homi 를 고른 뒤에는 parent 도 켜졌다. system 이 저장하는 `AppleEnabledInputSources` 에는 바로 나타나지 않았다. ✅ / 이유 🔶
-- system 은 homi 를 **고르는 순간** 띄운다 (부모 process = launchd). 입력칸이 바뀔 때마다 `activateServer`·`deactivateServer` 가 오고,
-  같은 app 안에서도 3ms 안에 deactivate → activate → deactivate 가 몰려오는 일이 있다. ✅
-- homi 아래 keyboard layout 은 **ABC** 다 (`tis current`). `handle()` 이 NO 를 돌려주면 context 가 그 layout 으로 `insertText` 한다 — app 쪽에서는 ABC 와 구별되지 않는다. ✅
-- **homi 를 고른 동안 Caps Lock 은 input source 전환이 아니라 진짜 대문자 고정이다** (`chars="D" mods=⇪`). homi 는 `TICapsLockLanguageSwitchCapable` 을 선언하지 않았다.
-  조사(gureum#883)와 맞고, M3 에서 Caps Lock 을 직접 다룬다는 전제가 선다. ✅
-- ⌃Space 로 input source 를 바꾸면 app 은 ⌃ 의 flags 만 보고 Space 는 못 본다 — ⌘Tab 과 같다. ✅
-- homi 를 고른 채 probe 로 돌아오자 system 이 문서별 기억으로 **ABC 를 되살렸다**. "문서의 입력 소스로 자동 전환" 이 homi 의 앱별 기억과 싸우리라는 예상의 실증이다. ✅
-- IMK 의 `error messaging the mach port for IMKCFRunLoopWakeUpReliable` 은 세 번째 — 새 source·새 client 와의 첫 상호작용마다 나오고, 매번 무해했다. ✅
-- LaunchServices: app 을 죽이자마자 `open` 하면 -600 — 죽어가는 process 에 붙으려 한다. 종료를 기다린 뒤 연다 (`scripts/probe.sh`). ✅
+- 짧게 누르면 전환, 길게 누르면 대문자 고정이라 system 은 떼는 순간을 봐야 전환을 확정한다 — 누름 → 확정 43–106ms, 매번 다르다. ✅ timing / 해석 🔶
+- 전환은 key event 와 **다른 통로**(TIS 알림 → app 의 context)로 온다. 두 통로 사이에 순서 보장이 없으면 전환 직후 친 key 가 이전 source 로 처리된다 —
+  "한글 모드인데 첫 자음이 영문" 의 유력한 기전이다 🔶. probe 에서는 재현하지 못했다 — 전환 뒤 200ms 넘게 지나서 쳤다.
+- 조합 중에 전환하면 입력기가 비활성화되며 스스로 조합을 확정하는데, 그 `insertText` 는 어느 `handleEvent` 에도 속하지 않는다 —
+  다음 key 와의 순서가 보장되지 않는다 🔶 (run 2: `flags kc=57` → `insertText "글" repl={11,1}` → `sys source → ABC`).
+- **"문서의 입력 소스로 자동 전환"** 이 켜져 있으면 app 전환 때 system 이 문서별 input source 를 되살린다 — `app active` 18ms 뒤 `ctx source → ABC`.
+  그 사이에 친 key 는 이전 source 로 간다 🔶 — 또 하나의 "첫 글자" 경로. homi 를 고른 채 돌아와도 ABC 를 되살렸다 ✅ — 그래서 이 설정을 껐다.
+- input source 를 바꾸는 key 는 app 에 오지 않는다 — ⌘Tab 의 Tab, ⌃Space 의 Space. app 은 수식키 flags 만 보고, 돌아오면 `flags kc=0` 합성 event 가 온다. ✅
+  → 수식키 tap 을 입력기가 본 event 만으로 판정하면 ⌘Tab 도 tap 이 된다.
 
-## HangulCore 를 만들며 (M1)
+## homi 의 방식
 
-- **TIS API 는 main thread 에서만 부른다.** test 들이 병렬로 돌며 여러 thread 에서 `TISCreateInputSourceList` 를 부르자 process 가 abort(signal 6)했다. 직렬로는 통과했다. ✅
-- Apple 의 `2SetHangul` layout 은 key 26개 × Shift 유무 52가지 모두 homi 의 두벌식 표와 같다 — Shift 는 ㅃㅉㄸㄲㅆㅒㅖ 만 바꾸고, 나머지 key 는 Shift 여도 같은 자모다. ✅ (`UCKeyTranslate` 대조 test)
-
-## homi 가 한글을 조합하다 (M2)
-
-- homi 는 조합 중인 글자를 `setMarkedText` 로 보이고, 음절이 넘어갈 때만 `insertText` 로 확정한다. `replacementRange` 는 늘 NSNotFound. ✅ (probe run 3)
+- **조합 중인 글자는 `setMarkedText` 로 보이고, 음절이 넘어갈 때만 `insertText` 로 확정한다.** `replacementRange` 는 늘 NSNotFound. ✅ (probe run 3)
 
   ```
   ㅇ ㅜ ㄹ   → setMarked "ㅇ" → "우" → "울"
@@ -137,76 +105,64 @@ keyDown return     → insertText "글" repl={1,1} → doCommand insertNewline: 
   ⌫          → doCommand deleteBackward:           조합이 없으면 app 이
   ```
 
-- homi 는 marked text 안의 선택을 `{글자 수, 0}`(커서를 글자 뒤로 — ongeul 과 같은 값)으로 보냈는데, app 은 `{0, 글자 수}`(전체 선택)로 받았다.
-  IMK 가 중간에서 바꾼 것으로 보인다. 🔶 원인 미확인 — 화면에 드러난 문제는 아직 없다.
-- **Telegram(`ru.keepcoder.Telegram` 12.9, native AppKit)에서 Apple 두벌식이 초성을 잃었다**: `아` 를 치면 `ㅏ` 만 남는다 (주인 관측, 2026-09-25).
-  같은 곳에서 homi 로는 재현되지 않았다. Apple 입력기의 바꿔치기 방식이 app 의 문서 위치 답과 어긋날 때의 모양으로 보인다 🔶 — 결정 5(marked text)의 근거 하나.
-- **Telegram 에서 조합 중에 누른 Enter 는 전송이 아니라 줄바꿈이 된다** (주인 보고 — Apple 입력기 때부터). 원인은 Telegram 의 규칙이다 ✅ source:
-  `TelegramSwift/packages/InputView/Sources/InputView/ChatInputTextView.swift` `keyDown` (a404806, 2025-06-30) —
-  Enter 는 `!self.hasMarkedText()` 일 때만 전송하고, 조합 중이면 `super.keyDown` 으로 입력기에 넘긴다 → 입력기가 확정 → `insertNewline`.
-  일본어·중국어의 "Enter = 변환 확정" 관례다. marked text 를 쓰는 homi 도 같다.
-  고치려면: 조합 중 Enter 를 확정하고 먹은 뒤 Enter 를 다시 보낸다 → 손쉬운 사용 권한 + 고정 서명 (AGENTS.md 열린 결정, M4).
-
-## 한/영 전환 key (M3)
-
-- **Caps Lock → F18 remap 은 관리자 권한 없이 걸린다** (`hidutil property --set '{"UserKeyMapping":[…]}'`, macOS 27 26A428). ✅
-  공개 API `IOHIDEventSystemClientSetProperty(…, "UserKeyMapping", …)` 로 homi 가 직접 건다 — homi 가 선택된 동안에만.
-- remap 된 Caps Lock 은 입력기에 **평범한 keyDown** 으로 온다: `kc=79 chars=U+F715 mods=fn`. 대문자 고정을 바꾸는 flagsChanged 는 한 번도 없었다. ✅ (probe)
-  → 다음 key 와 같은 흐름이라 "전환 → 다음 key" 순서가 보장되고, 불빛·누름 지연·system 의 Caps Lock 전환이 끼어들 자리가 없다.
-- F18 은 fn 수식키를 달고 온다 — 전환 판정을 수식키 검사보다 먼저 해야 한다. ✅
-- `recognizedEvents` 가 keyDown 말고 다른 event 도 받겠다고 하면, IMK 의 기본 mouse 처리(조합 영역 밖 click → `commitComposition`)가 꺼진다.
+- marked text 안의 선택을 `{글자 수, 0}`(커서를 글자 뒤로)으로 보냈는데 app 은 `{0, 글자 수}`(전체 선택)로 받았다 — IMK 가 중간에서 바꾼 것으로 보인다 🔶.
+  화면에 드러난 문제는 없다.
+- **전환 key 는 remap 한 수식키다.** Caps Lock 은 homi 가 선택된 동안 `UserKeyMapping`(공개 API `IOHIDEventSystemClientSetProperty`, 관리자 권한 없이 ✅)으로
+  오른쪽 Control 로 바꿔 flagsChanged 로 받는다. 처음엔 F18 로 바꿔 keyDown 으로 받았는데 terminal 에 F18 의 문자가 샜다 (아래 "먹었다" 판정) —
+  그래서 글자를 만들지 않는 수식키로 바꿨다. homi 는 `TICapsLockLanguageSwitchCapable` 을 선언하지 않으므로 선택된 동안 system 의 Caps Lock 전환이 끼지 않는다. ✅
+- **수식키 tap 은 누를 때와 뗄 때 system 전체의 key·mouse 누름 횟수가 같은지로 판정한다** (`CGEventSource.counterForEventType`) —
+  입력기가 못 본 ⌘C 의 C 도 세고, 권한이 필요 없다. ✅ Caps Lock 을 단독으로 0.5초 누르고 있으면 그때 대문자 고정을 뒤집는다 — macOS 처럼 떼기 전에. ✅ 주인
+- `recognizedEvents` 가 keyDown 말고 다른 event 도 받겠다고 하면 IMK 의 기본 mouse 처리(조합 영역 밖 click → `commitComposition`)가 꺼진다 —
   그래서 homi 는 leftMouseDown 도 받아 직접 확정한다. ✅ `IMKInputController.h` (recognizedEvents 주석)
-- **전환 직후의 첫 key 는 늘 새 모드였다** — Caps Lock(F18)·오른쪽 ⌘ tap·Shift+Space 로 35번 전환, 틀린 경우 0. 조합 중 전환은 먼저 확정한다 (`insertText "아"`). ✅ (probe run 4)
-  "재현 안 됨" 이 아니라 구조가 막는 것이다 — 전환 key 와 다음 key 가 같은 흐름에서 차례로 처리된다 (`ToggleTests` 가 고정).
+- **전환 직후의 첫 key 는 늘 새 모드였다** — 35번 전환에 틀린 경우 0 (probe run 4). "재현 안 됨" 이 아니라 구조가 막는다 —
+  전환 key 와 다음 key 가 같은 흐름에서 차례로 처리된다 (`ToggleTests`·`ModifierKeysTests` 가 고정). ✅
 
-## app 은 "입력기가 key 를 먹었다" 를 제각각 판정한다 (M4)
+## app 은 "입력기가 key 를 먹었다" 를 제각각 판정한다
 
-입력기가 `handle` 에서 YES(먹었다)를 돌려줘도, app 이 그 대답을 보지 않고 key 를 스스로 처리하는 경우가 있다. source 로 확인한 규칙:
+입력기가 `handle` 에서 YES(먹었다)를 돌려줘도, app 이 그 대답을 보지 않고 key 를 스스로 처리하는 경우가 있다. source 로 확인한 규칙 ✅:
 
 | app | key 를 app 이 처리하지 않는 조건 (그 밖에는 key 를 스스로 보낸다) | source |
 |---|---|---|
-| Ghostty | ① 이 key 전에 조합 중이었다 (그때는 확정 글자만 보내고, 화살표 말고는 key 를 버린다) ② 입력기가 **비지 않은** 글자를 `insertText` ③ key 처리 중 **keyboard layout 이 바뀌었다** ("an input method grabbed it") | `macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift` `keyDown`, `String.keyEventText` |
-| iTerm2 (기본 설정) | ① 조합 중이었다 ② 입력기가 **1글자 이상** `insertText` ③ 처리 뒤 marked text 가 남았다. 입력기의 YES 는 실험 설정(experimentalKeyHandling)에서만 본다 | `sources/Keyboard/iTermKeyboardHandler.m` `shouldPassPostCocoaEventToDelegate`, `insertText` |
-| IntelliJ (JetBrains Runtime) | marked text 가 있거나, 입력기가 **빈 marked text 를 세웠거나** `insertText` 로 넣었다 (`fKeyEventsNeeded = NO`) | `src/java.desktop/macosx/native/libawt_lwawt/awt/AWTView.m` `keyDown`, `setMarkedText` |
-| Telegram | Enter 는 marked text 가 없을 때만 전송 | `TelegramSwift/packages/InputView/…/ChatInputTextView.swift` `keyDown` |
+| Ghostty | ① 이 key 전에 조합 중이었다 (그때는 확정 글자만 보내고, 화살표 말고는 key 를 버린다) ② 입력기가 **비지 않은** 글자를 `insertText` ③ key 처리 중 **keyboard layout 이 바뀌었다** | `SurfaceView_AppKit.swift` `keyDown` |
+| iTerm2 (기본 설정) | ① 조합 중이었다 ② 입력기가 **1글자 이상** `insertText` ③ 처리 뒤 marked text 가 남았다. 입력기의 YES 는 실험 설정에서만 본다 | `iTermKeyboardHandler.m` `shouldPassPostCocoaEventToDelegate` |
+| IntelliJ (JetBrains Runtime) | marked text 가 있거나, 입력기가 **빈 marked text 를 세웠거나** `insertText` 로 넣었다 (`fKeyEventsNeeded = NO`) | `AWTView.m` `keyDown`, `setMarkedText` |
+| Telegram | Enter 는 marked text 가 없을 때만 전송 | `ChatInputTextView.swift` `keyDown` |
 
-그래서 관측된 것 ✅ (주인, 2026-09-25):
-- 영문 → 한글 전환처럼 **조합도 글자도 없이 먹은 key** 는 terminal 로 샌다 — Caps Lock 을 F18 로 받았을 때 Ghostty 에 F18 의 문자 U+F715(``)가, Shift+Space 로 전환하면 space 가 들어갔다.
-  한글 → 영문 전환은 조합 중이던 글자를 확정하는 `insertText` 가 곧 "먹었다" 가 되어 새지 않았다.
-- 빈 `insertText("")` 는 Ghostty·iTerm2 둘 다 "글자 없음" 으로 본다. marked text 를 세웠다 지우는 신호(macSKK 방식)도 Ghostty·iTerm2 에는 통하지 않는다.
-- 결론: **전환 key 는 글자를 만들지 않는 수식키여야 한다.** Caps Lock 은 오른쪽 Control 로 remap 해 tap 으로 받고, Shift+Space 전환은 없앴다.
+- 그래서 **조합도 글자도 없이 먹은 key 는 terminal 로 샌다** — F18 의 문자 U+F715, Shift+Space 전환의 space ✅ 주인.
+  한글 → 영문 전환은 조합을 확정하는 `insertText` 가 곧 "먹었다" 가 되어 새지 않는다.
+  빈 `insertText("")` 도, marked text 를 세웠다 지우는 신호(macSKK 방식)도 Ghostty·iTerm2 에는 통하지 않는다. ✅
+  → **전환 key 는 글자를 만들지 않는 수식키여야 한다.** Shift+Space 는 이것을 알고 고르는 선택지로 남겼다.
+- **같은 까닭으로, 입력기가 먹는 key 는 marked text 가 있는 채로 와야 한다** ✅ source:
+  - JBR: key 처리 중 marked text 없이 온 `insertText` 는 누른 key 의 입력으로 Java 에 간다 — KEY_PRESSED 다음에 글자마다 KEY_TYPED.
+    Enter 로 한자를 골랐다면 Enter 동작까지 일어날 것이다 🔶.
+  - Chromium: key 전에 marked text 가 없었고 넣는 글자가 한 글자면 원래 keydown 을 page 에 보낸다. key 처리 중의 `setMarkedText` 는 모아 두었다가 마지막 것 하나만 보낸다.
+  - 그래서 한자를 고르는 key 도 marked text 가 있는 채로 오게 한다 — 선택 영역도 ⌥↩ 때 marked text 로 만든다.
 
-## key 다시 보내기 (M4)
+## key 다시 보내기
 
-- 조합 중 Enter(Telegram)·ESC(terminal vim)는 확정한 뒤 그 key 를 먹고 **다시 보낸다** — 두 번째 key 가 도착할 때는 marked text 가 없다. ✅ 주인 확인 (Telegram 전송, Ghostty·iTerm2 vim ESC 한 번)
-- **원래 event 를 복사해 보내면 닿지 않는다**: `NSEvent.cgEvent.copy()` 를 key 처리 도중에 `post` 했더니 Telegram 에서 "틱" 소리만 나고 Enter 가 사라졌다.
-  Telegram 의 전송 조건(`flags == 0` + 입력칸에 글자)은 맞았으므로 event 가 입력칸에 닿지 않은 것이다. ✅ (homi 기록 + TelegramSwift source)
-  → **새 event** 를 만들어(`CGEvent(keyboardEventSource:virtualKey:keyDown:)`, key code 와 수식키만 옮김) **원래 key 처리가 끝난 뒤**(`DispatchQueue.main.async`) HID 경로(`.cghidEventTap`)로 보내니 됐다. ✅
-  원인이 복사본에 딸린 창·시각 정보인지, 처리 도중에 보낸 시점인지는 가르지 않았다. 🔶
-- 다시 보내려면 **손쉬운 사용** 허가가 있어야 한다(`CGPreflightPostEventAccess`). macOS 27 의 System Settings 에서는 개인정보 보호 및 보안의 **Device & Data Access** 아래에 있다 (주인 확인).
+- 조합 중 Enter(Telegram)·ESC(terminal 의 vim)는 확정한 뒤 그 key 를 먹고 **다시 보낸다** — 두 번째 key 가 도착할 때는 marked text 가 없다.
+  ✅ 주인 (Telegram 전송, Ghostty·iTerm2 의 vim 에서 ESC 한 번)
+- **원래 event 를 복사해 보내면 닿지 않는다** — `NSEvent.cgEvent.copy()` 를 key 처리 도중에 보냈더니 Telegram 에서 "틱" 소리만 나고 Enter 가 사라졌다. ✅
+  **새 event**(`CGEvent(keyboardEventSource:virtualKey:keyDown:)`, key code 와 수식키만 옮김)를 **원래 key 처리가 끝난 뒤**(`DispatchQueue.main.async`)
+  HID 경로(`.cghidEventTap`)로 보내니 됐다. ✅ 복사본에 딸린 창·시각 정보 탓인지, 처리 도중이라는 시점 탓인지는 가르지 않았다 🔶.
+- 다시 보내려면 **손쉬운 사용** 허가가 있어야 한다(`CGPreflightPostEventAccess`). macOS 27 에서는 개인정보 보호 및 보안의 **Device & Data Access** 아래에 있다 (주인).
   `x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility` 가 그 화면을 연다. homi 가 목록에 없으면 "+" 로 `~/Library/Input Methods/homi.app` 을 넣는다.
 - 허가는 서명 신원(bundle ID + 인증서)에 붙는다 — 자체 서명 인증서로 서명하니 다시 build·설치해도 유지됐다. ✅
 
-## 모드 표시 (M4)
+## 모드 표시
 
-- **menu bar 표시(NSStatusItem)는 앱 객체(`NSApplication.shared`)가 있은 뒤에 만들어야 한다.** 먼저 만들면 오류 없이 **아무것도 생기지 않는다** —
-  homi 가 창을 하나도 갖지 않은 것(`CGWindowListCopyWindowInfo`)으로 확인했다. ✅ (2026-09-25)
-- **커서 옆 말풍선**: 모드가 실제로 바뀔 때(전환 key, ESC trigger) 커서 줄 아래에 "한"/"A" 를 잠깐 띄운다 — Apple 입력기의 표시처럼. ✅ 주인 확인
-  - 위치는 `attributes(forCharacterIndex: 0, lineHeightRectangle:)` 로 묻는다 — 입력기가 후보 창을 띄울 때 쓰는 질의.
-    **key 처리 도중에만** 묻는다: app 이 homi 를 기다리는 그때가 안전하고, 그 밖에서 client 를 부르면 Chrome 과 교착한 사례가 있다 (조사: az#317).
-  - 그리기는 key 처리 뒤로 미룬다 (`Task @MainActor`). NSPanel(borderless·nonactivating, `.popUpMenu` level) + NSVisualEffectView(`.popover`).
-- **대문자 고정 표시는 macOS 에 맡긴다.** homi 가 IOKit 으로 Caps Lock 상태를 바꾸면 macOS 가 자기 표시를 띄운다 — homi 가 따로 띄우면 겹쳤다 (주인). ✅
-- **macOS 는 대문자 고정이 켜진 동안 입력을 멈출 때마다 커서 아래에 표시를 띄운다** (Sonoma 부터의 표준 동작 — homi 와 무관). ✅ 주인 관측
-  끄는 방법은 `sudo defaults write /Library/Preferences/FeatureFlags/Domain/UIKit.plist redesigned_text_cursor -dict-add Enabled -bool NO` + 재부팅이라고 한다 🔶
-  (macobserver·macmost). 입력 소스 전환 popup 을 끄는 `TSMLanguageIndicatorEnabled` 와는 다른 설정이다. 주인은 끄지 않기로 했다 (2026-09-25).
-- **대문자 고정은 누르고 있는 동안 켜진다**: Caps Lock 을 단독으로 0.5초 누르고 있으면 그때 뒤집는다 (timer + `ModifierTap.holdReached`) — 뗄 때 판정했더니
-  macOS 와 달리 떼야 켜졌다 (주인). 그 사이에 다른 key 가 눌리면(system 누름 횟수가 변하면) 아니다. ✅
+- **menu bar 표시(NSStatusItem)는 앱 객체(`NSApplication.shared`)가 있은 뒤에 만들어야 한다** — 먼저 만들면 오류 없이 아무것도 생기지 않는다. ✅
+- **커서 옆 말풍선**: 위치는 `attributes(forCharacterIndex: 0, lineHeightRectangle:)` 로 묻는다 — 입력기가 후보 창을 띄울 때 쓰는 질의.
+  **key 처리 도중에만** 묻는다: app 이 homi 를 기다리는 그때가 안전하고, 그 밖에서 client 를 부르면 Chrome 과 교착한 사례가 있다 (조사: az#317).
+  그리기는 key 처리 뒤로 미룬다 (`Task @MainActor`, borderless·nonactivating NSPanel).
+- **대문자 고정 표시는 macOS 에 맡긴다** — homi 가 IOKit 으로 lock 상태를 바꾸면 macOS 가 자기 표시를 띄운다. ✅
+  macOS 는 대문자 고정이 켜진 동안 입력을 멈출 때마다 커서 아래에 표시를 띄운다 (Sonoma 부터, homi 와 무관 ✅ 주인).
+  끄는 feature flag(`redesigned_text_cursor`)가 있다고 하나 🔶 주인은 끄지 않기로 했다.
 
-## 한자 변환 — 확정한 글자는 바꾸지 않는다 (M6)
+## 확정한 글자를 바꾸는 호출은 app 마다 다르다 (한자)
 
-- **Apple 식(선택 없이 커서 앞 단어)을 해 보고 뺐다** (2026-09-25). homi 가 이어서 친 한글을 기억해 두었다가, ⌥↩ 때 app 에게 그 자리 글자를
-  확인하고(`markedRange`·`attributedSubstring`) 조합 중인 글자를 확정한 뒤 `setMarkedText(단어, replacementRange: 그 자리)` 로 단어를 marked text 로 되돌렸다 —
-  일본어 입력기의 재변환과 같은 호출. 주인 관측 ✅:
+- ⌥↩ 가 선택 없이 방금 친 단어를 바꾸려면(Apple 식) 확정한 글자를 marked text 로 되돌려야 한다 —
+  `setMarkedText(단어, replacementRange: 그 자리)`, 일본어 입력기의 재변환과 같은 호출이다. 주인 관측 ✅:
 
   | app | 결과 |
   |---|---|
@@ -214,121 +170,58 @@ keyDown return     → insertText "글" repl={1,1} → doCommand insertNewline: 
   | Chrome | 되는 입력칸과 안 되는 입력칸이 있다 |
   | VS Code · Orca | 단어가 선택된 듯 보이지만 고르면 `나는한자漢字` — 조합을 커서에 따로 만들었다 |
   | IntelliJ | 고르면 단어가 지워지고 한자도 생기지 않는다 |
-  | Word | 한 글자만 (Office 는 위치를 준 교체에 깨진다는 조사 때문에 조합 중인 글자만 바꾸게 했다) |
 
-- 왜 app 마다 다른가:
-  - IntelliJ: JBR 은 교체 범위를 `SelectTextRangeEvent` 로 넘기는데, IntelliJ 는 그것을 speed search 에만 쓴다 — editor 는 범위를 무시한다 ✅
-    (source: `intellij-community` `IdeEventQueue.kt` `handleSelectTextRangeEvent`, JBR `CInputMethod.java` `selectRange`).
-    JBR 의 `markedRange` 도 Java 의 입력 위치(`getInsertPositionOffset`)를 문서 위치처럼 빌려 쓴다 ✅. 한자가 사라진 까닭까지는 가르지 못했다.
-  - Chromium 은 교체 범위를 지원한다고 알린다 — `validAttributesForMarkedText` 에 `NSTextInputReplacementRangeAttributeName`(공개 header 에 없는 AppKit symbol) ✅.
-    Blink 는 그 범위를 선택하고 조합을 시작하지만, VS Code(Monaco) 같은 JS editor 는 자기가 모르는 선택에서 시작한 조합을 커서 자리의 새 입력으로 다룬다 🔶.
-    입력기는 page 안의 JS 를 알 수 없다. JBR 은 빈 목록을 돌려준다 ✅.
-  - 결론: 확정한 글자를 바꾸는 호출은 app(과 그 안의 JS)마다 다르게 다뤄진다 — 결정 5 가 맞았다.
-- **되는 조건에서는 살렸다** (2026-09-25 주인 요청). 된 곳(TextEdit·Telegram)은 macOS text 엔진(NSTextView)이고,
-  client 가 알리는 `validAttributesForMarkedText` 로 가려진다 ✅ (NSTextView 는 실험, 나머지는 source):
+- 왜 다른가: IntelliJ 의 editor 는 JBR 이 넘긴 교체 범위를 무시한다 — speed search 에만 쓴다 ✅ (source: `IdeEventQueue.kt`).
+  Chromium 은 교체 범위를 지원한다고 알리고 Blink 는 그 범위에서 조합을 시작하지만, VS Code(Monaco) 같은 JS editor 는 자기가 모르는 선택에서 시작한 조합을
+  커서 자리의 새 입력으로 다룬다 🔶 — 입력기는 page 안의 JS 를 알 수 없다. Office 는 위치를 준 교체에 깨진다 (조사).
+- 된 곳은 macOS text 엔진(NSTextView)이고, client 가 알리는 `validAttributesForMarkedText` 로 가려진다 ✅ (NSTextView 는 실험, 나머지는 source):
 
   | client | 알리는 attribute |
   |---|---|
   | NSTextView (TextEdit, Telegram 의 입력칸) | `NSFont` `NSUnderline` `NSColor` `NSBackgroundColor` `NSUnderlineColor` `NSMarkedClauseSegment` `NSLanguage` **`NSTextInputReplacementRangeAttributeName`** `NSGlyphInfo` **`NSTextAlternatives`** `NSTextInsertionUndoable` `NSAttachment` |
-  | Chromium · WebKit | `NSUnderline` `NSUnderlineColor` `NSMarkedClauseSegment` `NSTextInputReplacementRangeAttributeName` (Chromium 이 WebKit 것을 옮겼다) |
+  | Chromium · WebKit | `NSUnderline` `NSUnderlineColor` `NSMarkedClauseSegment` `NSTextInputReplacementRangeAttributeName` |
   | JetBrains Runtime · Ghostty | 없음 |
 
-  교체 범위와 받아쓰기 대안(`NSTextAlternatives`)을 함께 알리는 client 에서만 Apple 식을 쓴다. app 목록이 아니라 client 가 스스로 밝힌 입력 지원이다.
-  terminal 과 Office 는 이와 별도로 app 규칙(`convertsEnteredText`)으로 뺀다.
-- **입력기가 먹는 key 는 marked text 가 있는 채로 와야 한다** — 그래야 app 이 그 key 를 입력기의 것으로 본다:
-  - JBR: key 처리 중 marked text 없이 온 `insertText` 는 누른 key 의 입력으로 Java 에 간다 — 누른 key 의 KEY_PRESSED 다음에 글자마다 KEY_TYPED ✅
-    (`AWTView.m` `insertText:replacementRange:`·`keyDown:`, `CPlatformResponder.java` `handleKeyEvent`). Enter 로 골랐다면 IntelliJ 는 Enter 동작을 할 것이다 🔶.
-  - Chromium: key 전에 marked text 가 없었고 넣는 글자가 한 글자면 원래 keydown 을 page 에 보낸다 ✅ (`render_widget_host_view_cocoa.mm` `keyEvent:`).
-    key 처리 중의 `setMarkedText` 는 모아 두었다가 key 처리 뒤에 마지막 것 하나만 보낸다 ✅.
-  - M4 의 terminal 규칙(Ghostty·iTerm2)과 같은 규칙이다.
-  - 그래서 선택 영역도 ⌥↩ 때 `setMarkedText(글자)`(위치 없이 — 선택 영역에 한글을 칠 때와 같은 길)로 marked text 로 만들고, 고르면 `insertText` 한다.
-- terminal 도 선택 영역을 알려 준다 — Ghostty 의 `selectedRange`·`attributedSubstring` 은 화면의 선택을 돌려준다 ✅. 그 선택은 입력이 아니라 출력이라
-  거기서 조합을 시작하면 prompt 에 들어간다. 그래서 terminal 에서는 선택 영역을 바꾸지 않는다.
-- 선택 영역이 안 되는 곳 ✅ 주인 확인 (조합 중인 글자는 둘 다 된다):
-  - **Word**: 선택만 있을 때 ⌥↩ 가 homi 에 오지 않는다 — mouse 선택 뒤로 homi 기록에 key 가 없다. marked text 가 없을 때는 Word 가 key 를 먼저 가져가는 듯하다 🔶.
-  - **IntelliJ + IdeaVim**: mouse 로 선택하면 IdeaVim 은 Visual mode 가 된다. 조합을 시작하며 선택이 지워지면 Visual 을 나오는데,
-    Insert 로 돌아가지 않으면 고른 한자는 Normal mode 명령으로 읽혀 사라진다 (source: `IdeaSelectionControl.controlNonVimSelectionChange`). vim 의 의미다.
+  교체 범위와 받아쓰기 대안(`NSTextAlternatives`)을 함께 알리는 client 에서만 Apple 식을 쓴다 — app 목록이 아니라 client 가 스스로 밝힌 입력 지원이다.
+- terminal 은 화면의 선택을 선택 영역으로 알려 준다 (Ghostty ✅) — 그 선택은 입력이 아니라 출력이라, 거기서 조합을 시작하면 prompt 에 들어간다.
+  그래서 terminal 에서는 조합 중인 글자만 바꾼다.
 
-## click 때 음절이 두 번 들어가는 문제 (M6 중 발견)
+## Chromium 은 click 때 조합을 스스로 확정한다
 
-- VS Code 에서 `자`를 조합하던 중 mouse 로 선택하면 가끔 `자자`가 됐다 ✅ 주인 관측. 조사에서 알던 함정이다 (gureum#87, 미해결).
-- 길 ✅ (source: `render_widget_host_view_cocoa.mm`):
-  - Chromium 의 view 는 mouse event 를 입력기에 넘기지 않는다(`mouseEvent:` 에 `inputContext handleEvent` 가 없다) — homi 의 mouse-down 확정은 Chrome 에서 불리지 않는다.
-  - page(renderer)가 click 때 조합을 스스로 확정하고, 그 소식에 view 가 `cancelComposition` → `[inputContext discardMarkedText]` 를 부른다. 이것이 입력기의 `commitComposition` 으로 온다.
-    homi 가 그때 `insertText` 하면 이미 확정된 음절이 한 번 더 들어간다.
-  - Chromium 의 `markedRange` 는 조합이 없으면 `NSNotFound` 다(`_hasMarkedText`).
-  - click(`mouseEvent:`)이면 `finishComposingText` — page 에 확정을 보내고(`ImeFinishComposingText`) `cancelComposition` 한다. first responder 를 넘길 때,
-    창이 key 를 잃을 때도 `cancelComposition` 한다 ✅.
-- 첫 대응 — `commitComposition` 때 client 에 marked text 가 남아 있을 때만 넣기(조사의 설계 5번) — 는 **통하지 않았다** ✅ (homi 기록):
-  `commitComposition` 안에서 물은 `markedRange` 가 "있다" 였다. `discardMarkedText` 는 입력기의 처리를 기다리는 호출이고,
-  Chromium 은 그것이 끝난 뒤에야 `_hasMarkedText = NO` 한다. 결과: 확정된 음절이 mouse 를 누른 자리에 한 번 더 들어갔다.
-- 지금의 대응: **Chromium 계열 app 의 `commitComposition` 은, homi 가 아직 선택된 입력기라면 넣지 않는다.**
-  - Chromium 이 이것을 부르는 길(click·blur)은 모두 page 가 조합을 스스로 확정한 뒤다. 입력 소스를 바꿀 때는 system 이 부르고 Chromium 은 모르므로,
-    그때(homi 가 더는 선택되어 있지 않다)만 넣는다. 전환 순간에 TIS 가 이미 새 입력 소스를 가리키는지는 아직 확인하지 않았다 🔶.
-  - Chromium 계열인지는 app bundle 안의 renderer helper(`… Helper (Renderer).app`)로 가린다 — Electron 은 `Frameworks/` 바로 아래,
-    Chrome 은 `… Framework.framework/Helpers/` ✅ (이 Mac: Chrome·VS Code·Obsidian·Orca·Wave·Claude 가 해당, Word·Telegram·Safari·IntelliJ·Ghostty 는 아님).
-- 그 뒤에도 VS Code 에서 **가끔** `한자`(자 조합 중)를 mouse 로 선택하면 누른 자리에 `자`가 한 번 더 들어간다(`자한자`) ✅ 주인 관측.
-  homi 기록으로는 그 click 의 `commitComposition` 에 넣지 않았고(`finished by client — not inserting`) 그 뒤로도 아무것도 넣지 않았다 ✅ —
-  **VS Code(또는 Chromium)가 스스로 만든 중복이다.** 매번이 아니라 가끔인 것도 homi 의 정해진 경로가 아니라 app 안의 타이밍이라는 표시다.
-  비슷한 계열: VS Code 에서 조합 중에 EditContext 가 선택을 바꾸면 확정 글자가 엉뚱한 자리에 들어가는 문제(microsoft/vscode#337197),
-  click 때 한글 중복(#13818, Linux IBus, `upstream`) 🔶.
+- Chromium 의 view 는 mouse event 를 입력기에 넘기지 않는다. click 이면 page 가 조합을 확정하고(`finishComposingText`), view 가
+  `cancelComposition` → `[inputContext discardMarkedText]` 를 부른다 — 이것이 입력기의 `commitComposition` 으로 온다.
+  first responder 를 넘길 때, 창이 key 를 잃을 때도 그렇다. ✅ (source: `render_widget_host_view_cocoa.mm`)
+- 그때 입력기가 `insertText` 하면 이미 확정된 음절이 한 번 더 들어간다. `commitComposition` 안에서 `markedRange` 를 물으면 아직 "있다" 다 —
+  `discardMarkedText` 는 입력기를 기다리는 호출이고, Chromium 은 그 뒤에야 `_hasMarkedText` 를 끈다. ✅ (homi 기록)
+- 그래서 Chromium 계열 app(bundle 안의 `… Helper (Renderer).app`)의 `commitComposition` 은 homi 가 선택된 동안 넣지 않는다.
+  입력 소스를 바꿀 때 system 이 부르는 것만 넣는다 — 그 순간 TIS 가 이미 새 source 를 가리키는지는 아직 확인하지 않았다 🔶. 경과는 lessons 에 있다.
 
-## 화면 공유(Remote Desktop)는 입력기의 글자가 아니라 keyboard layout 으로 만든 글자를 보낸다 (M7 중 발견)
+## 화면 공유(Remote Desktop)는 입력기의 글자가 아니라 keyboard layout 으로 만든 글자를 보낸다
 
 - **화면은 입력기가 만든 글자를 받지 않는다** ✅. 화면(`SSFrameBufferView`)은 `keyDown:` 으로 key 를 직접 받아 원격에 보낸다 —
   `ScreenSharing.framework` 에 `insertText`·`setMarkedText`·`interpretKeyEvents` 가 하나도 없다 (symbol 조사).
-  ⌘Tab 같은 system key 는 helper(`EventHelperGrabKeys_rpc`)가 가로챈다. ⌃Space 는 이 Mac 의 system 이 먼저 받는다(이 Mac 의 입력 소스가 바뀐다).
+  ⌘Tab 같은 system key 는 helper(`EventHelperGrabKeys_rpc`)가 가로챈다. ⌃Space 는 이 Mac 의 system 이 먼저 받는다 (이 Mac 의 입력 소스가 바뀐다).
 - **key 를 보내는 두 방식** ✅ (`__UpdateKeyboardInputSourceInfo_block_invoke_2` 를 disassemble + log):
   이 Mac 과 원격의 입력 소스 ID 가 같으면 **key code**, 다르면 **keysym**(글자). 원격은 자기 입력 소스가 바뀔 때마다 ID 를 알려 온다
-  (`received keyboard input source info` — log 는 ID 를 가리지만 길이는 남긴다: ABC 23, 두벌식 39). homi 가 선택되어 있으면 원격에 homi 가 없으니 늘 keysym.
-- **keysym 은 이 Mac 의 keyboard layout 으로 만든다** ✅. `ConvertKeycodeToX11Keysym` 이 key code 를 지금의 keyboard layout
-  (`TISCopyCurrentKeyboardLayoutInputSource` 의 uchr, log 의 `KeyLayoutData size`)으로 바꾼다. 입력 소스와 keyboard layout 은 따로 있다 —
-  입력기(IMK)가 선택되어 있어도 그 아래에 layout 이 하나 있고, 입력기가 넘긴 key 는 그 layout 으로 글자가 된다.
-  Apple 두벌식의 layout 은 `com.apple.keylayout.2SetHangul`(2964 byte)이고 key 마다 자모 하나를 낸다(g → ㅎ U+314E — `UCKeyTranslate` 로 확인).
-  homi 의 layout 은 homi 가 activate 때 고정하는 ABC(5032 byte)다.
-- **원격은 keysym 을 자기 layout 에서 key 로 되돌려 치고, 없으면 글자 그대로 넣는다** ✅. 원격의 `ScreensharingAgent`(`KeyMap.c`)는
-  지금의 layout 으로 keysym → key code 를 찾아 key event 를 만들고(`KeyMapDictionary_ConvertKeysym`, `CGEventCreateKeyboardEvent`),
-  없으면 Unicode 글자로 넣는다(`CGEventKeyboardSetUnicodeString`; 비밀번호 칸에서는 넣지 않는다) — 받는 쪽 binary 의 import·문자열.
+  (log 는 ID 를 가리지만 길이는 남긴다: ABC 23, 두벌식 39). homi 가 선택되어 있으면 원격에 homi 가 없으니 늘 keysym 이다.
+- **keysym 은 이 Mac 의 keyboard layout 으로 만든다** ✅. `ConvertKeycodeToX11Keysym` 이 key code 를 지금의 layout
+  (`TISCopyCurrentKeyboardLayoutInputSource` 의 uchr, log 의 `KeyLayoutData size` — ABC 5032 byte, `2SetHangul` 2964 byte)으로 바꾼다.
+- **원격은 keysym 을 자기 layout 에서 key 로 되돌려 치고, 없으면 글자 그대로 넣는다** ✅. 원격의 `ScreensharingAgent`(`KeyMap.c`)는 지금의 layout 에서
+  keysym 의 key code 를 찾아 key event 를 만들고(`KeyMapDictionary_ConvertKeysym`, `CGEventCreateKeyboardEvent`), 없으면 Unicode 글자로 넣는다
+  (`CGEventKeyboardSetUnicodeString`, 비밀번호 칸에서는 넣지 않는다) — 받는 쪽 binary 의 import·문자열.
   그래서 원격이 두벌식이면 자모가 두벌식 key 로 되돌아가 **원격 입력기가 조합**하고, 원격이 ABC 면 **자모가 그대로 들어간다**(풀어쓰기).
-  영문 글자는 원격이 두벌식이어도 영문으로 들어간다 (2026-09-26 주인).
+  영문 글자는 원격이 두벌식이어도 영문으로 들어간다 (주인).
 - **그래서 한/영을 정하는 것은 이 Mac 의 layout 이다** ✅. Apple 입력기로 원격에 한/영이 먹은 것도 이 Mac 의 입력 소스가 ABC ↔ 두벌식으로 바뀌며
-  layout 이 바뀌었기 때문이다 — ⌃Space 로 이 Mac 만 20초에 8번 바뀌는 동안 원격은 그대로였다 (2026-09-26 주인 + log).
-  homi 는 입력 소스를 바꾸지 않고 layout 만 바꾼다: IMK 의 `overrideKeyboardWithKeyboardNamed:` 로 한 → `2SetHangul`, A → ABC.
-  그러면 선택된 입력 소스 변경 알림이 가고 Remote Desktop 은 곧바로 layout 을 다시 읽는다(`local keyboard changed` → 새 `KeyLayoutData`) ✅ log.
-  override 할 layout 은 켜져 있지 않아도 된다 — `2SetHangul` 은 입력 소스 목록에 없고, Apple 한국어 입력기를 끈 뒤에도 됐다 ✅ (2026-09-26 주인).
+  layout 이 바뀌었기 때문이다 — ⌃Space 로 이 Mac 만 20초에 8번 바뀌는 동안 원격은 그대로였다 (주인 + log).
+  homi 는 입력 소스를 바꾸지 않고 layout 만 바꾼다 — `overrideKeyboardWithKeyboardNamed:` 로 한 → `2SetHangul`, A → ABC.
+  그러면 선택된 입력 소스 변경 알림이 가고, Remote Desktop 은 곧바로 layout 을 다시 읽는다 (`local keyboard changed` → 새 `KeyLayoutData`). ✅ log
   남는 조건 하나: 조합은 원격 입력기가 하므로 **원격은 두벌식이어야 한다**.
-- **입력 소스 ID 동기화("키보드 언어 동기화", Sync Keyboard Language)는 Remote Desktop 에서 켤 수 없다** ✅.
-  켜져 있으면 이 Mac 의 입력 소스가 바뀔 때마다 ID(`kTISPropertyInputSourceID`)를 보내고(`RFBShareKeyboardSourceID` → `UpdateKeyboardInputSourceInfo`,
-  연결 시작 때 한 번 + `kTISNotifySelectedKeyboardInputSourceChanged` 마다), 원격의 `ScreensharingAgent` 는 `TISCopyInputSourceRefForInputSourceID` 로
-  정확히 그 ID 를 찾아 켜고 고른다 — 없으면 "Failed to select input source". 켜져 있으면 늘 key code 로 보낸다.
-  flag(`ref+0xf06`)가 꺼져 있으면 log 에 `do not set keyboard source` 만 남는다. 창의 nib 에 단추(`Keyboard`, 설명 "키보드 언어 동기화")는 있지만
-  toolbar delegate 의 기본·허용 목록에 없고 사용자화도 꺼져 있다 (nib 해독 + app 전체 disassemble, 2026-09-26).
-  이름이 헷갈리는 `handleKeyboardInputSourceEncoding:` 은 원격의 secure input(비밀번호 칸) 상태를 받는 것이다.
-- 수식키는 왼쪽·오른쪽을 가려 key code 로 보낸다 ✅ (`SSSendChangedModifierFlags` 의 표, memory 에서 읽음) —
-  device flag → key code: 왼 Control 59 · 왼 Shift 56 · 오른 Shift 60 · 왼 ⌘ 55 · **오른 ⌘ 54** · 왼 ⌥ 58 · **오른 ⌥ 61** · **오른 Control 62** · Caps Lock 57 · fn 63.
-  homi 가 Caps Lock 을 오른쪽 Control 로 바꿔 두면 원격에는 62 가 간다 — 원격의 입력 소스는 바뀌지 않는다.
-- 선행 사례: 구름은 한/영이 곧 입력 소스 mode 다 — 영문 mode(`…Gureum.qwerty`, `smRoman`, ABC layout)와 한글 mode 를 두고,
-  전환 key 에 `client.selectMode(mode)`(IMK `selectInputMode:`) ✅ source. 입력 소스 ID 동기화가 켜지는 화면 공유에서만 의미가 있다.
+- **입력 소스 ID 동기화("키보드 언어 동기화")는 Remote Desktop 에서 켤 수 없다** ✅. 켜져 있으면 이 Mac 의 입력 소스가 바뀔 때마다 ID 를 보내고
+  (`RFBShareKeyboardSourceID`), 원격의 `ScreensharingAgent` 는 정확히 그 ID 를 찾아 켜고 고르며, 늘 key code 로 보낸다.
+  꺼져 있으면 log 에 `do not set keyboard source` 만 남는다. 원격 창의 nib 에 단추(`Keyboard`)는 있지만 toolbar delegate 의 기본·허용 목록에 없고
+  사용자화도 꺼져 있다 (nib 해독 + app 전체 disassemble).
+- 수식키는 왼쪽·오른쪽을 가려 key code 로 보낸다 ✅ (`SSSendChangedModifierFlags` 의 표) — 오른쪽 ⌘ 54 · 오른쪽 ⌥ 61 · 오른쪽 Control 62 · Caps Lock 57.
+  homi 의 Caps Lock(오른쪽 Control 로 remap)은 원격에 62 로 간다 — 원격의 입력 소스는 바뀌지 않는다.
 - 조사 방법: `dlopen` 으로 framework 를 불러 ObjC runtime 으로 class·method 를 나열하고, lldb 로 method 와 C 함수를 disassemble 했다.
   shared cache 의 stub(`adrp x17 / add / ldr x16,[x17] / braa`)은 GOT 의 pointer 를 읽어 이름을 풀었다. 컴파일된 nib 은 NIBArchive 형식을 직접 읽었다.
-  layout 은 `UCKeyTranslate` 로 쳐 보고, `TISGetInputSourceProperty(kTISPropertyUnicodeKeyLayoutData)` 의 크기로 log 의 `KeyLayoutData size` 와 맞췄다 (scratch script).
-
-## 알려진 화면 문제
-
-- **Ghostty**: 한글 조합 중에 수식키(Caps Lock·오른쪽 ⌘)로 전환하면, 확정된 마지막 글자가 선택된 것처럼 보이다가 다음 key 에 사라진다. 글자는 제대로 들어간다(`한a`). ✅ 주인 관측
-  전환이 flagsChanged 처리 중이라 확정이 keyDown 밖에서 일어나는 경우의 Ghostty 쪽 다시 그리기 문제로 보인다 🔶 — M5 에서 다시 본다.
-
-## 관측 기록
-
-| 날짜 | 실험 | 비고 |
-|---|---|---|
-| 2026-09-25 | `tis list`·`current` | 주인 환경: ABC + Apple 두벌식 |
-| 2026-09-25 | probe run 1 — Caps Lock 전환, `gks`, `한글` + Return | Apple 두벌식, NSTextView (probe 초판, bundle 없이 실행) |
-| 2026-09-25 | probe run 2 — `한글` + space + Return, `닭` + Backspace, Caps Lock 직후 입력, 중간중간 ⌘Tab | handleEvent 중첩·질문 기록 추가, bundle 로 실행. 첫 글자 영문은 재현 안 됨 (전환 후 200ms 넘게 뒤에 쳤다) |
-| 2026-09-25 | M0 — homi(빈 입력기) 등록·선택, probe 에 알파벳·Shift+Space·Caps Lock | homi 의 lifecycle log(`log stream`)와 probe log 를 함께 봤다 |
-| 2026-09-25 | M2 — homi 로 probe 와 여러 app 에서 한글 입력 (probe run 3) | Telegram 의 Apple 입력기 초성 유실을 주인이 관측, homi 로는 재현 안 됨 |
-| 2026-09-25 | Caps Lock → F18 remap 실험 (hidutil) | homi 가 kc=79 keyDown 으로 받음, 실험 후 되돌림 |
-| 2026-09-25 | M3 — 전환 key 셋 (probe run 4) + 주인이 여러 app 에서 확인 | Telegram 의 조합 중 Enter 는 여전히 줄바꿈 (M4 과제) |
-| 2026-09-25 | M4 — app 별 기억·규칙, 다시 보내기, 전환 key 재설계 (주인이 여러 app 에서 확인, homi 기록 1건) | Ghostty·iTerm2·IntelliJ·Telegram 의 key 처리 source 확인 |
-| 2026-09-25 | M6 — Apple 식 한자 변환(커서 앞 단어)을 주인이 여러 app 에서 | TextEdit·Telegram 만 맞음 → macOS text 엔진 client 에서만 쓰기로. JBR·IntelliJ·IdeaVim·Chromium source 확인, Word 는 homi 기록 |
-| 2026-09-25 | VS Code click 때 음절 중복 — homi 기록 2건 | `markedRange` 확인은 통하지 않음 → Chromium 규칙. 남은 가끔의 중복은 VS Code 쪽 (homi 는 넣지 않았다) |
+  layout 은 `UCKeyTranslate` 로 쳐 보고, `kTISPropertyUnicodeKeyLayoutData` 의 크기로 log 의 `KeyLayoutData size` 와 맞췄다.

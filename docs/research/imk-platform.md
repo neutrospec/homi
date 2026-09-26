@@ -1,5 +1,8 @@
 # 조사: IMK platform 구조 (2026-09-25)
 
+> 구현 전의 조사다. 그 뒤 homi 가 확인하거나 정한 것은 AGENTS.md·docs/macos-input.md·app 원장이 우선한다
+> (예: 주인 환경의 설정, 서명 신원, 전환 key 받는 방법).
+
 조사 agent 가 macOS 입력기 13개의 source·issue 와 주인의 Mac(macOS 27.0 26A428, Swift 6.4)을 직접 확인한 결과를 추렸다.
 표기: ✅ source·local 로 확인 / 🔶 불확실. 출처의 약칭은 GitHub repo 다.
 

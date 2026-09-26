@@ -19,7 +19,7 @@
 
 - `startsInEnglish` — 활성화될 때마다 `ModeMemory.activate` 가 영문으로 되돌린다 (`AppRules`, `c08572b`).
 
-## 다시 확인할 것
+## 확인하는 법
 
 - 한글 모드에서 LaunchBar 를 불러 → 영문으로 시작한다.
 

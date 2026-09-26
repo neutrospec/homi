@@ -30,7 +30,7 @@
   (`AppRules`, `c08572b`·`c884edd`).
 - 전환 key 는 수식키다 (`c08572b`).
 
-## 다시 확인할 것
+## 확인하는 법
 
 - vim 에서 조합 중 ESC 한 번 → Normal + 영문. tmux 에서 Ctrl-B → 영문.
 - Caps Lock·오른쪽 ⌘ 전환 때 글자가 새지 않는다.

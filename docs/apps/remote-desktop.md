@@ -48,7 +48,7 @@
   원격 입력기가 한글 key 를 받는 것은 원격이 두벌식일 때뿐이다. 이 Mac 에서 원격의 입력 소스를 바꿀 길은 없다(동기화를 켤 수 없다).
 - 주인이 Remote Desktop 을 한/영 전환 없는 app 에 넣으면 homi 는 비켜서고 layout 도 ABC 다.
 
-## 다시 확인할 것
+## 확인하는 법
 
 - 원격을 두벌식에 두고: 한 → 한글 조합, A → 영문, 전환 즉시 (log 의 `KeyLayoutData size` 가 2964 ↔ 5032).
 - Remote Desktop 을 떠나면 다른 app 의 영문·문장부호가 정상 (layout 이 새지 않는다).
