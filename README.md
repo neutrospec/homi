@@ -52,6 +52,12 @@ scripts/install.sh --register
 
 자세한 조작과 설정은 입력기의 설정 창(입력 메뉴 > 설정…)에서 고른다.
 
+## 같이 켜 두면 안 되는 것
+
+- **입력 소스를 바꾸는 다른 도구**(Hammerspoon·Karabiner 의 입력 소스 전환 등)는 끈다 — 그 도구가 ABC 로 바꾸면 homi 가 밀려나 "갑자기 ABC 로 돌아간다".
+- **Apple 한국어 입력기**는 입력 소스에서 뺀다 — 둘이 섞이면 이상할 때 어느 쪽 증상인지 가리기 어렵다.
+- "문서의 입력 소스로 자동 전환" 은 끈다 — 켜 두면 system 이 문서마다 input source 를 되돌려 homi 를 밀어낸다.
+
 ## 비상 탈출
 
 입력기가 고장나면 타이핑이 막힌다. **`ABC` 입력 소스를 input source 목록에 남겨두면** menu bar 에서 바로 빠져나올 수 있다. 설치 전에 `ABC` 가 목록에 있는지 확인하라.
@@ -60,7 +66,8 @@ scripts/install.sh --register
 
 - 이 입력기는 개인 프로젝트다. Apple 의 한국어 입력기와 동작이 다른 부분이 있다 (같은 자음 연달아 합치지 않기, `` ` `` 는 `` ` `` 그대로 등). 자세한 설계 의도는 `AGENTS.md` 에 있다.
 - macOS 입력기는 system 전체에 영향을 준다. 문제가 생기면 `ABC` 로 빠져나가고, 필요하면 `~/Library/Input Methods/homi.app` 을 지우면 된다.
-- Remote Desktop·Windows App 같은 원격 환경에서는 이 Mac 의 keyboard layout 으로 한/영을 알린다 — 원격 Mac 은 두벌식 layout 으로 둬야 한다.
+- Remote Desktop 에서는 이 Mac 의 keyboard layout 으로 한/영을 알린다 — 원격 Mac 은 두벌식에 둬야 한다.
+  Windows App 은 key 를 그대로 넘기고, 한/영은 원격 Windows 의 입력기가 맡는다.
 
 ## 구조
 
