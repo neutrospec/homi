@@ -28,8 +28,10 @@
 - `swift build` 와 Debug·Release 전체 test 통과: 각각 164개(HangulCore 18, InputSession 129, Homi 14, Install 3).
   11:55 KST 에 자체 인증서로 서명·검증·설치했다(CDHash `46e0de87a668649237dff2deeb85a593392ae360`).
   native probe 는 처음 ABC 상태의 준비 단계에서 `BLOCKED` 였다. 12:33 KST 에 실제 `가` 입력·marked text 와 homi 선택은 확인했다.
-  그 뒤 준비 글자를 비우는 단계에서 진행이 멈추고 probe 가 SIGSEGV 로 종료됐다. crash stack 은 `AppDelegate.activeChanged` 의 executor 검사에 있다
-  (`probe-2026-10-09-123318.ips`). 원인은 미확정이다. insert/mark injection·입력칸 이동과 실제 callback 순서는 아직 검증하지 못했다.
+  그 뒤 준비 글자를 비우는 단계에서 진행이 멈추고 probe 가 SIGSEGV 로 종료됐다. crash stack 은 main thread 의 `AppDelegate.activeChanged` executor 검사에 있다
+  (`probe-2026-10-09-123318.ips`). 일반적인 actor isolation 불일치 trap 과는 다르며, stack 에 clear·injection 은 없다. 원인은 미확정이다.
+  같은 probe binary(UUID `D29CB4B9-F65F-3092-A8C2-8DF3E49D8665`)의 일반 창에서는 주인이 긴 입력을 정상으로 확인했다.
+  실제 insert·mark 의 관측 연결은 [입력 구조](macos-input.md#client-호출-단계의-관측)에 남겼다. insert/mark 중 callback 의 확정 대상·강제 injection·두 입력칸 이동은 아직 검증하지 못했다.
 - input menu 의 비활성·누락과 Chrome 의 다른 source 왕복은 **미해결**이다.
 
 ## 2026-10-09 작업 마감

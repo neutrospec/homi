@@ -240,7 +240,9 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 ## 다음 작업
 
 1. [activation 교정·callback 관측](docs/lessons.md#2026-10-09-activation-교정callback-관측): 새 규칙의 native text·LaunchBar·Chrome 기본 경로를 확인한다.
-   주인의 변경 전 정상 사용 보고를 모든 경로의 통과로 확대하지 않는다. callback token 만으로 commit 대상을 결정하지 않는다.
+   주인이 일반 probe 의 긴 입력을 확인했고 실제 insert·mark 의 관측 연결도 확인했다. 자동 검사는 probe crash 로 중단됐다.
+   notification·검사 진행을 나눈 최소 재현 또는 수동 검증으로 남은 경계를 확인한다. 원인 확인 없이 actor 검사를 우회하지 않는다.
+   정상 사용 보고를 모든 경로의 통과로 확대하지 않는다. callback token 만으로 commit 대상을 결정하지 않는다.
 2. [개선 안건](docs/stability-review.md): signing 실패 시 기존 설치본 보존·binary 식별·읽기 전용 진단을 준비한다.
    후보 revision·resend·Caps 종료 등 남은 안건은 영향과 증거에 따라 검증한다. 기본 입력이 다른 source 왕복보다 먼저다.
    [일본어 입력기의 recipe](docs/research/japanese-ime-recipes.md)는 외부 근거이며 실제 homi 검증과 구분한다.

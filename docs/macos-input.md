@@ -102,6 +102,18 @@ lifecycle snapshot 은 info log 와 memory ring buffer 에, client 호출의 시
 native `probe --check-input-manual` 은 주인이 선택한 homi·실제 `가` 입력으로 준비한 뒤 자기 NSTextView 에서 기본 입력·insert/mark callback·입력칸 이동을 검사한다.
 도구가 source 를 고르거나 system 에 key 를 post 하지 않는다. context injection 은 실제 lifecycle 도착 단계와 log 를 대조해야 한다.
 
+일반 probe 의 실제 입력에서 다음 순서를 확인했다. ✅ (2026-10-09 12:37:33 KST, 같은 controller 의 event 6·batch 6, 내용 없는 homi trace)
+
+| 단계 | `localMarkPlan` | `markAttempt` | `markReturn` |
+|---|---|---|---|
+| insert 시작·반환 | 4 | 3 | 3 |
+| 다음 mark 시작 | 4 | 4 | 3 |
+| 다음 mark 반환 | 4 | 4 | 4 |
+
+또한 12:37:43 의 deactivate 는 `inputDepth=0, composing=true` 로 시작했고, 종료 insert 는 `explicitEnd=true, composing=false` 인 별도 transaction 으로 실행됐다.
+이 표의 입력 중에는 commit·deactivate·activate 의 재진입을 관측하지 않았다. 계획·호출 이력의 연결을 확인한 것이며 callback 의 확정 대상은 아직 가르지 못했다.
+주인의 일반 입력 확인과 자동 검사 중단의 범위는 [작업 기록](lessons.md#2026-10-09-activation-교정callback-관측)에 있다.
+
 ## Apple 한국어 입력기가 하는 일
 
 ### marked text 없이 확정하고 바꿔치기한다
