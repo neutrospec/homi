@@ -8,6 +8,10 @@ public final class SessionDriver {
     private var pendingDeactivation: (([Action]) -> Void)?
     private var pendingCommit: (insert: Bool, apply: ([Action]) -> Void)?
     private var presentations: [() -> Void] = []
+    private var finishing = false
+    private var mutationDepth = 0
+    /// 관측 전용 cache. callback 은 Session 대신 이것의 primitive snapshot 을 읽는다.
+    public let clientTrace = ClientTrace()
     /// 지연된 UI 가 이미 끝난 조합을 다시 보이지 않게 하는 세대.
     public private(set) var revision: UInt64 = 0
 
@@ -15,11 +19,17 @@ public final class SessionDriver {
     public var composing: String { session.composing }
     public var hasCandidates: Bool { session.hasCandidates }
     public var isHandlingEvent: Bool { depth > 0 }
+    /// 명시적인 commit 은 activate 가 취소하지 않는다. 종료 flush 도 실제 입력 event 의 continuation 과 구분한다.
+    public var hasExplicitEnd: Bool { pendingCommit != nil || finishing }
+    public var isMutatingSession: Bool { mutationDepth > 0 }
 
     @discardableResult
     public func perform<Result>(_ operation: (inout Session) -> Result, apply: (Result) -> Void) -> Result {
         withEvent {
+            mutationDepth += 1
             let result = operation(&session)
+            mutationDepth -= 1
+            updateTraceState()
             apply(result)
             return result
         }
@@ -27,21 +37,23 @@ public final class SessionDriver {
 
     /// app 판별·수식키·caret 질의도 같은 경계 안에 둔다.
     public func withEvent<Result>(_ body: () -> Result) -> Result {
-        if depth == 0 { revision &+= 1 }
-        depth += 1
-        defer {
-            depth -= 1
-            if depth == 0 {
-                // flush 의 client 호출도 재진입할 수 있다. 그 callback 역시 다음 flush 로 모은다.
-                depth = 1
-                drain()
-                depth = 0
-                let ready = presentations
-                presentations = []
-                ready.forEach { $0() }
+        clientTrace.withEvent {
+            if depth == 0 { revision &+= 1 }
+            depth += 1
+            defer {
+                depth -= 1
+                if depth == 0 {
+                    // flush 의 client 호출도 재진입할 수 있다. 그 callback 역시 다음 flush 로 모은다.
+                    depth = 1
+                    drain()
+                    depth = 0
+                    let ready = presentations
+                    presentations = []
+                    ready.forEach { $0() }
+                }
             }
+            return body()
         }
-        return body()
     }
 
     /// 한 event 안에서 명시적 commit 없이 같은 controller 가 재활성화되면 조합을 이어 간다.
@@ -90,11 +102,21 @@ public final class SessionDriver {
     }
 
     private func finish(insert: Bool, apply: ([Action]) -> Void) {
+        finishing = true
+        defer { finishing = false }
         revision &+= 1
-        let actions = session.commit().filter {
+        mutationDepth += 1
+        let committed = session.commit()
+        mutationDepth -= 1
+        updateTraceState()
+        let actions = committed.filter {
             if case .insert = $0 { return insert }
             return true
         }
         if !actions.isEmpty { apply(actions) }
+    }
+
+    private func updateTraceState() {
+        clientTrace.updateState(.init(composing: !session.composing.isEmpty, candidates: session.hasCandidates))
     }
 }

@@ -16,6 +16,9 @@ nonisolated final class HomiInputController: IMKInputController {
     private lazy var capsLockHold = HoldTimer(owner: self)
     /// 이 controller 가 맡은 입력칸의 app — controller 는 client 하나에 묶여 있어 바뀌지 않는다.
     private var app: String?
+    private var modeActivation = ModeActivation()
+    /// SessionDriver 의 종료 flush 와 실제 입력 event 를 구분한다.
+    private var inputDepth = 0
     private var receivedEvent = false
     /// 같은 process 안의 controller 를 구분한다. 입력 내용이나 client 문서 위치를 담지 않는다.
     var traceID: String { String(UInt(bitPattern: ObjectIdentifier(self).hashValue), radix: 16) }
@@ -27,28 +30,34 @@ nonisolated final class HomiInputController: IMKInputController {
     }
 
     override func activateServer(_ sender: Any!) {
+        observeClient("activate.begin", lifecycle: true)
+        defer { observeClient("activate.return", lifecycle: true) }
+        let resuming = inputDepth > 0 && !session.hasExplicitEnd
+        modeActivation.activate(resumingInput: resuming)
         session.activate()
         let controller = Unchecked(self)
         MainActor.assumeIsolated { ActiveInputSession.controller = controller.value }
-        // activate 안에서는 client 에 묻지 않는다. handle 이 실제 bundle ID 로 바로잡는다.
+        // 실제 ID 를 이미 알며 client 반영 중이 아닐 때만 즉시 초기화한다. 그 밖에는 실제 입력 경계까지 intent 를 보존한다.
+        if !session.isHandlingEvent, inputDepth == 0, let app { prepareMode(for: app) }
+        // activate 안에서는 client 에 묻지 않으며 fallback app 의 기억도 reset 하지 않는다.
         let app = app ?? frontmostApp()
         let profile = profile(for: app)
-        let (mode, changed) = memory.withLock { memory in
-            let before = memory
-            let mode = memory.activate(app, profile: profile)
-            return (mode, memory != before ? memory : nil)
-        }
-        if let changed { Memory.save(changed) }
+        let mode = memory.withLock { $0.mode(for: app) }
         // homi 가 넘긴 key 는 이 layout 으로 문자가 된다 — 늘 ABC, 원격 화면의 한글 모드만 두벌식 (`AppProfile.keyboardLayout`).
-        let layout = profile.keyboardLayout(in: mode)
-        (sender as? IMKTextInput)?.overrideKeyboard(withKeyboardNamed: layout)
+        // 새 시작의 layout 은 activate 에서만 준비한다. 같은 event 의 재활성화는 기존 layout 도 이어 간다.
+        let layoutMode: Mode = modeActivation.needsStart && profile.startsInEnglish ? .english : mode
+        let layout = profile.keyboardLayout(in: layoutMode)
+        if !resuming, let proxy = sender as? any IMKTextInput & NSObjectProtocol {
+            Client(proxy: proxy, owner: self).apply([.layout(layout)])
+        }
         log.info("activate \(app, privacy: .public), controller: \(self.traceID, privacy: .public)")
-        record("activate \(app) \(profile.passThrough ? "pass-through" : "\(mode)") \(layout)")
-        let shown: Mode? = profile.passThrough ? nil : mode
-        Task { @MainActor in Indicator.shared.show(shown) }
+        record("activate \(app) \(profile.passThrough ? "pass-through" : "\(mode)") \(resuming ? "layout preserved" : layout)")
+        showIndicator(mode, app: app, passThrough: profile.passThrough)
     }
 
     override func deactivateServer(_ sender: Any!) {
+        observeClient("deactivate.begin", lifecycle: true)
+        defer { observeClient("deactivate.return", lifecycle: true) }
         let id = app ?? "unknown"
         log.info("deactivate \(id, privacy: .public), controller: \(self.traceID, privacy: .public)")
         record("deactivate \(id)")
@@ -59,6 +68,8 @@ nonisolated final class HomiInputController: IMKInputController {
 
     /// client 가 조합을 끝내 달라고 할 때 — focus 이동, input source 전환.
     override func commitComposition(_ sender: Any!) {
+        observeClient("commitComposition.begin", lifecycle: true)
+        defer { observeClient("commitComposition.return", lifecycle: true) }
         record("commitComposition \(app ?? "unknown")")
         // 기존 Chromium 우회로 복귀한다. TIS 는 source 전환 중 아직 homi 일 수 있어 이 구분은 불완전하다.
         // callback 뒤의 mark 질의로 보완하려던 처리는 새 입력칸에 글자를 넣었다 — Chrome 원장.
@@ -81,18 +92,23 @@ nonisolated final class HomiInputController: IMKInputController {
 
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event, let proxy = sender as? any IMKTextInput & NSObjectProtocol else { return false }
+        inputDepth += 1
+        defer { inputDepth -= 1 }
         return session.withEvent {
             let controller = Unchecked(self)
             MainActor.assumeIsolated { ActiveInputSession.controller = controller.value }
-            let app = resolveApp(sender)
+            let app = resolveApp(Client(proxy: proxy, owner: self))
             if !receivedEvent {
                 receivedEvent = true
                 log.info("receiving events from \(app, privacy: .public), controller: \(self.traceID, privacy: .public)")
             }
             switch event.type {
             case .keyDown:
+                prepareMode(for: app)
+                modeActivation.inputStarted(app: app, trusted: self.app != nil)
                 return keyDown(event, app: app, client: Client(proxy: proxy, owner: self))
             case .flagsChanged:
+                prepareMode(for: app)
                 modifiersChanged(event, app: app, client: Client(proxy: proxy, owner: self))
                 return false
             case .leftMouseDown:
@@ -140,6 +156,7 @@ nonisolated final class HomiInputController: IMKInputController {
         capsLockHold.cancel()
         if result.startsHoldTimer { scheduleCapsLockHold() }
         guard let action = result.action else { return }
+        modeActivation.inputStarted(app: app, trusted: self.app != nil)
         record("modifier kc=\(event.keyCode) → \(action)")
         switch action {
         case .toggle:
@@ -200,7 +217,39 @@ nonisolated final class HomiInputController: IMKInputController {
         log.info("mode \(String(describing: mode), privacy: .public) for \(app, privacy: .public)")
         record("mode \(mode)")
         // menu bar 표시는 key 처리 밖에서 — 결정 4
-        Task { @MainActor in Indicator.shared.show(mode) }
+        showIndicator(mode, app: app, passThrough: profile(for: app).passThrough)
+    }
+
+    /// client 의 실제 ID(또는 그 cache)를 아는 경계에서 시작 규칙을 한 번 적용한다.
+    private func prepareMode(for app: String) {
+        let profile = profile(for: app)
+        let trusted = self.app != nil
+        let initializing = modeActivation.needsStart && trusted
+        let (mode, changed) = memory.withLock { memory in
+            let before = memory
+            let mode = modeActivation.prepare(app: app, trusted: trusted, profile: profile, memory: &memory)
+            return (mode, memory != before ? memory : nil)
+        }
+        if let changed { Memory.save(changed) }
+        if initializing || changed != nil {
+            log.info("input start prepared for \(app, privacy: .public), controller: \(self.traceID, privacy: .public), mode: \(String(describing: mode), privacy: .public)")
+            record("input start \(app) \(mode)")
+            showIndicator(mode, app: app, passThrough: profile.passThrough)
+        }
+    }
+
+    /// 옛 activation 표시가 뒤늦게 현재 mode 를 덮지 않는다. client 에게는 묻지 않는다.
+    private func showIndicator(_ mode: Mode, app: String, passThrough: Bool) {
+        let controller = Unchecked(self)
+        session.afterEvent {
+            Task { @MainActor in
+                guard ActiveInputSession.controller === controller.value,
+                    controller.value.app == nil || controller.value.app == app,
+                    controller.value.profile(for: app).passThrough == passThrough,
+                    memory.withLock({ $0.mode(for: app) }) == mode else { return }
+                Indicator.shared.show(passThrough ? nil : mode)
+            }
+        }
     }
 
     /// 이 입력칸의 규칙 — 주인의 설정과 app 규칙 표를 합친다.
@@ -209,12 +258,15 @@ nonisolated final class HomiInputController: IMKInputController {
     }
 
     /// 이 입력칸의 app. client 가 bundle ID 를 모르면 맨 앞 app 으로 (조사: nil 일 수 있다).
-    private func resolveApp(_ sender: Any?) -> String {
+    private func resolveApp(_ client: Client) -> String {
         if let app { return app }
-        let id = (sender as? IMKTextInput)?.bundleIdentifier() ?? ""
+        let id = client.bundleIdentifier() ?? ""
         let resolved = id.isEmpty ? frontmostApp() : id
         // 불확실한 fallback 은 영구 cache 하지 않는다. 다음 key 에 client 가 답하면 바로잡는다.
-        if !id.isEmpty { app = resolved }
+        if !id.isEmpty {
+            app = resolved
+            showIndicator(memory.withLock { $0.mode(for: resolved) }, app: resolved, passThrough: profile(for: resolved).passThrough)
+        }
         return resolved
     }
 
@@ -234,6 +286,8 @@ nonisolated final class HomiInputController: IMKInputController {
     /// source 전환 알림은 deactivate 가 빠져도 온다. bound client 에만 확정하고, 반복은 무해하다.
     func sourceChanged(selected: Bool) {
         guard !selected else { return }
+        observeClient("sourceEnd.begin", lifecycle: true)
+        defer { observeClient("sourceEnd.return", lifecycle: true) }
         log.info("source end handled, controller: \(self.traceID, privacy: .public)")
         cancelModifiers()
         let target = client().map { Client(proxy: $0, owner: self) }
@@ -241,6 +295,8 @@ nonisolated final class HomiInputController: IMKInputController {
     }
 
     override func inputControllerWillClose() {
+        observeClient("controllerClose.begin", lifecycle: true)
+        defer { observeClient("controllerClose.return", lifecycle: true) }
         log.info("closing controller: \(self.traceID, privacy: .public)")
         cancelModifiers()
         commit()
@@ -252,6 +308,19 @@ nonisolated final class HomiInputController: IMKInputController {
     }
 
     var sessionRevision: UInt64 { session.revision }
+    var clientTrace: ClientTrace { session.clientTrace }
+    /// 상태 cache 와 호출 이력만 읽는다. Session 의 mutating 질의 중에도 그 Session 이나 client 문서를 읽지 않는다.
+    func observeClient(_ phase: String, returnedCall: UInt64? = nil, lifecycle: Bool = false) {
+        let state = session.clientTrace.snapshot.description
+        let returned = returnedCall.map(String.init) ?? "none"
+        let context = "controller=\(traceID) inputDepth=\(inputDepth) mutation=\(session.isMutatingSession) explicitEnd=\(session.hasExplicitEnd) needsStart=\(modeActivation.needsStart) returnedCall=\(returned) \(state)"
+        if lifecycle {
+            log.info("trace \(phase, privacy: .public) \(context, privacy: .public)")
+            record("trace \(phase) \(context)")
+        } else {
+            log.debug("trace \(phase, privacy: .public) \(context, privacy: .public)")
+        }
+    }
     var hasCandidates: Bool { session.hasCandidates }
     var isHandlingEvent: Bool { session.isHandlingEvent }
     func afterEvent(_ presentation: @escaping () -> Void) { session.afterEvent(presentation) }

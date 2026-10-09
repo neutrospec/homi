@@ -31,24 +31,49 @@ extension ModifierEvent {
 nonisolated struct Client {
     let proxy: any IMKTextInput & NSObjectProtocol
     weak var owner: HomiInputController?
+    private let traceOverride: ClientTrace?
+
+    init(proxy: any IMKTextInput & NSObjectProtocol, owner: HomiInputController? = nil, trace: ClientTrace? = nil) {
+        self.proxy = proxy
+        self.owner = owner
+        self.traceOverride = trace
+    }
+
+    private var trace: ClientTrace? { traceOverride ?? owner?.clientTrace }
 
     private static let nowhere = NSRange(location: NSNotFound, length: 0)
 
     func apply(_ actions: [Action]) {
-        for action in actions {
+        if let trace {
+            let batch = trace.plan(actions, state: trace.snapshot.cachedState)
+            trace.withBatch(batch) { apply(actions, batch: batch) }
+        } else {
+            apply(actions, batch: nil)
+        }
+    }
+
+    private func apply(_ actions: [Action], batch: ClientTrace.Batch?) {
+        for (index, action) in actions.enumerated() {
+            let planned = batch?.call(at: index)
             switch action {
             case .mark(let text):
                 record("  mark \"\(text)\"")
                 let caret = NSRange(location: (text as NSString).length, length: 0)
-                proxy.setMarkedText(text, selectionRange: caret, replacementRange: Self.nowhere)
+                call("mark", planned: planned, kind: .mark) {
+                    proxy.setMarkedText(text, selectionRange: caret, replacementRange: Self.nowhere)
+                }
             case .markCommitted(let text, let range):
                 record("  mark \"\(text)\" over {\(range.location),\(range.length)}")
                 let caret = NSRange(location: (text as NSString).length, length: 0)
-                proxy.setMarkedText(text, selectionRange: caret, replacementRange: range)
+                call("markCommitted", planned: planned, kind: .mark) {
+                    proxy.setMarkedText(text, selectionRange: caret, replacementRange: range)
+                }
             case .insert(let text):
                 record("  insert \"\(text)\"")
                 // {NSNotFound, NSNotFound} 실험은 Chrome 의 실패를 해결하지 못했다. 기존 range 로 복귀한다.
-                proxy.insertText(text, replacementRange: Self.nowhere)
+                call("insert", planned: planned, kind: .insert) {
+                    proxy.insertText(text, replacementRange: Self.nowhere)
+                }
             case .showCandidates(let candidates, let selected):
                 record("  candidates \(selected)/\(candidates.count)")
                 let line = caretLine()  // key 처리 도중에 묻는다 — ModeHUD 와 같은 이유
@@ -73,35 +98,54 @@ nonisolated struct Client {
                 }
             case .layout(let id):
                 record("  layout \(id)")
-                proxy.overrideKeyboard(withKeyboardNamed: id)
+                call("layout", planned: planned, kind: .layout) { proxy.overrideKeyboard(withKeyboardNamed: id) }
             }
         }
+    }
+
+    /// call frame 을 올린 뒤에만 관측한다. 반환은 proxy 호출의 완료이지 renderer 확정의 증거가 아니다.
+    private func call<Result>(_ name: String, planned: ClientTrace.PlannedCall? = nil,
+                              kind: ClientTrace.CallKind = .query, _ body: () -> Result) -> Result {
+        guard let trace else { return body() }
+        var callID: UInt64?
+        let invoke = {
+            callID = trace.snapshot.frame?.id
+            self.owner?.observeClient("client.\(name).begin")
+            return body()
+        }
+        let result: Result
+        if let planned { result = trace.withCall(planned, invoke) }
+        else { result = trace.withCall(kind, invoke) }
+        owner?.observeClient("client.\(name).return", returnedCall: callID)
+        return result
     }
 }
 
 extension Client {
+    nonisolated func bundleIdentifier() -> String? { call("bundleIdentifier") { proxy.bundleIdentifier() } }
+
     /// 선택 영역의 글자 — ⌥↩ 로 단어를 한자로 바꿀 때만, key 처리 도중에 묻는다. 없거나 너무 길면 nil.
     nonisolated func selectedText() -> String? {
-        let range = proxy.selectedRange()
+        let range = call("selectedRange") { proxy.selectedRange() }
         guard range.location != NSNotFound, range.length > 0, range.length <= 40 else { return nil }
-        return proxy.attributedSubstring(from: range)?.string
+        return call("selectedSubstring") { proxy.attributedSubstring(from: range)?.string }
     }
 
     /// 조합 중인 글자(없으면 커서) 바로 앞 `count` 글자와 그 끝의 문서 위치 — ⌥↩ 가 방금 친 단어를 바꿀 수 있는지 볼 때만,
     /// key 처리 도중에 묻는다. 확정된 글자의 교체를 제대로 받는 client 가 아니거나, 선택 영역이 있거나, 답이 없으면 nil.
     nonisolated func textBefore(_ count: Int) -> (text: String, end: Int)? {
         guard replacesLikeTextView() else { return nil }
-        let marked = proxy.markedRange()
+        let marked = call("markedRange") { proxy.markedRange() }
         let end: Int
         if marked.location != NSNotFound, marked.length > 0 {
             end = marked.location
         } else {
-            let selected = proxy.selectedRange()
+            let selected = call("selectedRange") { proxy.selectedRange() }
             guard selected.location != NSNotFound, selected.length == 0 else { return nil }
             end = selected.location
         }
         guard count > 0, end >= count,
-            let text = proxy.attributedSubstring(from: NSRange(location: end - count, length: count))?.string
+            let text = call("precedingSubstring", { proxy.attributedSubstring(from: NSRange(location: end - count, length: count))?.string })
         else { return nil }
         return (text, end)
     }
@@ -110,14 +154,14 @@ extension Client {
     /// 교체 범위와 받아쓰기 대안(`NSTextAlternatives`)까지 받는다고 알릴 때만. Chromium·WebKit 은 앞의 것만 알리고
     /// (그 위의 JS editor 가 교체를 모른다), JetBrains Runtime·terminal 은 아무것도 알리지 않는다 (docs/macos-input.md).
     nonisolated func replacesLikeTextView() -> Bool {
-        let attributes = Set((proxy.validAttributesForMarkedText() ?? []).compactMap { $0 as? String })
+        let attributes = Set((call("validMarkedAttributes") { proxy.validAttributesForMarkedText() } ?? []).compactMap { $0 as? String })
         return attributes.isSuperset(of: ["NSTextInputReplacementRangeAttributeName", "NSTextAlternatives"])
     }
 
     /// 커서가 있는 줄의 사각형 (화면 좌표) — 입력기가 후보 창을 띄울 때 쓰는 IMK 의 질의. 모르는 client 는 빈 사각형.
     nonisolated func caretLine() -> NSRect {
         var line = NSRect.zero
-        _ = proxy.attributes(forCharacterIndex: 0, lineHeightRectangle: &line)
+        _ = call("caretAttributes") { proxy.attributes(forCharacterIndex: 0, lineHeightRectangle: &line) }
         return line
     }
 }

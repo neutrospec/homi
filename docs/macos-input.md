@@ -77,6 +77,31 @@ HID mapping 을 함께 확보한다. System Settings 에도 사라졌는지와 S
   대상은 마지막으로 활성화되거나 event 를 받은 weak controller 하나다. 모든 종료 순서와 실제 app 을 검증한 것은 아니다.
   이것이 menu bar 의 비활성 증상을 고쳤다는 증거는 아직 없다.
 
+### client 호출 단계의 관측
+
+`SessionDriver.clientTrace` 는 마지막 안전한 경계에서 옮긴 `composing`·`candidates` boolean 과 호출 metadata 만 가진다.
+`perform`·`finish` 의 mutating call 이 반환한 뒤 cache 를 갱신한다. callback 에서 Session 을 직접 읽거나 client 에 더 묻지 않는다.
+실제 `Client` 의 fake proxy callback 과 mutating 질의 test 로 exclusivity 충돌 없이 읽히고 추가 질의가 없음을 확인했다. ✅ (2026-10-09, Debug·Release)
+
+| 기록 | 의미 · 한계 |
+|---|---|
+| `event` | driver 의 동기 transaction ID. key 외의 명시적 commit·종료 flush 에도 붙으므로 물리 key 번호가 아니다 |
+| `batch`·`action` | client 에 보낼 목록과 그 안의 순서. 목록 전체를 첫 IPC 전에 계획한다 |
+| `localMarkPlan` | 가장 최근 계획한 mark 의 token. `insert(old) → mark(next)` 의 insert 중에도 next 계획을 볼 수 있다 |
+| `markAttempt`·`markReturn` | 마지막 mark 호출의 시작·정상 반환 token. 반환은 renderer 적용·확정의 증거가 아니다 |
+| `call(kind,depth,…)` | 지금 실행 중인 insert·mark·query·layout 과 중첩 깊이 |
+| `returnedCall` | `.return` log 에서 방금 반환한 호출 ID. 이때 `call(…)` 은 이미 복구된 바깥 frame 이다 |
+| `inputDepth`·`mutation`·`explicitEnd` | 실제 입력 handler 안인지, Session 변경 중인지, 명시적 종료가 대기·flush 중인지 |
+
+token 은 글자의 동일성·DOM 입력칸·callback 의 적용 대상을 증명하지 않는다. 같은 글자와 빈 mark 도 새 계획이고,
+조합이 끝난 뒤에도 이력은 남는다. cached state 는 진행 중 mutation 이전의 값일 수 있으며 `composing=false, candidates=true` 도 가능하다.
+lifecycle `.return` 은 callback 반환이다. 경계 끝의 pending commit 완료를 뜻하지 않는다.
+
+lifecycle snapshot 은 info log 와 memory ring buffer 에, client 호출의 시작·반환은 debug log 에 남긴다.
+새 snapshot 에 글자·key code·문서 위치는 없다. 기록의 추가 비용이 timing 을 바꿀 수 있으므로 관측된 순서를 일반화하지 않는다.
+native `probe --check-input-manual` 은 주인이 선택한 homi·실제 `가` 입력으로 준비한 뒤 자기 NSTextView 에서 기본 입력·insert/mark callback·입력칸 이동을 검사한다.
+도구가 source 를 고르거나 system 에 key 를 post 하지 않는다. context injection 은 실제 lifecycle 도착 단계와 log 를 대조해야 한다.
+
 ## Apple 한국어 입력기가 하는 일
 
 ### marked text 없이 확정하고 바꿔치기한다
@@ -153,7 +178,7 @@ probe run 1, 한→영:
   그래서 homi 는 leftMouseDown 도 받아 직접 확정한다. ✅ `IMKInputController.h` (recognizedEvents 주석)
 - **전환 직후의 첫 key 는 새 모드였다** — 35번 전환에 틀린 경우 0 (probe run 4). ✅
   homi 내부 전환과 다음 key 는 같은 흐름에서 차례로 처리된다 (`ToggleTests`·`ModifierKeysTests` 가 고정).
-  이 관측이 재진입 activation 의 mode reset 까지 검증한 것은 아니다. 그 경계는 [개선 검토](stability-review.md#activation-의-두-counterexample)에 따로 둔다.
+  이 관측이 재진입 activation 의 mode reset 까지 검증한 것은 아니다. 그 교정과 제한은 [교훈](lessons.md#재활성화가-mode-를-reset-하고-실제-client-의-시작-규칙을-놓친다-2026-10-09)에 둔다.
 
 ### homi process 와 HID mapping 의 수명
 

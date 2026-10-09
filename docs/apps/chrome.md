@@ -59,25 +59,26 @@
   textarea → plaintext-only, plaintext-only → rich text 에서도 같은 순서였다. 입력 내용 없는 lifecycle·DOM event 관찰이다.
 - `{NSNotFound, NSNotFound}` 확정 range 실험을 설치한 뒤 주인: 첫 입력은 여전히 대체되고 다음 칸에는 `글` 이 따라와 상태가 더 나쁘다고 보고했다. ✅
   range 변경과 악화의 인과는 분리하지 못했다. 보류한 확정과 range 실험을 09:54 KST 설치본에서 되돌렸다.
-  이후 source 전환 없는 `글` 조합 → 새 입력칸 click → `한` 확인을 요청했으나 결과는 아직 없다.
+  이후 source 전환 없는 `글` 조합 → 새 입력칸 click → `한` 확인을 요청했다. 후속 기본 입력 정상 보고는 [작업 기록](../lessons.md#2026-10-09-activation-교정callback-관측)에 있으며 이 경로의 개별 결과는 받지 않았다.
 - 기본 입력칸에서도 source 전환 뒤 대체가 보고됐다. Froala 에만 있는 결함으로 좁힐 근거는 없다.
 
 ## 다음 작업
 
 주인 결정(2026-10-09): 드문 다른 input source 왕복의 교정은 일상 입력을 악화시키면서까지 하지 않는다. [개선 검토](../stability-review.md)의 기본 경로가 먼저다.
-현재 설치본의 입력칸 이동이 원래 동작으로 돌아왔는지부터 확인한다. 아래 source 왕복 표는 후속 검증 기준으로 보존한다.
+activation 교정본에서도 source 전환 없는 입력칸 이동을 확인한다. 아래 source 왕복 표는 후속 검증 기준으로 보존한다.
 homi 를 한글 모드로 두고 다음 표를 새 빈자리에서 별개로 실행하고,
 전환 실험 사이에는 입력칸을 다시 click 하지 않는다. 지금까지의 긍정·부정 관측은 위 기록에 있고, 이 표는 다음 확인의 기준이다.
 
 | 경로 | 기대 결과 | 다음 확인 |
 |---|---|---|
-| ABC 전환 없이 `글` 조합 → 빈 다른 칸 click → `한` 입력 | 옛 칸 `글`, 새 칸 `한` | rollback 의 복구 확인이 먼저 |
+| ABC 전환 없이 `글` 조합 → 빈 다른 칸 click → `한` 입력 | 옛 칸 `글`, 새 칸 `한` | activation 교정본의 기본 입력 확인 |
 | `한` 조합 → mouse ABC → mouse homi → 새 `글` 한 음절 | `한글` | 한 음절 결과만으로 교정 완료라 하지 않음 |
 | `한` 조합 → mouse ABC → mouse homi → 새 `한글` 두 음절 전체 | `한한글` | 일반 input·rich contenteditable 을 각각 확인 |
 | 같은 source 전환을 ⌃Space 로 | 위와 동일 | mouse 경로와 분리, 아직 확인하지 않음 |
 
 source 왕복 조사를 다시 시작할 때에는 입력기 호출과 page 조합 종료 사이를 가른다. 입력 내용 없이 controller ID·TIS 선택·callback 순서와
 DOM `compositionstart/update/end`·focus/blur 의 시각을 함께 관찰한다. `insertText` 반환을 page 의 확정 완료로 세지 않는다.
+추가한 [client 호출 단계](../macos-input.md#client-호출-단계의-관측)는 다음 mark 의 계획과 이전 mark 호출 반환을 가르지만 callback 의 확정 대상을 증명하지 않는다.
 event 의 `isTrusted` 값만으로 editor 나 extension 을 원인으로 지목하지 않는다.
 필요하면 마지막 mark 를 받은 proxy·bound client·callback sender 가 같은 object 인지 진단 정보를 더한다.
 이는 호출 대상을 비교하는 관측이며 DOM 입력칸의 소유권 증명은 아니다. 확인 없이 callback sender 로 확정 대상을 바꾸지 않는다.

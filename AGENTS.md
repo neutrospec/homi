@@ -4,7 +4,7 @@
 목표는 **두벌식 한글 입력이 완벽하게 동작하는 것** 하나다. 기능을 늘리는 프로젝트가 아니다 — 잡다한 기능·옵션·변죽은 만들지 않는다.
 
 > **현재 (2026-10-09)**: M0–M4·M6·M7 을 주인이 확인했다. 지금은 M5 — 일상 사용과 app 호환성.
-> 설치본의 변경·검증 범위는 [lessons](docs/lessons.md#2026-10-09-작업-마감), 개선 안건은 [안정성 검토](docs/stability-review.md), 남은 작업은 [다음 작업](#다음-작업)에 있다.
+> 설치본의 변경·검증 범위는 [lessons](docs/lessons.md#2026-10-09-activation-교정callback-관측), 개선 안건은 [안정성 검토](docs/stability-review.md), 남은 작업은 [다음 작업](#다음-작업)에 있다.
 > 이상하면 주인이 곧바로 "최근 key 기록 저장" 을 누른다 → [진행 단계](#진행-단계)
 
 ## 문서
@@ -185,8 +185,9 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
     입력기가 client 에게 무엇을 하는지는 추측하지 말고 여기서 본다.
   - `tools/probe/browser.html`·`browser-trace.js` — Chrome 기본 입력칸 비교와 입력 내용 없는 DOM event 관찰.
     준비·종료 방법과 아직 확인하지 못한 경로는 [Chrome 원장](docs/apps/chrome.md#다음-작업)에 있다.
-  - `probe --check`·`--check-manual` — native client 의 조합·재진입 검사. 이번 작업의 자동 검사는 모드 준비 단계에서 `BLOCKED` 였다.
-    `PASS` 로 세지 않는다. `--check-manual` 은 자기 test 창에서 한글 모드로 `가` 를 입력해 준비하는 경로이며 아직 실행 결과가 없다.
+  - `scripts/probe.sh build/activation-probe.log --check-input-manual` — 현재 homi 를 주인이 선택하고 자기 창에 `가` 를 입력해 준비하면,
+    기본 입력·insert/mark 중 context 재활성화·두 입력칸 이동을 검사한다. 도구가 source 를 바꾸거나 system 에 key 를 post 하지 않는다.
+    `--check`·`--check-manual` 은 한자·다른 source 전환을 포함한 별도 검사다. 준비 실패는 `BLOCKED` 이며 `PASS` 로 세지 않는다.
 - `swift scripts/make-icon.swift 호 Sources/homi/Bundle/Resources/homi.tiff` — menu bar icon.
 - log: `/usr/bin/log stream --level debug --predicate 'subsystem == "com.unocult.inputmethod.homi"'` (zsh 에서는 `log` 가 builtin 이다).
 - 직접 확인할 app (주인이 쓰는 것): VS Code · Obsidian · Ghostty · iTerm2 · Wave · Terminal · Chrome · Safari · Firefox · KakaoTalk · Telegram · Word ·
@@ -238,11 +239,11 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 
 ## 다음 작업
 
-1. [기본 입력](docs/stability-review.md#검증-근거와-다음-순서): 현재 설치본의 조합·편집·내부 전환·focus 이동을 확인한다.
-   Chrome rollback 뒤 입력칸 이동과 native probe 의 실제 확인은 아직 남아 있다.
-2. [개선 안건](docs/stability-review.md): activation 의 mode 경계·client 확인의 범위를 재현 test 부터 검증한다.
-   signing 실패 시 기존 설치본 보존·binary 식별·읽기 전용 진단도 준비한다. 후보 표시와 다른 source 왕복보다 기본 입력이 먼저다.
-   [일본어 입력기의 recipe](docs/research/japanese-ime-recipes.md)는 test 설계의 근거이며 제품 교정 완료가 아니다.
+1. [activation 교정·callback 관측](docs/lessons.md#2026-10-09-activation-교정callback-관측): 새 규칙의 native text·LaunchBar·Chrome 기본 경로를 확인한다.
+   주인의 변경 전 정상 사용 보고를 모든 경로의 통과로 확대하지 않는다. callback token 만으로 commit 대상을 결정하지 않는다.
+2. [개선 안건](docs/stability-review.md): signing 실패 시 기존 설치본 보존·binary 식별·읽기 전용 진단을 준비한다.
+   후보 revision·resend·Caps 종료 등 남은 안건은 영향과 증거에 따라 검증한다. 기본 입력이 다른 source 왕복보다 먼저다.
+   [일본어 입력기의 recipe](docs/research/japanese-ime-recipes.md)는 외부 근거이며 실제 homi 검증과 구분한다.
 3. [비활성·누락](docs/macos-input.md#input-menu-의-비활성누락-2026-10-09-미해결): 재발 당시 상태를 먼저 확보한다.
    재진입·수명·설치 수정이 이 증상을 해결했다는 증거는 없다. 재발을 기다리는 동안 다른 검토를 멈추지 않는다.
 

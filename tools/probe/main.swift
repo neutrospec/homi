@@ -112,6 +112,7 @@ nonisolated final class ProbeInputContext: NSTextInputContext {
 final class ProbeTextView: NSTextView {
     // 자동 검사에서만 쓴다. 실제 client 호출 도중 context 의 lifecycle 을 흔든다.
     var onInsertOnce: (() -> Void)?
+    var onMarkOnce: (() -> Void)?
     var onSelectionQueryOnce: (() -> Void)?
     // lazy 로 두면 안 된다: context 는 init 안에서 client 에게 validAttributesForMarkedText 를 묻고,
     // 그 질문을 기록하려고 context 를 다시 만들면 무한 재귀다. 만들어지기 전에는 nil 로 둔다.
@@ -206,6 +207,10 @@ final class ProbeTextView: NSTextView {
     override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
         journal?.write("setMarked   \(quoted(string)) sel=\(range(selectedRange)) repl=\(range(replacementRange))")
         super.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
+        if let callback = onMarkOnce {
+            onMarkOnce = nil
+            callback()
+        }
     }
 
     override func insertText(_ string: Any, replacementRange: NSRange) {
@@ -235,6 +240,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let previousSource = systemSource()
         let previousApp = NSWorkspace.shared.frontmostApplication
+        let inputOnly = CommandLine.arguments.contains("--check-input-manual")
         let width: CGFloat = 900
         let input = ProbeTextView(frame: NSRect(x: 0, y: 0, width: width, height: 180))
         input.font = .systemFont(ofSize: 22)
@@ -242,6 +248,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         input.isAutomaticSpellingCorrectionEnabled = false
         input.isAutomaticTextReplacementEnabled = false
         input.isAutomaticQuoteSubstitutionEnabled = false
+
+        // 기본 입력 검사는 자기 창의 다른 입력칸으로 first responder 를 옮긴다.
+        let otherInput: ProbeTextView? = inputOnly ? ProbeTextView(frame: NSRect(x: 0, y: 0, width: width, height: 90)) : nil
+        if let otherInput {
+            otherInput.font = input.font
+            otherInput.isAutomaticSpellingCorrectionEnabled = false
+            otherInput.isAutomaticTextReplacementEnabled = false
+            otherInput.isAutomaticQuoteSubstitutionEnabled = false
+        }
 
         let logView = NSTextView(frame: NSRect(x: 0, y: 0, width: width, height: 480))
         logView.isEditable = false
@@ -251,6 +266,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         split.isVertical = false
         split.dividerStyle = .thin
         split.addArrangedSubview(scrollable(input))
+        if let otherInput { split.addArrangedSubview(scrollable(otherInput)) }
         split.addArrangedSubview(scrollable(logView))
 
         let window = NSWindow(
@@ -259,6 +275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.title = "probe"
         window.contentView = split
         split.setPosition(180, ofDividerAt: 0)
+        if inputOnly { split.setPosition(270, ofDividerAt: 1) }
         window.center()
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(input)
@@ -269,11 +286,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.input = input
         observe()
         journal?.write("start       sys=\(systemSource())  ctx=\(input.inputContext?.selectedKeyboardInputSource ?? "-")")
-        let manual = CommandLine.arguments.contains("--check-manual")
+        let manual = inputOnly || CommandLine.arguments.contains("--check-manual")
         if CommandLine.arguments.contains("--check") || manual {
-            window.title = manual ? "probe — 한글 모드에서 가 를 입력하면 자동 검사" : "probe — 자동 검사 중"
+            window.title = inputOnly ? "probe — 현재 homi 의 한글 모드에서 첫 칸에 가 를 입력하면 기본 입력 검사"
+                : manual ? "probe — 한글 모드에서 가 를 입력하면 자동 검사" : "probe — 자동 검사 중"
             Task {
-                await ProbeChecks.run(input, previousSource: previousSource, previousApp: previousApp, manual: manual)
+                await ProbeChecks.run(input, previousSource: previousSource, previousApp: previousApp,
+                    manual: manual, inputOnly: inputOnly, otherView: otherInput)
             }
         }
     }

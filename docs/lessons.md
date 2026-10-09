@@ -17,6 +17,19 @@
 - "우리 insert 기록이 없다" 는 app 결함의 확정 증거가 아니다. VS Code 원장의 남은 중복도 원인 미확정으로 바로잡았다.
   한 번에 한 가정을 바꾸고, 설치본의 기본 동작이 복구됐는지 확인한 뒤 다음 실험을 한다.
 
+## 2026-10-09 activation 교정·callback 관측
+
+- 주인은 변경 전에 “한글 입력기는 현재 상태로 잘 동작 하는 것 같다”고 확인했다. 기본 입력의 사용 관측이며,
+  Chrome 의 각 입력칸 이동·source 왕복이나 모든 app 의 개별 검사 결과로 확대하지 않는다.
+- activation 의 두 counterexample 을 기존 glue 를 재현한 test 에서 먼저 실패시켰다. `ModeActivation` 교정 뒤 통과했고,
+  늦은 client ID·첫 modifier·명시적 종료·실제 새 시작을 포함해 14개 regression 을 추가했다(아래 결함).
+- 내용 없는 client 호출 관측을 연결했다. helper 9개·실제 `Client` proxy 3개 test 가 계획·호출·반환·cache 의 경계와 질의 횟수를 검사한다.
+  token 의 뜻과 한계는 [입력 구조](macos-input.md#client-호출-단계의-관측)에 둔다. commit 정책·range·한글 엔진은 바꾸지 않았다.
+- `swift build` 와 Debug·Release 전체 test 통과: 각각 164개(HangulCore 18, InputSession 129, Homi 14, Install 3).
+  11:55 KST 에 자체 인증서로 서명·검증·설치했다(CDHash `46e0de87a668649237dff2deeb85a593392ae360`).
+  native probe 는 ABC 상태의 준비 단계에서 `BLOCKED` 였다. 수동 준비를 기다리는 검사창을 다시 열었으며 실제 callback 순서는 아직 확인하지 못했다.
+- input menu 의 비활성·누락과 Chrome 의 다른 source 왕복은 **미해결**이다.
+
 ## 2026-10-09 작업 마감
 
 - 유지한 변경: 재진입 경계·source 종료 알림 보완·activate 의 client 질의 제거, Caps Lock timer 수명·mapping 실패 처리,
@@ -27,10 +40,26 @@
   재진입·owner 해제·HID 실패 주입·directory 교환의 검증이다. 후보 창의 실제 표시·모든 app 의 호환성을 증명하지 않는다.
 - native probe 자동 검사는 합성 수식키로 한글 모드에 들어가지 못해 `BLOCKED` 였다. 도구의 system keyboard event 전송 권한도 없었다.
   자기 창의 `--check-manual` 경로는 준비했지만 끝까지 `PASS` 를 확인하지 않았다.
-- Chrome source 전환·input menu 의 비활성/누락은 **미해결**이다. rollback 뒤 실제 입력칸 이동의 복구도 주인 확인이 아직 없다.
+- Chrome source 전환·input menu 의 비활성/누락은 **미해결**이다. 당시 rollback 뒤 실제 입력칸 이동의 복구는 주인 확인이 없었다.
   다음 작업의 시작점은 [Chrome 원장](apps/chrome.md#다음-작업)과 [비활성 관측](macos-input.md#input-menu-의-비활성누락-2026-10-09-미해결)에 둔다.
 
 ## homi 의 결함
+
+### 재활성화가 mode 를 reset 하고 실제 client 의 시작 규칙을 놓친다 (2026-10-09)
+
+- **증상**: `startsInEnglish` app 의 mark 중 deactivate → activate 를 주입하면 조합은 남고 mode 만 영문이 되어,
+  다음 모음이 조합에 붙지 않고 통과했다. activate 의 fallback 과 실제 client 가 다르면 다른 app 의 기억을 reset 하고 실제 시작 규칙은 놓쳤다.
+  주인 사용 중의 발생·빈도를 확인한 결함은 아니다.
+- **원인**: `SessionDriver` 는 같은 event 의 재활성화를 이어 갔지만 glue 는 모든 activate 에 `ModeMemory.activate` 를 실행했다.
+  client ID 를 첫 event 에서 알아낸 뒤 그 시작 intent 를 적용할 경계가 없었다.
+- **증거**: 기존 glue 를 재현한 `ActivationTests` 의 첫 두 test 가 수정 전에 실패하고 수정 뒤 통과했다.
+  별도 검토에서 fallback A → B → 실제 ID C 의 mode 이동도 잘못된 slot 을 쓰는 반례를 발견해 먼저 실패시킨 뒤 고쳤다.
+  실제 IMK 의 재진입 여부는 순수 test 와 구분해 확인한다.
+- **대응**: `ModeActivation` 은 시작 intent 와 ID 보정만 맡고 mode 는 `ModeMemory` 하나에 둔다. 실제 ID 또는 그 cache 로
+  새 시작의 규칙을 한 번 적용한다. 입력 event 안의 재활성화는 mode·layout 도 이어 가며, 명시적인 commit·종료 flush 는 새 시작과 구분한다.
+  activate 의 client 질의는 되살리지 않고 첫 key 중 layout 교정도 넣지 않았다. 늦게 ID 를 얻으면 진행 중 조합·사용자가 고른 mode 를 보존한다.
+- **제한**: ID 를 모르고 입력을 시작한 경우 실제 app 의 시작 규칙을 소급해 보장할 수 없다. 같은 controller 의 ID cache 가 정확하다는 전제도 남는다.
+  menu bar 표시는 owner·app·현재 mode·pass-through 를 다시 확인하지만 ModeHUD·후보 revision 의 별도 안건까지 해결한 것은 아니다.
 
 ### 보류한 Chromium 확정이 다음 입력칸에 들어간다 (2026-10-09)
 
