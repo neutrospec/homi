@@ -10,10 +10,15 @@
 
 ## 특징
 
-- **click·blur 때 page 가 조합을 스스로 확정하고, 입력기의 `commitComposition` 을 부른다.**
+- **click 때 page 가 조합을 스스로 확정하고, 입력기의 `commitComposition` 을 부른다.**
   click 이면 `mouseEvent:` → `finishComposingText`(`ImeFinishComposingText` + `cancelComposition`) → `discardMarkedText` 로 간다.
-  first responder 를 넘길 때, 창이 key 를 잃을 때도 `cancelComposition` 한다.
   `source` ✅ · `VS Code 1.139.0 · 2026-09-25 · 기록` ✅
+- **`cancelComposition` 만으로 renderer 확정까지 보장하지 않는다.** 이 함수는 `discardMarkedText` 뒤 Cocoa mark flag 를 끄며,
+  `finishComposingText` 처럼 먼저 `ImeFinishComposingText` 를 보내지 않는다. first responder 이동과 조건부 창 focus 해제에도 cancel 경로가 있다.
+  `154.0.8037.98 · 2026-10-09 · source 재검토` ✅ — 모든 blur 를 click 과 같은 renderer 확정으로 일반화하지 않는다.
+- **caret 위치 질의 실패도 cancel 경로다.** `firstRectForCharacterRange` 는 `SyncGetFirstRectForRange` 실패 때 `cancelComposition` 후 빈 rect 를 돌려준다.
+  `154.0.8037.98 · 2026-10-09 · source` ✅. homi 의 `attributes` 질의가 실제로 이 실패·IMK callback 에 연결됐는지는 미관측이다.
+  위치를 묻는 것만으로 항상 조합을 보존한다고 가정하지 않고 [개선 검토](../../stability-review.md)의 별도 검증 대상으로 둔다.
 - **그 호출은 입력기를 기다리고, 끝난 뒤에야 `_hasMarkedText` 를 끈다** — 그동안 `markedRange` 는 아직 "있다" 고 답한다.
   `VS Code 1.139.0 · 2026-09-25 · 기록` ✅
 - **mouse event 를 입력기에 넘기지 않는다** — 입력기의 mouse-down 처리가 불리지 않는다.

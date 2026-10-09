@@ -52,9 +52,16 @@ sequenceDiagram
 - System Settings 의 등록까지 사라졌는지는 확인하지 않았다. menu 의 가용성 변화와 등록 소실을 같은 현상으로 판단하지 않는다.
   당시 Secure Keyboard Entry 상태·TIS 속성·process 상태의 동시 관찰이 없어 원인은 아직 모른다.
 
-다음 재발에서는 app 이동·잠금·재설치로 상태를 바꾸기 전에, 시각·app bundle ID 와 `tis list --all`·`tis current`, homi process 유무를 확보한다.
-System Settings 에도 사라졌는지와 Secure Keyboard Entry 상태를 함께 확인할 읽기 전용 관찰을 준비한다.
-TIS 의 enabled 속성만으로 menu 의 선택 가능 여부를 판정하지 않는다. 관찰 중 `imklaunchagent` 를 종료하지 않는다.
+다음 재발에서는 app 이동·잠금·재설치로 상태를 바꾸기 전에, 시각·app bundle ID 와 `tis list --all`·`tis current`, homi PID·실행 경로·binary 식별,
+HID mapping 을 함께 확보한다. System Settings 에도 사라졌는지와 Secure Keyboard Entry 상태를 확인할 읽기 전용 관찰을 준비한다.
+
+- parent·mode 의 enabled 와 현재 source/layout 은 함께 읽는다. enabled 만으로 menu 의 선택 가능 여부를 판정하지 않는다.
+- `kTISPropertyInputSourceIsSelectCapable` 은 현재 상태와 무관한 **static capability**다. gray menu 의 detector 로 쓰지 않는다.
+  ✅ (macOS 27 SDK `TextInputSources.h` · 2026-10-09)
+- `IsSecureEventInputEnabled()` 는 어느 process 에서든 Secure Event Input 이 켜졌으면 true 다. thread safe 하지 않으므로 main thread 에서 읽는다.
+  true 만으로 homi 비활성의 원인을 확정하거나 켠 app 을 알아낸 것은 아니다. ✅ (같은 SDK `CarbonEventsCore.h`)
+
+이 관찰을 typing 경로에 넣거나 system 상태를 바꾸지 않는다. 관찰 중 `imklaunchagent` 를 종료하지 않는다.
 
 ## client 호출은 IMK lifecycle 을 재진입시킬 수 있다
 
@@ -144,8 +151,24 @@ probe run 1, 한→영:
   입력기가 못 본 ⌘C 의 C 도 세고, 권한이 필요 없다. ✅ Caps Lock 을 단독으로 0.5초 누르고 있으면 그때 대문자 고정을 뒤집는다 — macOS 처럼 떼기 전에. ✅ 주인
 - `recognizedEvents` 가 keyDown 말고 다른 event 도 받겠다고 하면 IMK 의 기본 mouse 처리(조합 영역 밖 click → `commitComposition`)가 꺼진다 —
   그래서 homi 는 leftMouseDown 도 받아 직접 확정한다. ✅ `IMKInputController.h` (recognizedEvents 주석)
-- **전환 직후의 첫 key 는 늘 새 모드였다** — 35번 전환에 틀린 경우 0 (probe run 4). "재현 안 됨" 이 아니라 구조가 막는다 —
-  전환 key 와 다음 key 가 같은 흐름에서 차례로 처리된다 (`ToggleTests`·`ModifierKeysTests` 가 고정). ✅
+- **전환 직후의 첫 key 는 새 모드였다** — 35번 전환에 틀린 경우 0 (probe run 4). ✅
+  homi 내부 전환과 다음 key 는 같은 흐름에서 차례로 처리된다 (`ToggleTests`·`ModifierKeysTests` 가 고정).
+  이 관측이 재진입 activation 의 mode reset 까지 검증한 것은 아니다. 그 경계는 [개선 검토](stability-review.md#activation-의-두-counterexample)에 따로 둔다.
+
+### homi process 와 HID mapping 의 수명
+
+- key remap 은 설정한 process 가 아니라 active keyboard service 의 수명에 묶인다. ✅
+  ([Apple TN2450](https://developer.apple.com/library/archive/technotes/tn2450/_index.html), 2026-10-09 재검토)
+- homi 는 source·app·설정 알림에서 remap 을 풀지만 `HomiApp` 의 종료·installer 의 `pkill`에는 별도 복원이 없다. ✅ (현재 코드)
+  process 가 끝나 복원 주체가 없으면 ABC 에서도 remap 이 남을 수 있다. 🔶 (macOS 27 실제 발생은 미확인)
+  새 process 의 `CapsLockMapping` 은 기존 homi 와 같은 항목을 원래 mapping 으로 다시 저장하지 않지만,
+  덮기 전 다른 mapping 의 기억은 process memory 에만 있어 재시작을 넘어 복원을 보장하지 않는다.
+
+### mode 저장과 key 처리
+
+`Memory.save` 는 mode 가 바뀌면 `UserDefaults.set` 을 호출한다. Apple 은 in-memory 값은 즉시, disk 기록은 비동기로 갱신한다고 설명한다. ✅
+([UserDefaults](https://developer.apple.com/documentation/foundation/userdefaults), 2026-10-09 확인)
+이 호출의 존재만으로 동기 disk stall 이라고 단정하지 않는다. 실제 지연은 측정 대상이며 mode 의 판단은 계속 동기 memory 를 SOT 로 한다.
 
 ## app 은 "입력기가 key 를 먹었다" 를 제각각 판정한다
 
@@ -178,6 +201,9 @@ probe run 1, 한→영:
 - 다시 보내려면 **손쉬운 사용** 허가가 있어야 한다(`CGPreflightPostEventAccess`). macOS 27 에서는 개인정보 보호 및 보안의 **Device & Data Access** 아래에 있다 (주인).
   `x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility` 가 그 화면을 연다. homi 가 목록에 없으면 "+" 로 `~/Library/Input Methods/homi.app` 을 넣는다.
 - 허가는 서명 신원(bundle ID + 인증서)에 붙는다 — 자체 서명 인증서로 서명하니 다시 build·설치해도 유지됐다. ✅
+- 현재 resend 는 원래 client·controller 없이 다음 main queue 에서 전역 HID 경로로 보낸다. ✅ (`Resend.post` 코드 · 2026-10-09 검토)
+  대기 사이의 focus 변경과 이미 대기 중인 다음 key 의 순서까지 원래대로 보장한 것은 아니다. 실제 잘못된 대상 전달은 미관측이다.
+  순서·대상 검증과 교정의 타협은 [개선 검토](stability-review.md)에 둔다.
 
 ## 모드 표시
 
@@ -220,7 +246,7 @@ probe run 1, 한→영:
 
 - Chromium 의 view 는 mouse event 를 입력기에 넘기지 않는다. click 이면 page 가 조합을 확정하고(`finishComposingText`), view 가
   `cancelComposition` → `[inputContext discardMarkedText]` 를 부른다 — 이것이 입력기의 `commitComposition` 으로 온다.
-  first responder 를 넘길 때, 창이 key 를 잃을 때도 그렇다. ✅ (source: `render_widget_host_view_cocoa.mm`)
+  ✅ (source·homi 기록). focus·caret 질의의 cancel 과 renderer 확정의 차이는 [Chromium 원장](apps/engines/chromium.md)에 둔다.
 - 그때 입력기가 `insertText` 하면 이미 확정된 음절이 한 번 더 들어간다. `commitComposition` 안에서 `markedRange` 를 물으면 아직 "있다" 다 —
   `discardMarkedText` 는 입력기를 기다리는 호출이고, Chromium 은 그 뒤에야 `_hasMarkedText` 를 끈다. ✅ (homi 기록)
 - **TIS 선택으로 commit 의 원인을 구분할 수 없다.** 실제 Chrome 에서 ABC 를 mouse 로 선택한 `commitComposition` 때도 TIS 가 homi 를 가리켰고,

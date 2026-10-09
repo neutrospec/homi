@@ -64,7 +64,9 @@
 
 ## 다음 작업
 
-먼저 현재 설치본의 입력칸 이동이 원래 동작으로 돌아왔는지 확인한다. homi 를 한글 모드로 두고 다음 표를 새 빈자리에서 별개로 실행하고,
+주인 결정(2026-10-09): 드문 다른 input source 왕복의 교정은 일상 입력을 악화시키면서까지 하지 않는다. [개선 검토](../stability-review.md)의 기본 경로가 먼저다.
+현재 설치본의 입력칸 이동이 원래 동작으로 돌아왔는지부터 확인한다. 아래 source 왕복 표는 후속 검증 기준으로 보존한다.
+homi 를 한글 모드로 두고 다음 표를 새 빈자리에서 별개로 실행하고,
 전환 실험 사이에는 입력칸을 다시 click 하지 않는다. 지금까지의 긍정·부정 관측은 위 기록에 있고, 이 표는 다음 확인의 기준이다.
 
 | 경로 | 기대 결과 | 다음 확인 |
@@ -74,7 +76,7 @@
 | `한` 조합 → mouse ABC → mouse homi → 새 `한글` 두 음절 전체 | `한한글` | 일반 input·rich contenteditable 을 각각 확인 |
 | 같은 source 전환을 ⌃Space 로 | 위와 동일 | mouse 경로와 분리, 아직 확인하지 않음 |
 
-복구 확인 뒤에는 입력기 호출과 page 조합 종료 사이를 가른다. 입력 내용 없이 controller ID·TIS 선택·callback 순서와
+source 왕복 조사를 다시 시작할 때에는 입력기 호출과 page 조합 종료 사이를 가른다. 입력 내용 없이 controller ID·TIS 선택·callback 순서와
 DOM `compositionstart/update/end`·focus/blur 의 시각을 함께 관찰한다. `insertText` 반환을 page 의 확정 완료로 세지 않는다.
 event 의 `isTrusted` 값만으로 editor 나 extension 을 원인으로 지목하지 않는다.
 필요하면 마지막 mark 를 받은 proxy·bound client·callback sender 가 같은 object 인지 진단 정보를 더한다.

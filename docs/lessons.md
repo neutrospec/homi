@@ -6,6 +6,17 @@
 - 간헐 결함의 증거는 homi 의 기록이다 — 이상하면 주인이 곧바로 input menu 의 "최근 key 기록 저장" 을 누르고(`~/Library/Logs/homi/`), 그 file 로 가린다.
 - 원인에 🔶 가 붙은 것은 대응이 통했지만 원인은 추정이라는 뜻이다.
 
+## 2026-10-09 재검토에서 적용할 교훈
+
+- 주인 결정: 기본 조합·편집·homi 내부 한/영·focus 이동을 우선한다. 드문 source 왕복의 교정이 일상 입력을 악화시키면 철회한다.
+  [개선 검토](stability-review.md)에 모든 안건의 채택·보류·기각과 다음 검증을 남겼다. 새 model 의 counterexample 은 실제 app 실패와 구분한다.
+- 재진입 경계가 Session 을 보호해도 mode reset·layout·표시까지 같은 판단을 따르는지 별도로 검증해야 한다.
+  stale UI 를 막는 세대 검사도 무변화 event 에 필요한 UI 를 버릴 수 있다. 보호 장치 자체의 반례를 검사한다.
+- `commitComposition` 의 callback 은 왜 왔는지와 무엇을 끝냈는지를 가른다. old mark·new mark·renderer 확정을 하나로 가정하지 않는다.
+  fake client 의 즉시 반영을 실제 app 완료로 세었던 실패를 반복하지 않는다.
+- "우리 insert 기록이 없다" 는 app 결함의 확정 증거가 아니다. VS Code 원장의 남은 중복도 원인 미확정으로 바로잡았다.
+  한 번에 한 가정을 바꾸고, 설치본의 기본 동작이 복구됐는지 확인한 뒤 다음 실험을 한다.
+
 ## 2026-10-09 작업 마감
 
 - 유지한 변경: 재진입 경계·source 종료 알림 보완·activate 의 client 질의 제거, Caps Lock timer 수명·mapping 실패 처리,

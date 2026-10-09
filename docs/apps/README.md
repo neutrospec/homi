@@ -14,7 +14,7 @@ homi 를 바꿀 때(특히 `Sources/InputSession/AppRules.swift`) 그 app 의 �
 - **같은 엔진의 공통 사실**은 `engines/` 에 한 번만 적고, app file 은 그곳을 가리킨다. app 고유의 것(그 위의 editor, plugin)만 app file 에 적는다.
 - **새 app 에서 무언가 알게 되면** 아래 형식으로 file 을 만든다. 규칙도 관찰도 없는 app 은 만들지 않는다.
 - version 보기: `defaults read "/Applications/<이름>.app/Contents/Info" CFBundleShortVersionString`
-- 이 Mac: macOS 27.0 (26A428). macOS 가 바뀌면 엔진의 사실부터 다시 본다.
+- 최신 관측 환경은 [Chrome 원장](chrome.md)에 있다. 각 사실은 확인 당시 version·날짜와 함께 읽고, 문제를 분석할 때 현재 환경과 대조한다.
 
 ## 목록
 
@@ -24,7 +24,7 @@ homi 를 바꿀 때(특히 `Sources/InputSession/AppRules.swift`) 그 app 의 �
 | [TextEdit](textedit.md) | `com.apple.TextEdit` | AppKit | 1.21 | — |
 | [VS Code](vscode.md) | `com.microsoft.VSCode` · `com.microsoft.VSCodeInsiders` | Chromium | 1.139.0 | ESC → 영문 |
 | [Obsidian](obsidian.md) | `md.obsidian` | Chromium | 1.13.7 | ESC → 영문 |
-| [Chrome](chrome.md) | `com.google.Chrome` | Chromium | 154.0.8037.57 | — |
+| [Chrome](chrome.md) | `com.google.Chrome` | Chromium | 154.0.8037.98 | — |
 | [Orca](orca.md) | `com.stablyai.orca` | Chromium | 1.4.210 | — |
 | [Wave](wave.md) | `dev.commandline.waveterm` | Chromium + xterm.js | 0.14.5 | ESC → 영문, 한자는 조합 중인 글자만 |
 | [iTerm2](iterm2.md) | `com.googlecode.iterm2` | 자체 | 3.6.10 | ESC → 영문, 다시 보내기, 한자는 조합 중인 글자만 |

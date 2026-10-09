@@ -4,7 +4,7 @@
 목표는 **두벌식 한글 입력이 완벽하게 동작하는 것** 하나다. 기능을 늘리는 프로젝트가 아니다 — 잡다한 기능·옵션·변죽은 만들지 않는다.
 
 > **현재 (2026-10-09)**: M0–M4·M6·M7 을 주인이 확인했다. 지금은 M5 — 일상 사용과 app 호환성.
-> 이번 검토의 변경·검증 범위는 [lessons](docs/lessons.md#2026-10-09-작업-마감), 남은 작업은 [다음 작업](#다음-작업)에 있다.
+> 설치본의 변경·검증 범위는 [lessons](docs/lessons.md#2026-10-09-작업-마감), 개선 안건은 [안정성 검토](docs/stability-review.md), 남은 작업은 [다음 작업](#다음-작업)에 있다.
 > 이상하면 주인이 곧바로 "최근 key 기록 저장" 을 누른다 → [진행 단계](#진행-단계)
 
 ## 문서
@@ -16,6 +16,7 @@
 | `docs/macos-input.md` | 배운 macOS 입력 구조와 그 증거 (✅ 확인 / 🔶 추정) |
 | `docs/apps/` | app 원장 — app 마다 확인한 사실·homi 의 우회·version. 같은 엔진의 공통 사실은 `engines/` |
 | `docs/lessons.md` | 고친 결함의 증상·원인·증거·대응, homi 의 결함이 아니었던 것 |
+| `docs/stability-review.md` | 개선 안건의 채택·보류·기각, 중요도와 다음 검증 기준 |
 | `docs/research/` | 구현 전의 조사 (2026-09-25). 그 뒤 확인한 것은 위 문서가 우선한다 |
 
 문서는 가치로 쓴다 — 같은 뜻이면 짧게, 단 친절함은 지킨다. 문서를 위한 문서는 쓰지 않는다 (2026-09-27 주인).
@@ -137,7 +138,8 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 1. **IMK lifecycle 은 뒤바뀌고 빠진다.** activate/deactivate 순서 보장이 없고 중첩되며, macOS 26 부터 다른 process 의 전환에는 `deactivateServer` 가 오지 않는다.
    상태는 controller·client 단위로, 확정은 두 번 불려도 안전하게, 앱별 규칙은 key 마다 다시 읽는다.
 2. **확정이 엉뚱한 client 로 간다.** 새 session 이 먼저 key 를 받고 옛 session 의 확정이 뒤늦게 온다 — init 때 묶인 client 로 넣는다.
-3. **Chromium 은 click·blur 때 스스로 확정한 뒤 `commitComposition` 을 부른다** — 그대로 넣으면 음절이 두 번.
+3. **Chromium 은 click 때 스스로 확정한 뒤 `commitComposition` 을 부른다** — 그대로 넣으면 음절이 두 번.
+   모든 cancel 을 renderer 확정으로 일반화하지 않는다 — focus·caret 질의 실패의 경로는 [Chromium 원장](docs/apps/engines/chromium.md)에 있다.
    callback 안의 TIS 선택 하나로 원인을 판단할 수 없다. 늦은 mark 확인도 web 입력칸 이동 때 확정이 새 칸으로 새었다 —
    client 하나를 여러 입력칸이 공유하므로 bound client 만으로는 부족하다. 늦은 확정은 제거했다.
    source 전환 구분은 미해결이다 (`docs/apps/chrome.md`).
@@ -209,6 +211,9 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 
 ## 작업 규칙
 
+- **안정적인 기본 입력이 최우선이다** (2026-10-09 주인). 글자 유실·중복·잘못된 입력칸·첫 key 의 모드·입력 중단을 무겁게 보고,
+  같은 영향이면 일상 조합·Backspace·homi 내부 한/영·focus 이동부터 다룬다. 빈도 미상은 드물다고 가정하지 않는다.
+  드문 다른 input source 왕복이나 부가 기능을 고치려고 기본 입력을 악화시키지 않는다. 근거와 제한을 남기고 보류하는 타협도 가능하다.
 - **조합 버그는 재현 test 부터.** 실패하는 test 를 먼저 쓰고 고친다.
 - **글자를 잃지 않는다.** 조합 중인 글자는 focus 이동·앱 전환·mouse click·모드 전환·trigger 키 어느 경로로도
   사라지거나 엉뚱한 곳에 들어가면 안 된다. 이 경로들은 test 로 관리한다.
@@ -233,10 +238,14 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 
 ## 다음 작업
 
-1. [Chrome](docs/apps/chrome.md#다음-작업): rollback 뒤 입력칸 이동 확인부터. source 전환 교정의 관측·실험 순서는 원장에 둔다.
-2. [비활성·누락](docs/macos-input.md#input-menu-의-비활성누락-2026-10-09-미해결): 재발 당시 상태를 먼저 확보한다.
-   이번 재진입·수명·설치 수정이 이 증상을 해결했다는 증거는 없다.
+1. [기본 입력](docs/stability-review.md#검증-근거와-다음-순서): 현재 설치본의 조합·편집·내부 전환·focus 이동을 확인한다.
+   Chrome rollback 뒤 입력칸 이동과 native probe 의 실제 확인은 아직 남아 있다.
+2. [개선 안건](docs/stability-review.md): activation 의 mode 경계·client 확인의 범위를 재현 test 부터 검증한다.
+   signing 실패 시 기존 설치본 보존·binary 식별·읽기 전용 진단도 준비한다. 후보 표시와 다른 source 왕복보다 기본 입력이 먼저다.
+3. [비활성·누락](docs/macos-input.md#input-menu-의-비활성누락-2026-10-09-미해결): 재발 당시 상태를 먼저 확보한다.
+   재진입·수명·설치 수정이 이 증상을 해결했다는 증거는 없다. 재발을 기다리는 동안 다른 검토를 멈추지 않는다.
 
+다른 source 왕복의 교정은 [Chrome 원장](docs/apps/chrome.md#다음-작업)에 남겨 후순위로 둔다.
 기본 동작의 복구를 확인하기 전에는 새 Chrome 우회를 얹지 않는다. unit test 에서 client 호출을 받았다는 것과 실제 app 이 조합을 끝냈다는 것을 구분한다.
 
 ## 글말
