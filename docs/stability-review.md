@@ -87,6 +87,10 @@ callback 의 적용 범위를 확인하기 전에는 insert 생략 정책을 바
 
 ## 검증 근거와 다음 순서
 
+일본어 입력기의 최신 공개 코드도 [recipe 검토](research/japanese-ime-recipes.md)로 대조했다. activation intent 를 실제 client event 와 함께 적용하는 방식,
+client 반영 단계·질의 횟수를 검사하는 bridge test, 현재 상태로 늦은 UI 를 검증하는 presenter test 를 다음 검증에 채택한다.
+외부 source 는 homi 의 callback 의미·입력칸 소유권을 증명하지 못했다. 비동기 commit·system mode 동기화·가짜 mark 우회는 가져오지 않으며 기본 입력의 우선순위는 유지한다.
+
 - 이번 `swift build`·Debug `swift test` 는 138개 모두 통과했다. Release 138개 통과는 앞선 [작업 마감](lessons.md#2026-10-09-작업-마감)의 검증이다.
   proxy 인자·fake client 의 반영을 actual app 완료로 세지 않는다.
 - 이번 별도 검사에서는 spec 의 독립 자모 분해표와 Unicode 완성형 정의로 **11,172개 음절**, 자소 Backspace 복원 **41,230 step**,

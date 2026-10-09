@@ -17,7 +17,7 @@
 | `docs/apps/` | app 원장 — app 마다 확인한 사실·homi 의 우회·version. 같은 엔진의 공통 사실은 `engines/` |
 | `docs/lessons.md` | 고친 결함의 증상·원인·증거·대응, homi 의 결함이 아니었던 것 |
 | `docs/stability-review.md` | 개선 안건의 채택·보류·기각, 중요도와 다음 검증 기준 |
-| `docs/research/` | 구현 전의 조사 (2026-09-25). 그 뒤 확인한 것은 위 문서가 우선한다 |
+| `docs/research/` | 외부 자료·공개 코드 조사 (날짜·commit 기준 명시). homi 가 확인·결정한 것은 위 문서가 우선한다 |
 
 문서는 가치로 쓴다 — 같은 뜻이면 짧게, 단 친절함은 지킨다. 문서를 위한 문서는 쓰지 않는다 (2026-09-27 주인).
 사실은 한 곳에 둔다: macOS 의 구조는 macos-input, app 에 딸린 것은 원장, 고친 결함은 lessons — 다른 곳에서는 가리키기만 한다.
@@ -242,6 +242,7 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
    Chrome rollback 뒤 입력칸 이동과 native probe 의 실제 확인은 아직 남아 있다.
 2. [개선 안건](docs/stability-review.md): activation 의 mode 경계·client 확인의 범위를 재현 test 부터 검증한다.
    signing 실패 시 기존 설치본 보존·binary 식별·읽기 전용 진단도 준비한다. 후보 표시와 다른 source 왕복보다 기본 입력이 먼저다.
+   [일본어 입력기의 recipe](docs/research/japanese-ime-recipes.md)는 test 설계의 근거이며 제품 교정 완료가 아니다.
 3. [비활성·누락](docs/macos-input.md#input-menu-의-비활성누락-2026-10-09-미해결): 재발 당시 상태를 먼저 확보한다.
    재진입·수명·설치 수정이 이 증상을 해결했다는 증거는 없다. 재발을 기다리는 동안 다른 검토를 멈추지 않는다.
 
