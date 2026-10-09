@@ -41,8 +41,6 @@ final class Indicator: NSObject {
 /// Caps Lock 을 바꾸는 것은 주인이 Caps Lock 을 전환 key 로 쓸 때, 한/영 전환 없는 app 이 앞에 있지 않을 때뿐이다 (설정).
 /// 그 밖(다른 input source, 비밀번호 칸의 ABC, 한/영 전환 없는 app)에서는 Caps Lock 이 원래대로 동작한다.
 final class SourceWatcher: NSObject {
-    private var remapped: Bool?
-
     override init() {
         super.init()
         DistributedNotificationCenter.default().addObserver(
@@ -58,7 +56,12 @@ final class SourceWatcher: NSObject {
         update()
     }
 
-    @objc func sourceChanged(_ note: Notification) { update() }
+    @objc func sourceChanged(_ note: Notification) {
+        let selected = update()
+        let controllerID = ActiveInputSession.controller?.traceID ?? "none"
+        log.info("source notification, homi selected: \(selected), active controller: \(ActiveInputSession.controller != nil), controller: \(controllerID, privacy: .public)")
+        ActiveInputSession.controller?.sourceChanged(selected: selected)
+    }
 
     @objc func appActivated(_ note: Notification) {
         let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
@@ -67,8 +70,8 @@ final class SourceWatcher: NSObject {
 
     /// 잠에서 깨면 key mapping 이 풀렸을 수 있다 — 다시 건다.
     @objc func woke(_ note: Notification) {
-        remapped = nil
-        update()
+        CapsLockRemap.invalidate()
+        sourceChanged(note)
     }
 
     /// 지금 선택된 input source 가 homi 인가.
@@ -79,16 +82,15 @@ final class SourceWatcher: NSObject {
         return id.hasPrefix("com.unocult.inputmethod.homi")
     }
 
-    private func update(front: String? = nil) {
+    @discardableResult
+    private func update(front: String? = nil) -> Bool {
         let selected = Self.homiSelected()
         let settings = preferences.withLock { $0 }
         let app = front ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
         let remap = selected && settings.toggleKeys.contains(.capsLock) && !settings.passThroughApps.contains(app)
-        if remap != remapped {
-            CapsLockRemap.apply(remap)
-            remapped = remap
-        }
+        CapsLockRemap.apply(remap)
         Indicator.shared.setVisible(selected)
+        return selected
     }
 }
 
@@ -98,19 +100,17 @@ final class SourceWatcher: NSObject {
 /// 다른 도구가 건 mapping 은 건드리지 않는다.
 enum CapsLockRemap {
     private static let client = IOHIDEventSystemClientCreateSimpleClient(kCFAllocatorDefault)
-    private static let capsLock: UInt64 = 0x7_0000_0039
-    private static let rightControl: UInt64 = 0x7_0000_00E4
-    private static let source = "HIDKeyboardModifierMappingSrc"
-    private static let destination = "HIDKeyboardModifierMappingDst"
+    private static let mapping = CapsLockMapping(read: {
+        IOHIDEventSystemClientCopyProperty(client, kIOHIDUserKeyUsageMapKey as CFString) as? [[String: Any]] ?? []
+    }, write: { value in
+        IOHIDEventSystemClientSetProperty(client, kIOHIDUserKeyUsageMapKey as CFString, value as CFArray)
+    })
+
+    static func invalidate() { mapping.invalidate() }
 
     static func apply(_ on: Bool) {
-        let key = kIOHIDUserKeyUsageMapKey as CFString
-        let current = IOHIDEventSystemClientCopyProperty(client, key) as? [[String: Any]] ?? []
-        var mapping = current.filter { ($0[source] as? UInt64) != capsLock }
-        if on { mapping.append([source: capsLock, destination: rightControl]) }
-        let done = IOHIDEventSystemClientSetProperty(client, key, mapping as CFArray)
-        log.info("caps lock → right control \(on ? "on" : "off", privacy: .public): \(done, privacy: .public)")
-        record("caps lock remap \(on ? "on" : "off") \(done)")
+        let done = mapping.apply(on)
+        if !done { log.error("caps lock remap failed") }
     }
 }
 

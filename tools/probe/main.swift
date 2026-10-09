@@ -110,6 +110,9 @@ nonisolated final class ProbeInputContext: NSTextInputContext {
 }
 
 final class ProbeTextView: NSTextView {
+    // 자동 검사에서만 쓴다. 실제 client 호출 도중 context 의 lifecycle 을 흔든다.
+    var onInsertOnce: (() -> Void)?
+    var onSelectionQueryOnce: (() -> Void)?
     // lazy 로 두면 안 된다: context 는 init 안에서 client 에게 validAttributesForMarkedText 를 묻고,
     // 그 질문을 기록하려고 context 를 다시 만들면 무한 재귀다. 만들어지기 전에는 nil 로 둔다.
     private var probeContext: ProbeInputContext?
@@ -153,6 +156,10 @@ final class ProbeTextView: NSTextView {
 
     override var selectedRange: NSRange {
         get {
+            if probeContext?.inside == true, let callback = onSelectionQueryOnce {
+                onSelectionQueryOnce = nil
+                callback()
+            }
             let value = super.selectedRange
             asked("selectedRange → \(range(value))")
             return value
@@ -204,6 +211,10 @@ final class ProbeTextView: NSTextView {
     override func insertText(_ string: Any, replacementRange: NSRange) {
         journal?.write("insertText  \(quoted(string)) repl=\(range(replacementRange))")
         super.insertText(string, replacementRange: replacementRange)
+        if let callback = onInsertOnce {
+            onInsertOnce = nil
+            callback()
+        }
     }
 
     override func unmarkText() {
@@ -222,6 +233,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var input: ProbeTextView?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let previousSource = systemSource()
+        let previousApp = NSWorkspace.shared.frontmostApplication
         let width: CGFloat = 900
         let input = ProbeTextView(frame: NSRect(x: 0, y: 0, width: width, height: 180))
         input.font = .systemFont(ofSize: 22)
@@ -256,6 +269,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.input = input
         observe()
         journal?.write("start       sys=\(systemSource())  ctx=\(input.inputContext?.selectedKeyboardInputSource ?? "-")")
+        let manual = CommandLine.arguments.contains("--check-manual")
+        if CommandLine.arguments.contains("--check") || manual {
+            window.title = manual ? "probe — 한글 모드에서 가 를 입력하면 자동 검사" : "probe — 자동 검사 중"
+            Task {
+                await ProbeChecks.run(input, previousSource: previousSource, previousApp: previousApp, manual: manual)
+            }
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }

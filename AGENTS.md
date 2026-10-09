@@ -3,7 +3,8 @@
 **homi** (`com.unocult.inputmethod.homi`) — macOS 한글 입력기. 주인 한 사람이 매일 쓰는 도구이고,
 목표는 **두벌식 한글 입력이 완벽하게 동작하는 것** 하나다. 기능을 늘리는 프로젝트가 아니다 — 잡다한 기능·옵션·변죽은 만들지 않는다.
 
-> **현재 (2026-09-27)**: M0–M4·M6·M7 을 주인이 확인했다. 지금은 M5 — 일상 사용과 app 호환성.
+> **현재 (2026-10-09)**: M0–M4·M6·M7 을 주인이 확인했다. 지금은 M5 — 일상 사용과 app 호환성.
+> 이번 검토의 변경·검증 범위는 [lessons](docs/lessons.md#2026-10-09-작업-마감), 남은 작업은 [다음 작업](#다음-작업)에 있다.
 > 이상하면 주인이 곧바로 "최근 key 기록 저장" 을 누른다 → [진행 단계](#진행-단계)
 
 ## 문서
@@ -119,8 +120,8 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 | `homi` (app, `Sources/homi`) | IMK glue — `IMKServer`, `HomiInputController`, NSEvent 변환, menu bar 표시, 설정 창(SwiftUI). `Bundle/` 에 `Info.plist`·resource | 위 둘 + AppKit·InputMethodKit |
 
 - 위 두 module 은 AppKit·IMK 를 모른다 — "key 순서 → client 에게 할 일" 대부분을 `swift test` 로 검증한다. IMK 층에 남는 것이 적을수록 좋다.
-- `Session` 은 client 를 직접 부르지 않고 할 일(`Action`) 목록을 돌려준다. IMK 층은 상태 변경이 끝난 뒤에 적용한다 —
-  IMK 는 우리의 `insertText` 도중에 deactivate 를 끼워 부를 수 있어서, 상태를 바꾸는 중에 client 를 부르면 재진입이 겹친다.
+- `Session` 은 할 일(`Action`) 목록을 돌려준다. `SessionDriver` 는 client 질의·상태 변경·목록 반영을 하나의 동기 경계로 감싼다 —
+  질의·`insertText` 도중 들어오는 commit·deactivate 는 목록 반영 뒤에 처리한다. 질의도 재진입하므로 상태 변경 뒤에 반영하는 것만으로는 부족하다.
 - `Info.plist` 는 한국어 mode 하나(`com.unocult.inputmethod.homi.korean`, `smKorean`)만 둔다 — 한/영은 homi 안의 모드라 system 에 알릴 일이 없다 (결정 4).
   비밀번호 칸에서는 system 이 ABC 로 바꾼다 (함정 7). mode 구성을 바꾸면 logout + input source 재추가가 필요하다.
 - 자판 mapping 은 `keyCode`(물리 위치) 기준이다 — `NSEvent.characters` 는 homi 아래의 keyboard layout 에 따라 바뀐다.
@@ -136,7 +137,10 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 1. **IMK lifecycle 은 뒤바뀌고 빠진다.** activate/deactivate 순서 보장이 없고 중첩되며, macOS 26 부터 다른 process 의 전환에는 `deactivateServer` 가 오지 않는다.
    상태는 controller·client 단위로, 확정은 두 번 불려도 안전하게, 앱별 규칙은 key 마다 다시 읽는다.
 2. **확정이 엉뚱한 client 로 간다.** 새 session 이 먼저 key 를 받고 옛 session 의 확정이 뒤늦게 온다 — init 때 묶인 client 로 넣는다.
-3. **Chromium 은 click·blur 때 스스로 확정한 뒤 `commitComposition` 을 부른다** — 그대로 넣으면 음절이 두 번. homi 가 선택된 동안 Chromium 계열의 것은 넣지 않는다.
+3. **Chromium 은 click·blur 때 스스로 확정한 뒤 `commitComposition` 을 부른다** — 그대로 넣으면 음절이 두 번.
+   callback 안의 TIS 선택 하나로 원인을 판단할 수 없다. 늦은 mark 확인도 web 입력칸 이동 때 확정이 새 칸으로 새었다 —
+   client 하나를 여러 입력칸이 공유하므로 bound client 만으로는 부족하다. 늦은 확정은 제거했다.
+   source 전환 구분은 미해결이다 (`docs/apps/chrome.md`).
 4. **입력기는 ⌘ 단축키의 key 를 못 본다** — menu 가 먼저 가져가고, ⌘Tab 의 Tab 은 system 이 가져간다. 수식키 tap 은 system 의 누름 횟수로 판정한다.
 5. **Caps Lock** 은 그대로 받으면 system 전환 옵션·activation delay·lock echo·LED·bubble 과 얽힌다 — 그래서 remap 해서 tap 으로 받는다.
 6. **`activateServer`·`setValue` 안에서 client 에게 묻거나 기다리지 않는다** — Chrome deadlock, Spotlight 멈춤 사례.
@@ -155,7 +159,7 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 
 | 결정 | 선택지 | 근거 · 할 실험 | 때 |
 |---|---|---|---|
-| 설치 위치 | `~/Library/Input Methods` · `/Library/Input Methods` | Secure Keyboard Entry 가 켜지면 전자는 비활성된다 (macOS 15.4.1, 조사). 지금은 전자 — sudo 가 필요 없고, Secure Keyboard Entry 를 늘 켜 둔 곳이 없다. iTerm2 에서 켜 보면 27 에서도 그런지 안다 | M5 |
+| 설치 위치 | `~/Library/Input Methods` · `/Library/Input Methods` | Secure Keyboard Entry 와 user 위치의 비활성 보고는 macOS 15.4.1 의 조사 사례다. 주인의 최근 비활성은 두 위치 모두에서 발생했다 → [현재 관측](docs/macos-input.md#input-menu-의-비활성누락-2026-10-09-미해결). 지금은 sudo 가 필요 없는 user 위치. macOS 27 의 Secure Keyboard Entry 경로는 별도 검증이 필요하다 | M5 |
 
 ## 선행 사례
 
@@ -170,12 +174,17 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 - `swift build`, `swift test` — 모든 변경의 최소 관문. HangulCore(spec 의 예, Apple `2SetHangul` layout 대조, 무작위 불변식)와 InputSession(key 순서 → 할 일).
   TIS 를 부르는 test 는 `@MainActor` 여야 한다 (병렬 test 에서 다른 thread 로 부르면 abort).
   Swift Testing 의 `#expect(...)` 안에서는 mutating method 를 부를 수 없다 — 결과를 변수에 먼저 받는다.
-- `scripts/install.sh [--register]` — release build → bundle 조립·서명(`scripts/app.sh`) → `~/Library/Input Methods/homi.app` → 실행 중인 homi 종료.
+- `scripts/install.sh [--register]` — release build → 설치 위치와 같은 volume 에 bundle 조립·서명·검증(`scripts/app.sh`) →
+  `~/Library/Input Methods/homi.app` 과 atomic 교환 → 실행 중인 homi 종료. 교환 전 실패하면 기존 app·process 는 그대로 남는다.
   다음 입력 때 system 이 새 binary 로 띄운다. `--register` 는 처음 한 번 (TIS 등록 + enable).
 - 개발 도구 (`tools/`, 제품 아님):
   - `swift run tis list|current|watch|register|enable|disable|select` — input source 조회·관찰·조작.
   - `scripts/probe.sh` — test client 창 (log: `build/probe.log`). key event, handled 여부, 입력기가 묻는 것·시키는 것, input source 변화를 시간순으로 보여준다.
     입력기가 client 에게 무엇을 하는지는 추측하지 말고 여기서 본다.
+  - `tools/probe/browser.html`·`browser-trace.js` — Chrome 기본 입력칸 비교와 입력 내용 없는 DOM event 관찰.
+    준비·종료 방법과 아직 확인하지 못한 경로는 [Chrome 원장](docs/apps/chrome.md#다음-작업)에 있다.
+  - `probe --check`·`--check-manual` — native client 의 조합·재진입 검사. 이번 작업의 자동 검사는 모드 준비 단계에서 `BLOCKED` 였다.
+    `PASS` 로 세지 않는다. `--check-manual` 은 자기 test 창에서 한글 모드로 `가` 를 입력해 준비하는 경로이며 아직 실행 결과가 없다.
 - `swift scripts/make-icon.swift 호 Sources/homi/Bundle/Resources/homi.tiff` — menu bar icon.
 - log: `/usr/bin/log stream --level debug --predicate 'subsystem == "com.unocult.inputmethod.homi"'` (zsh 에서는 `log` 가 builtin 이다).
 - 직접 확인할 app (주인이 쓰는 것): VS Code · Obsidian · Ghostty · iTerm2 · Wave · Terminal · Chrome · Safari · Firefox · KakaoTalk · Telegram · Word ·
@@ -221,6 +230,14 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
   결정·실험에는 "왜"를 함께 놓는다.
 - 배운 구조는 `docs/macos-input.md` 에 쌓는다. 확인된 사실과 추정을 구분하고, 확인한 방법(실험·source·문서)을 붙인다.
 - 실험 도구(`tools/`)는 관찰 가능하게 만든다 — 무엇이 어떤 순서로 일어났는지 log 로 보이게.
+
+## 다음 작업
+
+1. [Chrome](docs/apps/chrome.md#다음-작업): rollback 뒤 입력칸 이동 확인부터. source 전환 교정의 관측·실험 순서는 원장에 둔다.
+2. [비활성·누락](docs/macos-input.md#input-menu-의-비활성누락-2026-10-09-미해결): 재발 당시 상태를 먼저 확보한다.
+   이번 재진입·수명·설치 수정이 이 증상을 해결했다는 증거는 없다.
+
+기본 동작의 복구를 확인하기 전에는 새 Chrome 우회를 얹지 않는다. unit test 에서 client 호출을 받았다는 것과 실제 app 이 조합을 끝냈다는 것을 구분한다.
 
 ## 글말
 

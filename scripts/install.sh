@@ -13,13 +13,17 @@ readonly id=com.unocult.inputmethod.homi
 readonly dest="$HOME/Library/Input Methods/homi.app"
 
 swift build -c release --product homi
+swift build -c release --product replace-app
 bin=$(swift build -c release --show-bin-path)
-scripts/app.sh "$bin/homi" Sources/homi/Bundle/Info.plist build/homi.app Sources/homi/Bundle/Resources
-
 mkdir -p "${dest:h}"
+# staging 은 설치본과 같은 volume 에 둔다. 오래 남는 build/homi.app 사본은 만들지 않는다.
+stage=$(mktemp -d "${dest:h}/.homi-install.XXXXXX")
+trap 'rm -rf "$stage"' EXIT
+scripts/app.sh "$bin/homi" Sources/homi/Bundle/Info.plist "$stage/homi.app" Sources/homi/Bundle/Resources
+codesign --verify --strict "$stage/homi.app"
+"$bin/replace-app" "$stage/homi.app" "$dest"
+# 교환·검증에 실패했을 때는 실행 중인 입력기를 종료하지 않는다.
 pkill -x homi || true
-rm -rf "$dest"
-cp -R build/homi.app "$dest"
 echo "installed: $dest"
 
 if [[ ${1:-} == --register ]]; then

@@ -47,8 +47,8 @@ public struct Outcome: Sendable, Equatable {
 
 /// 입력칸(client) session 하나의 입력. IMK 를 모른다 — 조합 규칙은 docs/spec.md.
 ///
-/// client 를 직접 부르지 않고 할 일을 돌려준다. IMK 는 우리의 `insertText` 도중에 deactivate 를 끼워 부를 수 있어서,
-/// 상태를 바꾸는 중에 client 를 부르면 그 사이에 다시 들어온 `commit` 과 겹친다 (docs/research/app-compat-and-hangul.md §1).
+/// client 반영은 할 일 목록으로 돌려준다. 한자 질의 callback 은 상태 변경 중 실행하므로,
+/// IMK 에서는 `SessionDriver` 로 질의·상태 변경·반영을 함께 감싸 재진입한 lifecycle 을 처리한다.
 /// 조합 중인 글자는 marked text 로만 보이고, 이미 확정한 글자는 다시 쓰지 않는다 (AGENTS.md 결정 5) —
 /// 예외는 ⌥↩ 가 방금 친 단어를 바꿀 때 하나: 교체를 제대로 받는 client 에서, 그 자리 글자를 확인한 뒤에만.
 ///
@@ -101,9 +101,10 @@ public struct Session: Sendable {
 
     /// 조합 중인 글자.
     public var composing: String { composer.composing }
+    public var hasCandidates: Bool { choosing != nil }
 
     /// key 하나를 처리한다. `profile` 은 이 입력칸의 app 규칙 (`AppRules`).
-    /// ⌥↩ 때만 app 에게 묻는 것 둘 — key 처리 도중이라 안전하다:
+    /// ⌥↩ 때만 app 에게 묻는 것 둘 — `SessionDriver` 의 경계 안에서 실행한다:
     /// - `selectedText`: 선택 영역의 글자
     /// - `textBefore(n)`: 조합 중인 글자(없으면 커서) 바로 앞 n 글자와 그 끝의 문서 위치.
     ///   확정된 글자의 교체를 제대로 받는 client 만 답한다 — 아니면 nil 이고, 조합 중인 글자만 바꾼다.

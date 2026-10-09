@@ -19,6 +19,12 @@ let package = Package(
             exclude: ["Bundle"],
             swiftSettings: [.defaultIsolation(MainActor.self)]
         ),
+        .testTarget(
+            name: "HomiTests", dependencies: ["homi"],
+            swiftSettings: [.defaultIsolation(MainActor.self)]
+        ),
+        .executableTarget(name: "replace-app", path: "tools/replace-app"),
+        .testTarget(name: "InstallTests", dependencies: ["replace-app"]),
         // 개발 도구 — 제품이 아니다 (tools/)
         .executableTarget(
             name: "tis",
@@ -27,8 +33,9 @@ let package = Package(
         ),
         .executableTarget(
             name: "probe",
+            dependencies: ["InputSession"],
             path: "tools/probe",
-            exclude: ["Info.plist"],
+            exclude: ["Info.plist", "browser.html", "browser-trace.js"],
             swiftSettings: [.defaultIsolation(MainActor.self)]
         ),
     ]

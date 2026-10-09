@@ -30,6 +30,7 @@ extension ModifierEvent {
 /// 예외는 `markCommitted` 하나: ⌥↩ 가 방금 친 단어를 바꿀 때, 교체를 제대로 받는 client 에서 그 자리 글자를 확인한 뒤에만.
 nonisolated struct Client {
     let proxy: any IMKTextInput & NSObjectProtocol
+    weak var owner: HomiInputController?
 
     private static let nowhere = NSRange(location: NSNotFound, length: 0)
 
@@ -46,14 +47,30 @@ nonisolated struct Client {
                 proxy.setMarkedText(text, selectionRange: caret, replacementRange: range)
             case .insert(let text):
                 record("  insert \"\(text)\"")
+                // {NSNotFound, NSNotFound} 실험은 Chrome 의 실패를 해결하지 못했다. 기존 range 로 복귀한다.
                 proxy.insertText(text, replacementRange: Self.nowhere)
             case .showCandidates(let candidates, let selected):
                 record("  candidates \(selected)/\(candidates.count)")
                 let line = caretLine()  // key 처리 도중에 묻는다 — ModeHUD 와 같은 이유
-                Task { @MainActor in CandidatePanel.shared.show(candidates, selected: selected, below: line) }
+                let controller = Unchecked(owner)
+                let revision = owner?.sessionRevision
+                owner?.afterEvent {
+                    Task { @MainActor in
+                        guard let owner = controller.value, !owner.isHandlingEvent, owner.sessionRevision == revision,
+                            owner.hasCandidates, ActiveInputSession.controller === owner else { return }
+                        CandidatePanel.shared.show(candidates, selected: selected, below: line, owner: owner)
+                    }
+                }
             case .hideCandidates:
                 record("  candidates hidden")
-                Task { @MainActor in CandidatePanel.shared.hide() }
+                let controller = Unchecked(owner)
+                owner?.afterEvent {
+                    Task { @MainActor in
+                        guard let owner = controller.value, !owner.isHandlingEvent,
+                            !owner.hasCandidates else { return }
+                        CandidatePanel.shared.hide(owner: owner)
+                    }
+                }
             case .layout(let id):
                 record("  layout \(id)")
                 proxy.overrideKeyboard(withKeyboardNamed: id)
@@ -103,8 +120,4 @@ extension Client {
         _ = proxy.attributes(forCharacterIndex: 0, lineHeightRectangle: &line)
         return line
     }
-}
-
-nonisolated func clientID(_ sender: Any?) -> String {
-    (sender as? IMKTextInput)?.bundleIdentifier() ?? "nil"
 }

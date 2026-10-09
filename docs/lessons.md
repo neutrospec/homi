@@ -6,7 +6,92 @@
 - 간헐 결함의 증거는 homi 의 기록이다 — 이상하면 주인이 곧바로 input menu 의 "최근 key 기록 저장" 을 누르고(`~/Library/Logs/homi/`), 그 file 로 가린다.
 - 원인에 🔶 가 붙은 것은 대응이 통했지만 원인은 추정이라는 뜻이다.
 
+## 2026-10-09 작업 마감
+
+- 유지한 변경: 재진입 경계·source 종료 알림 보완·activate 의 client 질의 제거, Caps Lock timer 수명·mapping 실패 처리,
+  후보 창의 controller·조합 세대 확인, 완성된 bundle 의 atomic 설치. startup 의 `@main` 전환은 app 을 test target 에서 참조하기 위한 구조 변경이다.
+- 최종 rollback 은 09:54 KST 에 자체 인증서 `homi code signing` 으로 서명·검증·설치했다.
+  보류한 Chromium 확정과 `replacementRange` 실험은 철회했다. 한글 엔진의 조합 규칙·input mode 구성·설치 위치는 바꾸지 않았다.
+- `swift build` 와 Debug·Release test 통과: 각각 138개(HangulCore 18, InputSession 106, Homi 11, Install 3).
+  재진입·owner 해제·HID 실패 주입·directory 교환의 검증이다. 후보 창의 실제 표시·모든 app 의 호환성을 증명하지 않는다.
+- native probe 자동 검사는 합성 수식키로 한글 모드에 들어가지 못해 `BLOCKED` 였다. 도구의 system keyboard event 전송 권한도 없었다.
+  자기 창의 `--check-manual` 경로는 준비했지만 끝까지 `PASS` 를 확인하지 않았다.
+- Chrome source 전환·input menu 의 비활성/누락은 **미해결**이다. rollback 뒤 실제 입력칸 이동의 복구도 주인 확인이 아직 없다.
+  다음 작업의 시작점은 [Chrome 원장](apps/chrome.md#다음-작업)과 [비활성 관측](macos-input.md#input-menu-의-비활성누락-2026-10-09-미해결)에 둔다.
+
 ## homi 의 결함
+
+### 보류한 Chromium 확정이 다음 입력칸에 들어간다 (2026-10-09)
+
+- **증상**: source 전환 교정본에서 조합 중인 `글` 을 둔 채 다른 입력칸을 click 하고 `한` 을 치면 새 칸에 `글한` 이 들어갔다.
+- **원인**: `commitComposition` 에서 Session 을 남기고 다음 event 의 `markedRange` 답으로 확정했다.
+  proxy 하나를 여러 DOM 입력칸이 공유하며, 그 답은 이전 칸의 mark 가 남았다는 증거가 아니었다.
+- **증거**: 실제 Chrome lifecycle·DOM 순서와 주인 관측은 [Chrome 원장](apps/chrome.md)에 있다.
+  같은 proxy 의 focus 를 바꾸는 regression 도 수정 전에 Session 잔류·`글한` 으로 실패했다.
+- **대응**: 다음 event 에서 확정하는 경로를 제거하고 기존 Chromium 우회로 복귀했다.
+  client 가 확정한 Session 은 callback 반환 전에 끝낸다. key 처리 중의 재진입만 같은 event 끝에서 처리한다.
+  source 전환의 기존 실패는 남는다 — rollback 을 그 문제의 해결로 세지 않는다.
+
+### IMK 현재 selection 의 range 계약이 구현과 다르다 (2026-10-09, 교정 보류)
+
+- **증상·원인**: `insertText` 의 `replacementRange` 를 `{NSNotFound, 0}` 으로 보냈다.
+  IMK 의 현재 selection 지정은 `{NSNotFound, NSNotFound}` 다 — `setMarkedText` 의 위치만 지정하는 설명과 혼동했다.
+- **증거**: macOS 27 SDK `IMKInputSession.h`, 실제 `Client.apply` 의 proxy 인자를 검사한 `ClientTests` 실패.
+- **실험·현재 처리**: 길이도 `NSNotFound` 로 바꿔 설치했지만 Chrome 의 대체·입력칸 누출은 계속됐고 주인은 더 나쁘다고 보고했다.
+  인과관계는 가르지 못했다. 입력칸 이동의 실패를 먼저 제거하면서 range 도 기존 `{NSNotFound, 0}` 으로 되돌렸다.
+  SDK 계약과 실제 IMK 전달의 차이는 미해결이며, proxy 인자 test 만으로 app 동작을 증명할 수 없다.
+
+### Chrome 에서 ABC 를 거쳐 돌아오면 조합하던 글자를 덮어쓴다 (2026-10-09, 미해결)
+
+- **증상**: 주인 — 조합 중 input menu 를 mouse 로 ABC → homi 전환하고 바로 `한글` 을 치면 이전 글자가 대체됐다.
+  mouse 로 입력 위치를 옮기는 경로는 정상이었다. ⌃Space 전환은 별도 확인하지 않았다.
+- **기존 처리의 결함**: `commitComposition` 때 TIS 가 아직 homi 라는 이유로 client 가 이미 확정했다고 판단해 Session 만 비웠다.
+  source 종료 알림이 와도 이미 비었으므로 client 에 남은 mark 를 확정할 수 없었다.
+- **증거**: Chrome 154.0.8037.98·macOS 27.0.1 의 lifecycle log — 07:51:23.347 commit 의 선택은 homi,
+  07:51:23.357 source 알림에서는 ABC. 이미 ABC 인 commit 도 관측됐다.
+- **실패한 대응**: callback 뒤의 다음 event·종료 경계에서 Cocoa mark cache 를 확인했다.
+  실제 입력칸 이동에서는 보류한 글자가 새 칸에 들어가 이 처리를 제거했다(위의 결함).
+  현재는 기존 TIS 기반 우회로 돌아왔으며 source 전환의 구분은 불완전하다. 실제 관측은 [Chrome 원장](apps/chrome.md)에 둔다.
+- **test 의 한계**: 초기 fake client 는 insert 가 곧바로 문서와 mark 에 반영된다고 가정해 실제 실패를 놓쳤다.
+  현재 `explicitSourceCommitBeforeSourceNotification` 은 명시적 확정·source 알림·deactivate 의 중복 방지만 검사한다.
+  TIS 로 종료 원인을 가리는 것과 IMK 호출이 renderer 에 전달되는 것은 검증하지 않는다.
+
+### client 호출의 재진입으로 abort 하거나 mark 가 다시 남는다 (2026-10-09)
+
+- **증상**: 한자 질의 중 commit 이 끼면 process 가 abort 했다. `한` 다음 `ㄱ` 을 처리하는 `insert → mark` 중 deactivate 가 끼면,
+  Session 은 비었는데 client 에 `ㄱ` 의 mark 가 남았다.
+- **원인**: mutating `Session.handle` 이 client 질의를 실행하는 동안 다시 `Session.commit` 에 접근했다.
+  상태 변경 뒤 목록을 반영해도, 목록 중간에 lifecycle 이 들어오는 것은 막지 못했다.
+- **증거**: lifecycle 을 주입한 `ReentrancyTests` — 수정 전 mark 불일치와 Swift exclusive access abort, Debug·Release 에서 확인.
+  실제 macOS 관측의 근거는 [입력 구조](macos-input.md#client-호출은-imk-lifecycle-을-재진입시킬-수-있다)에 있다.
+- **대응**: `SessionDriver` 에서 질의부터 client 반영까지 감싸고 재진입한 종료를 마지막에 처리한다.
+  deactivate 누락은 source 알림으로 보완한다. 지연된 후보 표시는 끝난 조합이나 다른 controller 의 창을 건드리지 않는다.
+  client 가 이미 확정한 callback 은 뒤의 deactivate·source 종료가 다시 넣지 않도록 같은 경계에서 합친다.
+  deactivate·source 알림 두 regression 으로 중복 방지를 확인한다.
+  실제 Chrome 의 source 전환은 [Chrome 원장](apps/chrome.md)에 별도로 검증한다 — 주입 test 만으로 app 호환성을 확정하지 않는다.
+
+### Caps Lock timer 가 controller 를 붙잡는다 (2026-10-09)
+
+- **증상**: timer 를 취소하거나 실행을 마친 뒤에도 owner 가 해제되지 않았다.
+- **원인**: controller → `DispatchWorkItem` → controller 의 strong reference 순환.
+- **증거**: `HoldTimerTests` 의 weak owner 검사 — 기존 구조는 해제 실패, 수정 뒤 취소·대기·완료 경로 모두 해제.
+- **대응**: timer 는 owner 를 weak 로 들고, 취소·실행 때 작업을 비운다. 이것이 IMK 내부나 system 의 모든 누수를 해결한다는 뜻은 아니다.
+
+### Caps Lock mapping 실패를 성공으로 기억하고 다른 mapping 을 지운다 (2026-10-09)
+
+- **증상**: HID 쓰기가 실패해도 다음 알림에서 재시도하지 않았다. homi 를 떠날 때 다른 도구의 Caps Lock mapping 도 사라질 수 있었다.
+- **원인**: setter 결과를 무시하고 적용 상태를 cache 했다. 해제 때 source 가 Caps Lock 인 항목을 모두 지웠다.
+- **증거**: 실제 keyboard 를 바꾸지 않는 `CapsLockMappingTests` — setter 실패·다른 도구의 변경·wake 를 주입.
+- **대응**: 성공만 cache 하고, homi 의 Caps Lock → 오른쪽 Control 항목만 해제한다. 덮기 전 mapping 은 복원하며 다른 도구가 새로 바꾼 값은 보존한다.
+  source·destination 이 homi 와 정확히 같은 항목은 소유자를 구분할 수 없다 — 모든 도구와의 동시 제어를 보장한 것은 아니다.
+
+### 설치 실패 때 입력기가 없는 구간이 생긴다 (2026-10-09)
+
+- **증상**: 기존 app 을 지운 뒤 복사에 실패하면 설치 위치에 homi 가 없다. 복사 중에도 불완전한 app 이 노출될 수 있었다.
+- **원인**: process 종료 → 설치본 삭제 → 복사 순서였다. 완성된 bundle 을 교환하지 않았다.
+- **증거**: 설치 script 검토, `AtomicInstallTests` 의 실패·첫 설치·교환 검사. 수정한 script 로 서명·설치 성공.
+- **대응**: 같은 volume 에서 조립·서명·검증한 뒤 `renamex_np(RENAME_SWAP)` 으로 교환하고 process 를 종료한다.
+  지속적인 `build/homi.app` 사본도 새로 만들지 않는다. 과거 사본이 등록돼 있었다는 것만으로 비활성의 원인이라고 단정하지 않는다.
 
 ### Remote Desktop 에서 원격에 한글이 가지 않는다 (2026-09-26, M7 중)
 - **증상**: homi 로 한/영을 바꿔도 원격 입력칸에는 영문만 들어갔다. Apple 입력기로는 됐다 (주인).
@@ -93,11 +178,15 @@
 - **증거**: probe — homi 를 고른 채 돌아오자 system 이 ABC 를 되살렸다. `SourceWatcher` 의 선택 알림이 오락가락했다.
 - **대응**: 주인이 그 설정을 껐다 (`TextInputGlobalPropertyPerContextInput = 0`, `633c572`). app 별 한/영은 homi 가 기억한다.
 
+## 원인이 아직 확정되지 않은 관측
+
+- **VS Code 에서 가끔, click 한 자리에 조합 중이던 음절이 한 번 더** (`자한자`) — 해당 homi 기록에 insert 가 없다.
+  Chromium 의 타이밍으로 추정했지만, 지연된 lifecycle·mark 반영까지 배제한 증거는 아니다. homi 의 결함이 아니라고 확정하지 않는다.
+
 ## homi 의 결함이 아니었던 것
 
 같은 증상을 다시 보면 먼저 여기를 본다.
 
-- **VS Code 에서 가끔, click 한 자리에 조합 중이던 음절이 한 번 더** (`자한자`) — homi 기록에 넣은 것이 없다. VS Code(Chromium) 안의 타이밍 🔶.
 - **IntelliJ 에서 선택 영역을 한자로 바꾸면 글자가 사라진다** — IdeaVim 은 mouse 선택을 Visual mode 로 받고, 조합을 시작하며 선택이 지워지면 Visual 을 나온다.
   Insert 로 돌아가지 않으면 고른 한자는 Normal mode 명령으로 읽혀 버려진다 (source: IdeaVim `IdeaSelectionControl` — 주인 관측과 맞다 🔶). 조합 중인 글자는 된다.
 - **Word 에서 선택만 있을 때 ⌥↩ 가 무시된다** — homi 기록에 그 key 가 없다. marked text 가 없으면 Word 가 key 를 먼저 가져가는 듯하다 🔶.

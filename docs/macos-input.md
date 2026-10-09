@@ -44,6 +44,32 @@ sequenceDiagram
 - system 은 입력기를 **고르는 순간** 띄운다 (부모 process = launchd). 입력칸이 바뀔 때마다 `activateServer`·`deactivateServer` 가 오고,
   같은 app 안에서도 3ms 안에 deactivate → activate → deactivate 가 몰려오는 일이 있다. ✅
 
+### input menu 의 비활성·누락 (2026-10-09, 미해결)
+
+- 주인: homi 가 흐려져 선택되지 않거나 menu bar 의 input menu 에서 사라졌다. 모든 app 에서 이상한 때도,
+  app 을 옮기면 회복되는 때도 있었고, 잠금화면을 다녀오면 회복되기도 했다. ✅ (사용 관측)
+- user·system 두 설치 위치에서도 같은 증상이 있었다. 설치 위치 변경은 해결의 증거가 아니다. ✅ (주인)
+- System Settings 의 등록까지 사라졌는지는 확인하지 않았다. menu 의 가용성 변화와 등록 소실을 같은 현상으로 판단하지 않는다.
+  당시 Secure Keyboard Entry 상태·TIS 속성·process 상태의 동시 관찰이 없어 원인은 아직 모른다.
+
+다음 재발에서는 app 이동·잠금·재설치로 상태를 바꾸기 전에, 시각·app bundle ID 와 `tis list --all`·`tis current`, homi process 유무를 확보한다.
+System Settings 에도 사라졌는지와 Secure Keyboard Entry 상태를 함께 확인할 읽기 전용 관찰을 준비한다.
+TIS 의 enabled 속성만으로 menu 의 선택 가능 여부를 판정하지 않는다. 관찰 중 `imklaunchagent` 를 종료하지 않는다.
+
+## client 호출은 IMK lifecycle 을 재진입시킬 수 있다
+
+- client 를 부르는 동안 `commitComposition`·deactivate·activate 가 끼어들 수 있다.
+  macOS 27 의 실제 관측은 [PriType #15](https://github.com/ghostface2232/PriType-Swift/pull/15)에 있다.
+  homi 에 같은 callback 순서를 주입하자 한자 질의는 Swift exclusive access 충돌로 abort 했고,
+  `insert → mark` 도중 deactivate 는 Session 이 비었는데 client 에 mark 를 다시 남겼다. ✅ (2026-10-09, Debug·Release regression)
+- `SessionDriver` 가 질의·상태 변경·client 반영을 함께 감싸고, 재진입한 종료 요청을 경계 끝에서 처리한다.
+  같은 경계 안의 deactivate → activate 는 명시적인 commit 요청이 없을 때만 상쇄한다. 지연된 후보 표시는 controller 와 조합 세대가 맞는지 확인한다.
+- macOS 26 에서 다른 process 의 input source 전환에 deactivate 가 빠진 관측이 있다
+  ([Squirrel #1140](https://github.com/rime/squirrel/issues/1140), [대응 #1142](https://github.com/rime/squirrel/pull/1142)).
+  homi 도 source 알림에서 bound client 의 조합을 정리한다. ✅ (callback 누락을 주입한 regression)
+  대상은 마지막으로 활성화되거나 event 를 받은 weak controller 하나다. 모든 종료 순서와 실제 app 을 검증한 것은 아니다.
+  이것이 menu bar 의 비활성 증상을 고쳤다는 증거는 아직 없다.
+
 ## Apple 한국어 입력기가 하는 일
 
 ### marked text 없이 확정하고 바꿔치기한다
@@ -106,7 +132,11 @@ probe run 1, 한→영:
   ```
 
 - marked text 안의 선택을 `{글자 수, 0}`(커서를 글자 뒤로)으로 보냈는데 app 은 `{0, 글자 수}`(전체 선택)로 받았다 — IMK 가 중간에서 바꾼 것으로 보인다 🔶.
-  화면에 드러난 문제는 없다.
+  당시 probe 에서 화면에 드러난 문제는 없었다 (2026-09-25).
+- `IMKTextInput.insertText` 의 "현재 selection" 지정은 위치·길이가 **모두** NSNotFound 다.
+  `setMarkedText` 는 위치가 NSNotFound 인 것으로 설명한다. ✅ (macOS 27 SDK `IMKInputSession.h`)
+  계약대로 바꾼 실험은 Chrome 전환·입력칸 이동의 실패를 해결하지 못했다. 현재는 기존 `{NSNotFound, 0}` 으로 복귀했다.
+  실제 IMK 전달과 SDK 계약의 차이는 [교정 보류 기록](lessons.md#imk-현재-selection-의-range-계약이-구현과-다르다-2026-10-09-교정-보류)에 둔다.
 - **전환 key 는 remap 한 수식키다.** Caps Lock 은 homi 가 선택된 동안 `UserKeyMapping`(공개 API `IOHIDEventSystemClientSetProperty`, 관리자 권한 없이 ✅)으로
   오른쪽 Control 로 바꿔 flagsChanged 로 받는다. 처음엔 F18 로 바꿔 keyDown 으로 받았는데 terminal 에 F18 의 문자가 샜다 (아래 "먹었다" 판정) —
   그래서 글자를 만들지 않는 수식키로 바꿨다. homi 는 `TICapsLockLanguageSwitchCapable` 을 선언하지 않으므로 선택된 동안 system 의 Caps Lock 전환이 끼지 않는다. ✅
@@ -153,8 +183,8 @@ probe run 1, 한→영:
 
 - **menu bar 표시(NSStatusItem)는 앱 객체(`NSApplication.shared`)가 있은 뒤에 만들어야 한다** — 먼저 만들면 오류 없이 아무것도 생기지 않는다. ✅
 - **커서 옆 말풍선**: 위치는 `attributes(forCharacterIndex: 0, lineHeightRectangle:)` 로 묻는다 — 입력기가 후보 창을 띄울 때 쓰는 질의.
-  **key 처리 도중에만** 묻는다: app 이 homi 를 기다리는 그때가 안전하고, 그 밖에서 client 를 부르면 Chrome 과 교착한 사례가 있다 (조사: az#317).
-  그리기는 key 처리 뒤로 미룬다 (`Task @MainActor`, borderless·nonactivating NSPanel).
+  **key 처리 도중에만** 묻는다: 그 밖에서 client 를 부르면 Chrome 과 교착한 사례가 있다 (조사: az#317).
+  key 처리 중에도 질의의 재진입은 가능하므로 위의 동기 경계 안에서 묻는다. 그리기는 key 처리 뒤로 미룬다 (`Task @MainActor`, borderless·nonactivating NSPanel).
 - **대문자 고정 표시는 macOS 에 맡긴다** — homi 가 IOKit 으로 lock 상태를 바꾸면 macOS 가 자기 표시를 띄운다. ✅
   macOS 는 대문자 고정이 켜진 동안 입력을 멈출 때마다 커서 아래에 표시를 띄운다 (Sonoma 부터, homi 와 무관 ✅ 주인).
   끄는 feature flag(`redesigned_text_cursor`)가 있다고 하나 🔶 주인은 끄지 않기로 했다.
@@ -193,8 +223,16 @@ probe run 1, 한→영:
   first responder 를 넘길 때, 창이 key 를 잃을 때도 그렇다. ✅ (source: `render_widget_host_view_cocoa.mm`)
 - 그때 입력기가 `insertText` 하면 이미 확정된 음절이 한 번 더 들어간다. `commitComposition` 안에서 `markedRange` 를 물으면 아직 "있다" 다 —
   `discardMarkedText` 는 입력기를 기다리는 호출이고, Chromium 은 그 뒤에야 `_hasMarkedText` 를 끈다. ✅ (homi 기록)
-- 그래서 Chromium 계열 app(bundle 안의 `… Helper (Renderer).app`)의 `commitComposition` 은 homi 가 선택된 동안 넣지 않는다.
-  입력 소스를 바꿀 때 system 이 부르는 것만 넣는다 — 그 순간 TIS 가 이미 새 source 를 가리키는지는 아직 확인하지 않았다 🔶. 경과는 lessons 에 있다.
+- **TIS 선택으로 commit 의 원인을 구분할 수 없다.** 실제 Chrome 에서 ABC 를 mouse 로 선택한 `commitComposition` 때도 TIS 가 homi 를 가리켰고,
+  10ms 뒤 source 알림에서 ABC 로 바뀌었다. 이미 ABC 를 가리킨 호출도 있었다. ✅ (154.0.8037.98, macOS 27.0.1, 2026-10-09 lifecycle log·주인)
+- callback 뒤의 다음 event 에서 mark 를 확인하는 교정은 **실패했다**. 이전 DOM 칸의 `compositionend`·blur 뒤,
+  다음 칸의 첫 key 때도 proxy 는 mark 를 보고했고 보류한 확정이 새 칸에 들어갔다. ✅ (같은 관찰)
+  이 경로를 제거했다. 현재는 기존 TIS 기반 우회로 복귀했으며 source 전환의 구분은 불완전하다.
+- Chromium Cocoa 의 `markedRange` getter 는 `_hasMarkedText` cache 를 읽으며 renderer 에 문서 위치를 동기 질의하지 않는다.
+  ✅ ([Chromium source](https://github.com/chromium/chromium/blob/154.0.8037.98/content/app_shim_remote_cocoa/render_widget_host_view_cocoa.mm), `154.0.8037.98` · 2026-10-09)
+  그러나 그 사실만으로 IMK proxy 의 늦은 답이 이전 DOM 입력칸의 상태라고 보장할 수는 없다.
+  mark 답을 client 의 현재 입력칸이나 이전 조합의 소유권으로 쓰지 않는다.
+  실제 교정본의 확인 범위와 남은 문제는 [Chrome 원장](apps/chrome.md)에 둔다.
 
 ## 화면 공유(Remote Desktop)는 입력기의 글자가 아니라 keyboard layout 으로 만든 글자를 보낸다
 

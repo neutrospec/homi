@@ -12,6 +12,7 @@ final class CandidatePanel {
     private let panel: NSPanel
     private let background = NSVisualEffectView()
     private let rows = NSStackView()
+    private weak var owner: HomiInputController?
 
     private static let padding: CGFloat = 6
 
@@ -48,7 +49,8 @@ final class CandidatePanel {
         panel.contentView = background
     }
 
-    func show(_ candidates: [Candidate], selected: Int, below line: NSRect) {
+    func show(_ candidates: [Candidate], selected: Int, below line: NSRect, owner: HomiInputController) {
+        self.owner = owner
         let size = Session.page
         let start = selected / size * size
         let pages = (candidates.count + size - 1) / size
@@ -79,8 +81,10 @@ final class CandidatePanel {
         panel.orderFrontRegardless()
     }
 
-    func hide() {
+    func hide(owner: HomiInputController) {
+        guard self.owner === owner else { return }
         panel.orderOut(nil)
+        self.owner = nil
     }
 
     /// 후보 한 줄: 번호 · 한자 · 뜻

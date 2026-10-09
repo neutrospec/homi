@@ -11,11 +11,14 @@ import Synchronization
 /// IMK header 에는 actor 표시가 없어 override 들이 nonisolated 여야 한다. 불리는 곳은 main thread 다.
 @objc(HomiInputController)
 nonisolated final class HomiInputController: IMKInputController {
-    private var session = Session(hanja: hanjaDictionary)
+    private let session = SessionDriver(hanja: hanjaDictionary)
     private var modifierKeys = ModifierKeys()
-    private var capsLockHold: DispatchWorkItem?
+    private lazy var capsLockHold = HoldTimer(owner: self)
     /// 이 controller 가 맡은 입력칸의 app — controller 는 client 하나에 묶여 있어 바뀌지 않는다.
     private var app: String?
+    private var receivedEvent = false
+    /// 같은 process 안의 controller 를 구분한다. 입력 내용이나 client 문서 위치를 담지 않는다.
+    var traceID: String { String(UInt(bitPattern: ObjectIdentifier(self).hashValue), radix: 16) }
 
     /// flagsChanged 는 수식키 tap(오른쪽 ⌘·⌥, Caps Lock)을 보려고 받는다. 그러면 IMK 의 기본 mouse 처리
     /// (조합 영역 밖을 click 하면 commitComposition) 가 꺼지므로 leftMouseDown 도 받아 직접 확정한다 — IMKInputController.h.
@@ -24,7 +27,11 @@ nonisolated final class HomiInputController: IMKInputController {
     }
 
     override func activateServer(_ sender: Any!) {
-        let app = resolveApp(sender)
+        session.activate()
+        let controller = Unchecked(self)
+        MainActor.assumeIsolated { ActiveInputSession.controller = controller.value }
+        // activate 안에서는 client 에 묻지 않는다. handle 이 실제 bundle ID 로 바로잡는다.
+        let app = app ?? frontmostApp()
         let profile = profile(for: app)
         let (mode, changed) = memory.withLock { memory in
             let before = memory
@@ -35,45 +42,67 @@ nonisolated final class HomiInputController: IMKInputController {
         // homi 가 넘긴 key 는 이 layout 으로 문자가 된다 — 늘 ABC, 원격 화면의 한글 모드만 두벌식 (`AppProfile.keyboardLayout`).
         let layout = profile.keyboardLayout(in: mode)
         (sender as? IMKTextInput)?.overrideKeyboard(withKeyboardNamed: layout)
-        log.info("activate \(app, privacy: .public)")
+        log.info("activate \(app, privacy: .public), controller: \(self.traceID, privacy: .public)")
         record("activate \(app) \(profile.passThrough ? "pass-through" : "\(mode)") \(layout)")
         let shown: Mode? = profile.passThrough ? nil : mode
         Task { @MainActor in Indicator.shared.show(shown) }
     }
 
     override func deactivateServer(_ sender: Any!) {
-        log.info("deactivate \(clientID(sender), privacy: .public)")
-        record("deactivate \(clientID(sender))")
+        let id = app ?? "unknown"
+        log.info("deactivate \(id, privacy: .public), controller: \(self.traceID, privacy: .public)")
+        record("deactivate \(id)")
         cancelModifiers()
-        commit()
+        let target = client().map { Client(proxy: $0, owner: self) }
+        session.deactivate { target?.apply($0) }
     }
 
     /// client 가 조합을 끝내 달라고 할 때 — focus 이동, input source 전환.
     override func commitComposition(_ sender: Any!) {
-        record("commitComposition \(clientID(sender))")
-        // Chromium 은 click·blur 때 page 가 조합을 스스로 확정한 뒤 이것을 부른다 — 그때 넣으면 두 번 들어간다 (함정 3).
-        // 입력 소스를 바꿀 때 system 이 부르는 것(homi 가 더는 선택되어 있지 않다)은 넣어야 한다.
-        let finishedByClient = app.map { app in
-            MainActor.assumeIsolated { Chromium.hosts(app) && SourceWatcher.homiSelected() }
-        } ?? false
-        commit(insert: !finishedByClient)
+        record("commitComposition \(app ?? "unknown")")
+        // 기존 Chromium 우회로 복귀한다. TIS 는 source 전환 중 아직 homi 일 수 있어 이 구분은 불완전하다.
+        // callback 뒤의 mark 질의로 보완하려던 처리는 새 입력칸에 글자를 넣었다 — Chrome 원장.
+        let sourceSelected = app.flatMap { app -> Bool? in
+            MainActor.assumeIsolated { Chromium.hosts(app) ? SourceWatcher.homiSelected() : nil }
+        }
+        let selected = sourceSelected.map { $0 ? "yes" : "no" } ?? "not Chromium"
+        let id = app ?? "unknown"
+        let senderType = sender.map { String(describing: type(of: $0)) } ?? "nil"
+        let busy = session.isHandlingEvent
+        let controllerID = traceID
+        log.info("commit requested from \(id, privacy: .public), controller: \(controllerID, privacy: .public), source selected: \(selected, privacy: .public), sender: \(senderType, privacy: .public), inside event: \(busy)")
+        if sourceSelected == true {
+            let target = client().map { Client(proxy: $0, owner: self) }
+            session.clientConfirmed { target?.apply($0) }
+        } else {
+            commit()
+        }
     }
 
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event, let proxy = sender as? any IMKTextInput & NSObjectProtocol else { return false }
-        let app = resolveApp(sender)
-        switch event.type {
-        case .keyDown:
-            return keyDown(event, app: app, client: Client(proxy: proxy))
-        case .flagsChanged:
-            modifiersChanged(event, app: app, client: Client(proxy: proxy))
-            return false
-        case .leftMouseDown:
-            record("mouseDown")
-            commit()
-            return false
-        default:
-            return false
+        return session.withEvent {
+            let controller = Unchecked(self)
+            MainActor.assumeIsolated { ActiveInputSession.controller = controller.value }
+            let app = resolveApp(sender)
+            if !receivedEvent {
+                receivedEvent = true
+                log.info("receiving events from \(app, privacy: .public), controller: \(self.traceID, privacy: .public)")
+            }
+            switch event.type {
+            case .keyDown:
+                return keyDown(event, app: app, client: Client(proxy: proxy, owner: self))
+            case .flagsChanged:
+                modifiersChanged(event, app: app, client: Client(proxy: proxy, owner: self))
+                return false
+            case .leftMouseDown:
+                record("mouseDown")
+                cancelModifiers()
+                commit()
+                return false
+            default:
+                return false
+            }
         }
     }
 
@@ -82,10 +111,11 @@ nonisolated final class HomiInputController: IMKInputController {
         let key = KeyEvent(event)
         record("key \(key)")
         let mode = memory.withLock { $0.mode(for: app) }
-        // 상태 변경을 끝낸 뒤에 client 를 부른다 — insertText 도중에 IMK 가 deactivate 를 끼워 부를 수 있다.
-        var outcome = session.handle(
-            key, mode: mode, profile: profile(for: app), selectedText: { client.selectedText() },
-            textBefore: { client.textBefore($0) })
+        // 질의·상태 변경·client 반영을 같은 동기 경계에 둔다. 그 사이의 lifecycle 은 경계 끝에서 처리한다.
+        var outcome = session.perform({
+            $0.handle(key, mode: mode, profile: profile(for: app), selectedText: { client.selectedText() },
+                textBefore: { client.textBefore($0) })
+        }, apply: { _ in })
         if outcome.resend && !Resend.allowed() {
             // 다시 보낼 수 없으면 먹지 않는다 — key 를 잃는 것보다 예전처럼 넘기는 게 낫다.
             outcome.handled = false
@@ -107,7 +137,7 @@ nonisolated final class HomiInputController: IMKInputController {
     private func modifiersChanged(_ event: NSEvent, app: String, client: Client) {
         let profile = profile(for: app)
         let result = modifierKeys.changed(ModifierEvent(event, activity: Activity.now()), profile: profile)
-        capsLockHold?.cancel()
+        capsLockHold.cancel()
         if result.startsHoldTimer { scheduleCapsLockHold() }
         guard let action = result.action else { return }
         record("modifier kc=\(event.keyCode) → \(action)")
@@ -116,10 +146,10 @@ nonisolated final class HomiInputController: IMKInputController {
             toggle(app: app, profile: profile, client: client)
         case .hanja:
             let mode = memory.withLock { $0.mode(for: app) }
-            let outcome = session.hanjaTapped(
-                mode: mode, profile: profile, selectedText: { client.selectedText() },
-                textBefore: { client.textBefore($0) })
-            if let outcome { client.apply(outcome.actions) }
+            session.perform({
+                $0.hanjaTapped(mode: mode, profile: profile, selectedText: { client.selectedText() },
+                    textBefore: { client.textBefore($0) })
+            }, apply: { if let outcome = $0 { client.apply(outcome.actions) } })
         case .capsLock:
             // 표시는 macOS 의 Caps Lock 표시에 맡긴다 — homi 가 따로 띄우면 겹친다 (주인, 2026-09-25).
             CapsLockState.toggle()
@@ -129,15 +159,12 @@ nonisolated final class HomiInputController: IMKInputController {
     /// key 를 치거나 입력칸을 떠났다 — 누르고 있던 수식키는 tap 이 아니다.
     private func cancelModifiers() {
         modifierKeys.cancel()
-        capsLockHold?.cancel()
+        capsLockHold.cancel()
     }
 
     /// Caps Lock 을 누르고 `holdAfter` 가 지나면, 아직 단독으로 누르고 있을 때 대문자 고정을 뒤집는다 — 떼기 전에 (macOS 처럼).
     private func scheduleCapsLockHold() {
-        let controller = Unchecked(self)
-        let work = DispatchWorkItem { controller.value.capsLockHeld() }
-        capsLockHold = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + ModifierTap.holdAfter, execute: work)
+        capsLockHold.schedule(after: ModifierTap.holdAfter) { $0.capsLockHeld() }
     }
 
     private func capsLockHeld() {
@@ -148,10 +175,11 @@ nonisolated final class HomiInputController: IMKInputController {
 
     private func toggle(app: String, profile: AppProfile, client: Client) {
         let mode = memory.withLock { $0.mode(for: app) }
-        let outcome = session.toggle(from: mode, profile: profile)
-        switchMode(to: outcome.mode, from: mode, app: app)
-        client.apply(outcome.actions)
-        showMode(outcome.mode, near: client)
+        session.perform({ $0.toggle(from: mode, profile: profile) }, apply: { outcome in
+            switchMode(to: outcome.mode, from: mode, app: app)
+            client.apply(outcome.actions)
+            showMode(outcome.mode, near: client)
+        })
     }
 
     /// 커서 옆 말풍선. 커서 줄의 위치는 지금(key 처리 도중, app 이 homi 를 기다리는 동안) 묻고 — 그 밖에서 client 를 부르면
@@ -169,6 +197,7 @@ nonisolated final class HomiInputController: IMKInputController {
             return memory
         }
         Memory.save(updated)
+        log.info("mode \(String(describing: mode), privacy: .public) for \(app, privacy: .public)")
         record("mode \(mode)")
         // menu bar 표시는 key 처리 밖에서 — 결정 4
         Task { @MainActor in Indicator.shared.show(mode) }
@@ -184,7 +213,8 @@ nonisolated final class HomiInputController: IMKInputController {
         if let app { return app }
         let id = (sender as? IMKTextInput)?.bundleIdentifier() ?? ""
         let resolved = id.isEmpty ? frontmostApp() : id
-        app = resolved
+        // 불확실한 fallback 은 영구 cache 하지 않는다. 다음 key 에 client 가 답하면 바로잡는다.
+        if !id.isEmpty { app = resolved }
         return resolved
     }
 
@@ -196,14 +226,35 @@ nonisolated final class HomiInputController: IMKInputController {
     /// deactivate·commitComposition 의 sender 는 이미 다른 client 일 수 있어 쓰지 않는다 (docs/research).
     /// `insert` 가 false 면 client 가 조합을 이미 확정했다 — homi 의 조합만 버리고 글자는 넣지 않는다.
     private func commit(insert: Bool = true) {
-        var actions = session.commit()
-        if !insert, actions.contains(where: { if case .insert = $0 { true } else { false } }) {
-            record("  finished by client — not inserting")
-            actions.removeAll { if case .insert = $0 { true } else { false } }
-        }
-        guard !actions.isEmpty, let proxy = client() else { return }
-        Client(proxy: proxy).apply(actions)
+        if !insert { record("  finished by client — not inserting") }
+        let target = client().map { Client(proxy: $0, owner: self) }
+        session.commit(insert: insert) { target?.apply($0) }
     }
+
+    /// source 전환 알림은 deactivate 가 빠져도 온다. bound client 에만 확정하고, 반복은 무해하다.
+    func sourceChanged(selected: Bool) {
+        guard !selected else { return }
+        log.info("source end handled, controller: \(self.traceID, privacy: .public)")
+        cancelModifiers()
+        let target = client().map { Client(proxy: $0, owner: self) }
+        session.sourceChanged(selected: selected) { target?.apply($0) }
+    }
+
+    override func inputControllerWillClose() {
+        log.info("closing controller: \(self.traceID, privacy: .public)")
+        cancelModifiers()
+        commit()
+        let controller = Unchecked(self)
+        MainActor.assumeIsolated {
+            if ActiveInputSession.controller === controller.value { ActiveInputSession.controller = nil }
+        }
+        super.inputControllerWillClose()
+    }
+
+    var sessionRevision: UInt64 { session.revision }
+    var hasCandidates: Bool { session.hasCandidates }
+    var isHandlingEvent: Bool { session.isHandlingEvent }
+    func afterEvent(_ presentation: @escaping () -> Void) { session.afterEvent(presentation) }
 
     override func menu() -> NSMenu! {
         let menu = NSMenu()
@@ -225,6 +276,12 @@ nonisolated final class HomiInputController: IMKInputController {
             log.error("record save failed: \(error.localizedDescription, privacy: .public)")
         }
     }
+}
+
+/// 마지막으로 활성화되거나 event 를 받은 controller. 표시와 source 전환 보완에만 쓰며 붙잡지 않는다.
+@MainActor
+enum ActiveInputSession {
+    static weak var controller: HomiInputController?
 }
 
 /// Sendable 이 아닌 것을 main thread 의 지연 작업에 넘길 때 — controller 는 늘 main thread 에서만 쓴다.
