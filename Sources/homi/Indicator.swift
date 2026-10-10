@@ -38,8 +38,8 @@ final class Indicator: NSObject {
 }
 
 /// homi 가 선택됐는지 지켜본다 — 선택된 동안에만 한/A 를 보이고, Caps Lock 을 오른쪽 Control 로 바꾼다.
-/// Caps Lock 을 바꾸는 것은 주인이 Caps Lock 을 전환 key 로 쓸 때, 한/영 전환 없는 app 이 앞에 있지 않을 때뿐이다 (설정).
-/// 그 밖(다른 input source, 비밀번호 칸의 ABC, 한/영 전환 없는 app)에서는 Caps Lock 이 원래대로 동작한다.
+/// 전환 key 로 고른 Caps Lock 은 일반 app 에서 오른쪽 Control, Windows App 전달 옵션에서는 고른 key 로 바꾼다.
+/// 그 밖(다른 input source, 비밀번호 칸의 ABC, 다른 한/영 전환 없는 app)에서는 Caps Lock 이 원래대로 동작한다.
 final class SourceWatcher: NSObject {
     override init() {
         super.init()
@@ -53,6 +53,8 @@ final class SourceWatcher: NSObject {
             self, selector: #selector(appActivated(_:)), name: NSWorkspace.didActivateApplicationNotification, object: nil)
         NotificationCenter.default.addObserver(
             self, selector: #selector(sourceChanged(_:)), name: .homiPreferencesChanged, object: nil)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(terminating(_:)), name: NSApplication.willTerminateNotification, object: nil)
         update()
     }
 
@@ -74,6 +76,10 @@ final class SourceWatcher: NSObject {
         sourceChanged(note)
     }
 
+    @objc func terminating(_ note: Notification) {
+        CapsLockRemap.apply(.system)
+    }
+
     /// 지금 선택된 input source 가 homi 인가.
     static func homiSelected() -> Bool {
         let source = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
@@ -87,8 +93,8 @@ final class SourceWatcher: NSObject {
         let selected = Self.homiSelected()
         let settings = preferences.withLock { $0 }
         let app = front ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
-        let remap = selected && settings.toggleKeys.contains(.capsLock) && !settings.passThroughApps.contains(app)
-        CapsLockRemap.apply(remap)
+        let route = CapsLockRoute.resolve(homiSelected: selected, app: app, preferences: settings)
+        CapsLockRemap.apply(route)
         Indicator.shared.setVisible(selected)
         return selected
     }
@@ -97,19 +103,25 @@ final class SourceWatcher: NSObject {
 /// Caps Lock 을 오른쪽 Control 로 바꾼다 — 누름·뗌이 flagsChanged 로 오고, 수식키라 어느 app 에도 글자가 새지 않는다.
 /// (F18 로 바꿨을 때는 Ghostty·iTerm2 가 입력기가 먹은 F18 을 terminal 로 보냈다 — docs/macos-input.md.)
 /// MacBook 에는 물리 오른쪽 Control 이 없어 헷갈릴 key 도 없다. 관리자 권한이 필요 없다 (macOS 27 에서 확인).
-/// 다른 도구가 건 mapping 은 건드리지 않는다.
+/// Windows App 전달 옵션에서는 LANG1 또는 오른쪽 Option 으로 바꾼다. 원격 검증 범위는 docs/apps/windows-app.md.
+/// 다른 도구가 건 mapping 은 보존한다.
 enum CapsLockRemap {
+    private static let ownershipKey = "windowsCapsLockOriginalMapping"
     private static let client = IOHIDEventSystemClientCreateSimpleClient(kCFAllocatorDefault)
     private static let mapping = CapsLockMapping(read: {
         IOHIDEventSystemClientCopyProperty(client, kIOHIDUserKeyUsageMapKey as CFString) as? [[String: Any]] ?? []
     }, write: { value in
         IOHIDEventSystemClientSetProperty(client, kIOHIDUserKeyUsageMapKey as CFString, value as CFArray)
+    }, windowsOriginal: UserDefaults.standard.array(forKey: ownershipKey) as? [[String: Any]], saveWindowsOriginal: { value in
+        // key 처리 경로가 아니라 source·app·설정 알림에서만 저장한다.
+        if let value { UserDefaults.standard.set(value, forKey: ownershipKey) }
+        else { UserDefaults.standard.removeObject(forKey: ownershipKey) }
     })
 
     static func invalidate() { mapping.invalidate() }
 
-    static func apply(_ on: Bool) {
-        let done = mapping.apply(on)
+    static func apply(_ route: CapsLockRoute) {
+        let done = mapping.apply(route)
         if !done { log.error("caps lock remap failed") }
     }
 }

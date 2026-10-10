@@ -70,11 +70,14 @@ public struct Trigger: Sendable, Equatable {
 /// 우회는 주인이 고르는 것이 아니라 app 의 동작에 딸린 것이라 source 의 표(`quirks`)에 둔다 — 재현 증거가 있는 것만, 바꾸면 다시 build·설치한다.
 /// 각 app 의 사실과 까닭, 확인한 version 은 원장 `docs/apps/<app>.md` 에 있다 — 바꾸기 전에 읽고, 바꾼 뒤에 갱신한다.
 public enum AppRules {
+    public static let windowsAppID = "com.microsoft.rdc.macos"
+
     public static func profile(for app: String, preferences: Preferences = .standard) -> AppProfile {
         var profile = quirks[app] ?? AppProfile()
         profile.startsInEnglish = preferences.englishStartApps.contains(app)
         if preferences.escapeApps.contains(app) { profile.englishTriggers.insert(esc, at: 0) }
         profile.passThrough = preferences.passThroughApps.contains(app)
+            || (app == windowsAppID && preferences.windowsAppCapsLock)
         profile.toggleKeys = preferences.toggleKeys
         profile.hanjaKey = preferences.effectiveHanjaKey
         profile.hanjaRecentWord = preferences.hanjaRecentWord

@@ -20,10 +20,23 @@ public struct Preferences: Sendable, Equatable, Codable {
         case rightCommand
     }
 
+    /// Windows App 에서 Caps Lock 으로 보낼 key. 한/영 전환 여부는 원격 Windows 의 해석에 달렸다.
+    public enum WindowsCapsLockKey: String, Sendable, Codable, CaseIterable {
+        /// Mac LANG1. Windows App 의 전용 한/영 key 전달과 같다고 보장할 수 없다 (app 원장).
+        case hangul
+        /// Mac 오른쪽 Option → Windows 오른쪽 Alt. 물리 오른쪽 Option 은 필요 없다.
+        case rightAlt
+    }
+
     public var toggleKeys: Set<ToggleKey>
     public var hanjaKey: HanjaKey
     /// 방금 친 단어도 한자로 바꾸는가 (Apple 방식 — 교체를 제대로 받는 app 에서만). false 면 조합 중인 글자와 선택 영역만.
     public var hanjaRecentWord: Bool
+    /// Windows App 에서 Caps Lock 을 고른 key 로 보낸다. 기본은 꺼짐.
+    /// 한/영 상태와 조합은 원격 Windows 가 소유한다 — homi 의 mode 를 바꾸지 않는다.
+    public var windowsAppCapsLock: Bool
+    /// 옛 시험본의 LANG1 선택은 유지한다. 오른쪽 Alt 는 주인이 설정에서 고른다.
+    public var windowsAppCapsLockKey: WindowsCapsLockKey
     /// 활성화될 때마다 영문으로 시작하는 app.
     public var englishStartApps: [String]
     /// ESC 로 영문 전환하는 app — 조합 중이면 확정하고, ESC 는 app 으로 간다.
@@ -35,11 +48,14 @@ public struct Preferences: Sendable, Equatable, Codable {
 
     public init(
         toggleKeys: Set<ToggleKey>, hanjaKey: HanjaKey, hanjaRecentWord: Bool,
-        englishStartApps: [String], escapeApps: [String], passThroughApps: [String]
+        englishStartApps: [String], escapeApps: [String], passThroughApps: [String], windowsAppCapsLock: Bool = false,
+        windowsAppCapsLockKey: WindowsCapsLockKey = .hangul
     ) {
         self.toggleKeys = toggleKeys
         self.hanjaKey = hanjaKey
         self.hanjaRecentWord = hanjaRecentWord
+        self.windowsAppCapsLock = windowsAppCapsLock
+        self.windowsAppCapsLockKey = windowsAppCapsLockKey
         self.englishStartApps = englishStartApps
         self.escapeApps = escapeApps
         self.passThroughApps = passThroughApps
@@ -71,6 +87,9 @@ public struct Preferences: Sendable, Equatable, Codable {
         toggleKeys = try container.decodeIfPresent(Set<ToggleKey>.self, forKey: .toggleKeys) ?? base.toggleKeys
         hanjaKey = try container.decodeIfPresent(HanjaKey.self, forKey: .hanjaKey) ?? base.hanjaKey
         hanjaRecentWord = try container.decodeIfPresent(Bool.self, forKey: .hanjaRecentWord) ?? base.hanjaRecentWord
+        windowsAppCapsLock = try container.decodeIfPresent(Bool.self, forKey: .windowsAppCapsLock) ?? base.windowsAppCapsLock
+        windowsAppCapsLockKey = (try? container.decodeIfPresent(WindowsCapsLockKey.self, forKey: .windowsAppCapsLockKey))
+            ?? base.windowsAppCapsLockKey
         englishStartApps = try container.decodeIfPresent([String].self, forKey: .englishStartApps) ?? base.englishStartApps
         escapeApps = try container.decodeIfPresent([String].self, forKey: .escapeApps) ?? base.escapeApps
         passThroughApps = try container.decodeIfPresent([String].self, forKey: .passThroughApps) ?? base.passThroughApps

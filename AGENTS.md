@@ -3,8 +3,8 @@
 **homi** (`com.unocult.inputmethod.homi`) — macOS 한글 입력기. 주인 한 사람이 매일 쓰는 도구이고,
 목표는 **두벌식 한글 입력이 완벽하게 동작하는 것** 하나다. 기능을 늘리는 프로젝트가 아니다 — 잡다한 기능·옵션·변죽은 만들지 않는다.
 
-> **현재 (2026-10-09)**: M0–M4·M6·M7 을 주인이 확인했다. 지금은 M5 — 일상 사용과 app 호환성.
-> 설치본의 변경·검증 범위는 [lessons](docs/lessons.md#2026-10-09-activation-교정callback-관측), 개선 안건은 [안정성 검토](docs/stability-review.md), 남은 작업은 [다음 작업](#다음-작업)에 있다.
+> **현재 (2026-10-10)**: M0–M4·M6·M7 을 주인이 확인했다. 지금은 M5 — 일상 사용과 app 호환성.
+> 설치본의 변경·검증 범위는 [activation 기록](docs/lessons.md#2026-10-09-activation-교정callback-관측)과 [Windows Caps Lock 실험](docs/apps/windows-app.md#caps-lock-전달-실험-2026-10-10), 개선 안건은 [안정성 검토](docs/stability-review.md), 남은 작업은 [다음 작업](#다음-작업)에 있다.
 > 이상하면 주인이 곧바로 "최근 key 기록 저장" 을 누른다 → [진행 단계](#진행-단계)
 
 ## 문서
@@ -85,6 +85,11 @@ macOS 기본 한국어 입력기(`com.apple.inputmethod.Korean.2SetKorean`)에�
     전환에 쓰지 않는 쪽은 한자 key 로 고를 수 있다.
   - Shift+Space: terminal(Ghostty·iTerm2)에서는 영문 → 한글 전환 때 space 가 샌다 — 주인이 알고 고르는 선택지다.
   - 수식키 tap 은 어느 app 에도 새지 않는다 — 전환 key 의 기본이 수식키인 이유 (함정 10).
+- **Windows App 의 한/영 전환 설정** (2026-10-10 주인 요청): 기본은 꺼짐. 켜고 Caps Lock 을 전환 key 로 고르면,
+  Windows App 에서만 **오른쪽 Alt** 또는 **한/영 key (LANG1 · 실험)** 중 고른 key 로 remap 한다. 물리 오른쪽 Option 은 필요 없다.
+  조합·한/영 상태는 Windows 가 맡으며, 이 app 의 길게 누르기 대문자 고정은 없다. 옛 시험본의 LANG1 선택은 자동으로 바꾸지 않는다.
+  오른쪽 Alt 는 주인 환경에서 정상 확인했고 LANG1 은 전환 실패다. [목적지 선택과 검증 범위](docs/apps/windows-app.md#목적지-선택-2026-10-10)를 따른다.
+  오른쪽 ⌘·⌥ 전달은 포함하지 않는다. 실제 원격 동작의 검증 범위는 [원장](docs/apps/windows-app.md#caps-lock-전달-실험-2026-10-10)에 둔다.
 - 전환은 즉시 — 다음 key 부터 새 모드. 조합 중이면 먼저 확정한다. 오른쪽 ⌘·⌥·Caps Lock 을 다른 key 와 함께 쓰면 평소의 ⌘·⌥·Ctrl 이다.
 - 모드 표시: menu bar 의 한/A + 모드가 바뀔 때 커서 옆 말풍선(Apple 입력기처럼). system input menu 의 icon("호")은 고정이다.
   대문자 고정 표시는 macOS 에 맡긴다 — 겹치면 불편하다.
@@ -98,6 +103,7 @@ macOS 기본 한국어 입력기(`com.apple.inputmethod.Korean.2SetKorean`)에�
   - **ESC 로 영문인 app** — 조합 중이면 확정 → 영문 → ESC 는 app 으로 간다. 기본 VS Code(·Insiders)·Obsidian·iTerm2·Wave·Ghostty·IntelliJ(·CE).
   - **한/영 전환 없는 app** — 한/영 전환도 조합도 하지 않고 key 를 넘긴다. Caps Lock 도 원래대로(remap 을 푼다), 표시는 `–`.
     원격 컴퓨터나 app 자체의 입력기가 한/영을 맡는다. 기본 Windows App·Emacs (Emacs 의 입력기가 좋다).
+    Windows App 의 한/영 전환 설정은 예외이며, 켜면 목록에서 빼더라도 homi 가 조합하지 않는다.
 - app 의 결함에 맞춘 우회는 주인이 고를 것이 아니라 `Sources/InputSession/AppRules.swift` 에 둔다 — 바꾸면 다시 build·설치한다. 까닭은 원장에:
   - 조합 중 Enter·ESC 를 app 이 잃거나 다르게 쓰는 곳(Telegram 의 Enter, terminal 의 Enter·ESC·Tab)은 확정한 뒤 그 key 를 먹고 **새 event 로 다시 보낸다**.
     손쉬운 사용 권한이 없으면 먹지 않고 넘긴다 — key 를 잃지 않는다.

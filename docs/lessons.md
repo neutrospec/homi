@@ -49,6 +49,18 @@
 
 ## homi 의 결함
 
+### Mac LANG1 을 Windows 전용 한/영 전달로 취급한다 (2026-10-10, 미해결)
+
+- **증상**: Windows App 전달 옵션을 켜니 Caps Lock 대문자 고정은 사라졌지만 한/영 전환도 안 됐다 (주인).
+- **원인**: Apple 의 LANG1 정의만으로 원격 Windows 의 전용 한/영 key 와 동등한 전달 경로를 확보했다고 볼 수 없었다.
+  Windows App 의 변환표와 platform 표의 불일치는 [원장](apps/windows-app.md#주인-시험과-target-재검토-2026-10-10)에 있다.
+  실제 원격 수신 key 는 미관측이므로 전환 실패의 전체 원인은 아직 확정하지 않는다.
+- **증거**: 주인 시험, 설치된 Windows App 11.4.3 의 static 변환표, Chromium 의 platform key 표 대조.
+  unit test 는 homi 의 target 선택·mapping 복원을 검사할 뿐 RDP 이후의 key 의미를 증명하지 않았다.
+- **대응**: 성공 여부를 전환 실패로 갱신하고 실제로 통과하는 전환 key 를 먼저 확인한다. Windows 설정 오류로 돌리거나
+  다른 target 으로 바꾼 시험본을 근거 없이 설치하지 않는다. 이어진 주인 요청으로 [목적지 선택](apps/windows-app.md#목적지-선택-2026-10-10)을 준비했다.
+  오른쪽 Alt 선택은 주인 환경에서 정상 확인했다 ([결과와 범위](apps/windows-app.md#목적지-선택-2026-10-10)). 전용 한/영 key 전달 실패는 남아 있다.
+
 ### 재활성화가 mode 를 reset 하고 실제 client 의 시작 규칙을 놓친다 (2026-10-09)
 
 - **증상**: `startsInEnglish` app 의 mark 중 deactivate → activate 를 주입하면 조합은 남고 mode 만 영문이 되어,

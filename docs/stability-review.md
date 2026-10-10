@@ -25,6 +25,7 @@
 | 설치본과 관측의 연결 | **채택** · 검증의 정확성, 낮은 회귀 위험 | 설치 확인·시작 log·사용자 요청 export 에 같은 binary UUID 또는 digest 를 넣는다. key 마다 계산하거나 입력 내용을 더 수집하지 않는다. |
 | Enter·ESC·Tab resend 의 순서와 대상 | **검증 채택, 교정 보류** · 명령 유실·잘못된 대상의 위험, 빈도 미상 | own probe 의 두 창·두 app 으로 순서와 focus 변경을 확인한다. [재전송 교훈](lessons.md#terminal-에서-조합-중-escenter-가-사라진다-2026-09-25-m4--apple-입력기-때부터) 때문에 일괄 제거·자동 drop·다른 post API 로의 교체를 바로 적용하지 않는다. |
 | 종료 뒤 Caps Lock remap | **검증 채택, 교정 보류** · 기본 key 에 영향, macOS 27 실관측 없음 | [mapping 수명](macos-input.md#homi-process-와-hid-mapping-의-수명)을 근거로 일반 종료·설치 종료와 crash 뒤 상태를 구분한다. snapshot 에 mapping 을 포함한다. guardian daemon 은 추가하지 않는다. |
+| Windows App 의 한/영 key 전달 | **2026-10-10 Caps Lock → 오른쪽 Alt 는 주인 확인, LANG1 은 전환 실패** · 기본값 꺼짐 | [원장](apps/windows-app.md#목적지-선택-2026-10-10)의 목적지 선택과 검증 범위를 따른다. [선택한 전환 key 의 일반화](apps/windows-app.md#전환-key-일반화-검토-2026-10-10)는 검증 채택: Shift+Space 의 별도 probe 부터, 오른쪽 ⌘·⌥ 는 단축키 보존까지 확인한다. 원격 Windows 설정·일반 조합 경로·local mode 소유는 바꾸지 않는다. |
 
 ### activation 의 두 counterexample
 

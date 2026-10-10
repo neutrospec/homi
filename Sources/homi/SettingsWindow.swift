@@ -5,7 +5,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// 설정 창 — input menu 의 "설정…" 이나 menu bar 의 한/A 에서 연다. 바꾸는 즉시 저장되고 다음 key 부터 쓰인다.
-/// 주인이 고르는 것만 둔다: 한/영 전환 key, 한자 key 와 방식, app 목록(시작할 때 영문·ESC 로 영문·한/영 전환 없는 app).
+/// 주인이 고르는 것만 둔다: 한/영 전환 key, Windows App 의 전환 key, 한자 key 와 방식, app 목록.
 final class SettingsWindow {
     static let shared = SettingsWindow()
 
@@ -55,11 +55,42 @@ private struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("한/영 전환") {
+            Section("Mac 의 한/영 전환 key") {
                 toggleKey(.capsLock, "Caps Lock", "짧게 누르면 전환, 길게 누르면 대문자 고정")
                 toggleKey(.rightCommand, "오른쪽 ⌘", "짧게 누르면 전환 — 다른 key 와 함께면 평소의 ⌘")
                 toggleKey(.rightOption, "오른쪽 ⌥", "짧게 누르면 전환 — 다른 key 와 함께면 평소의 ⌥")
                 toggleKey(.shiftSpace, "Shift+Space", "Ghostty·iTerm2 에서는 영문 → 한글 전환 때 space 가 들어간다")
+            }
+
+            Section {
+                Toggle(isOn: $model.value.windowsAppCapsLock) {
+                    Text("한/영 전환 key 를 Windows 에 보내기")
+                    Text("조합과 한/영 상태는 원격 Windows 가 맡는다.")
+                }
+                if model.value.windowsAppCapsLock {
+                    LabeledContent("Mac 에서 누를 key", value: "Caps Lock")
+                    if !model.value.toggleKeys.contains(.capsLock) {
+                        Text("위의 Mac 한/영 전환 key 에서 Caps Lock 을 켜야 동작한다.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Picker("Windows 에 보낼 key", selection: $model.value.windowsAppCapsLockKey) {
+                        Text("오른쪽 Alt").tag(Preferences.WindowsCapsLockKey.rightAlt)
+                        Text("한/영 key (실험)").tag(Preferences.WindowsCapsLockKey.hangul)
+                    }
+                    if model.value.windowsAppCapsLockKey == .rightAlt {
+                        Text("오른쪽 Alt 로 한/영을 전환하는 Windows 설정에서 사용한다.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        Text("현재 확인한 Windows App 에서는 한/영 전환에 실패했다.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("Windows App 의 한/영 전환")
+            } footer: {
+                Text(model.value.windowsAppCapsLock
+                     ? "현재 Caps Lock 만 지원하며, Windows App 에서는 길게 눌러도 대문자 고정이 되지 않는다."
+                     : "현재 Caps Lock 만 지원한다.")
             }
 
             Section("한자") {
@@ -99,7 +130,7 @@ private struct SettingsView: View {
             } header: {
                 Text("한/영 전환 없는 app")
             } footer: {
-                Text("한/영 전환도 조합도 하지 않고 key 를 그대로 넘긴다. Caps Lock 도 원래대로 — app 자체나 원격 컴퓨터의 입력기를 쓴다.")
+                Text("한/영 전환과 조합을 app 자체나 원격 컴퓨터의 입력기에 맡긴다. Caps Lock 도 원래대로 동작한다. Windows App 에서는 위의 한/영 전환 설정을 따른다.")
             }
         }
         .formStyle(.grouped)
