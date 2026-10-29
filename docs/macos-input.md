@@ -270,8 +270,9 @@ Quartz 의 session event tap 은 별도 thread 에서 원본을 반환하고, IM
   process 가 끝나 복원 주체가 없으면 ABC 에서도 remap 이 남을 수 있다. 🔶 (macOS 27 실제 발생은 미확인)
   새 process 의 `CapsLockMapping` 은 기존 homi 와 같은 항목을 원래 mapping 으로 다시 저장하지 않지만,
   일반 오른쪽 Control remap 의 복원값은 process memory 에만 있어 재시작을 넘어 복원을 보장하지 않는다.
-- Windows App 의 remap 은 덮기 전 Caps Lock 항목을 UserDefaults 에 따로 저장한다. 다음 process 는 그 기록이 있을 때만
-  남은 LANG1·오른쪽 Option 을 homi 소유로 보고 원래 값을 복원한다. 기록 없는 다른 도구의 같은 값은 지우지 않는다. ✅ (실패·재시작 주입 test)
+- Windows App·Emacs 의 remap 은 덮기 전 Caps Lock 항목을 UserDefaults 에 따로 저장한다. 다음 process 는 그 기록이 있을 때만
+  남은 LANG1·오른쪽 Option·F18 을 homi 소유로 보고 원래 값을 복원한다. 기록 없는 다른 도구의 같은 값은 지우지 않는다. ✅ (실패·재시작 주입 test)
+  저장 key `windowsCapsLockOriginalMapping`은 이전 설치본과의 호환을 위해 유지한다 (2026-10-29).
   disk 기록의 비동기성·crash 직후의 즉시 복원까지 증명한 것은 아니다. 원격 전달 검증은 [Windows App 원장](apps/windows-app.md#caps-lock-전달-실험-2026-10-10).
 
 ### mode 저장과 key 처리

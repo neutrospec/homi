@@ -6,6 +6,8 @@ final class CapsLockMapping {
     typealias Map = [[String: Any]]
     static let capsLock: UInt64 = 0x7_0000_0039
     static let rightControl: UInt64 = 0x7_0000_00E4
+    /// Emacs 의 toggle-input-method 에 연결하는 F18.
+    static let f18: UInt64 = 0x7_0000_006D
     /// Windows App 이 오른쪽 Alt 로 바꾸는 Mac 오른쪽 Option.
     static let rightOption: UInt64 = 0x7_0000_00E6
     /// Apple 의 LANG1 — Korean keyboard 의 한/영 key 이며, Japanese keyboard 의 Kana key 에도 해당한다.
@@ -18,19 +20,19 @@ final class CapsLockMapping {
     private var applied: CapsLockRoute?
     /// homi 가 덮기 전 Caps Lock mapping. wake 뒤에도 원래 값을 잊지 않는다.
     private var original: Map?
-    /// Windows mapping 은 저장한 소유 기록으로 복원한다. 기록 없는 LANG1·오른쪽 Option 은 임의로 지우지 않는다.
-    private var ownsWindowsMapping: Bool
-    private let saveWindowsOriginal: (Map?) -> Void
+    /// app 에 전달하는 mapping 은 소유 기록으로 복원한다. 기록 없는 F18·LANG1·오른쪽 Option 은 지우지 않는다.
+    private var ownsForwardedMapping: Bool
+    private let saveForwardedOriginal: (Map?) -> Void
 
     init(
         read: @escaping () -> Map, write: @escaping (Map) -> Bool,
-        windowsOriginal: Map? = nil, saveWindowsOriginal: @escaping (Map?) -> Void = { _ in }
+        forwardedOriginal: Map? = nil, saveForwardedOriginal: @escaping (Map?) -> Void = { _ in }
     ) {
         self.read = read
         self.write = write
-        self.original = windowsOriginal
-        self.ownsWindowsMapping = windowsOriginal != nil
-        self.saveWindowsOriginal = saveWindowsOriginal
+        self.original = forwardedOriginal
+        self.ownsForwardedMapping = forwardedOriginal != nil
+        self.saveForwardedOriginal = saveForwardedOriginal
     }
 
     func invalidate() { applied = nil }
@@ -49,10 +51,14 @@ final class CapsLockMapping {
         if let destination = Self.destination(for: route) {
             mapping = current.filter { !Self.isCaps($0) }
             mapping.append([Self.source: Self.capsLock, Self.destination: destination])
-            if case .windows = route, !ownsWindowsMapping {
+            let forwardsKey: Bool = switch route {
+            case .windows, .emacs: true
+            case .system, .homi: false
+            }
+            if forwardsKey, !ownsForwardedMapping {
                 // HID 쓰기 전에 복원값을 남긴다. 실패·process 종료 뒤에도 이 값으로만 되돌린다.
-                saveWindowsOriginal(previous)
-                ownsWindowsMapping = true
+                saveForwardedOriginal(previous)
+                ownsForwardedMapping = true
                 original = previous
             }
         } else {
@@ -67,9 +73,9 @@ final class CapsLockMapping {
         guard done else { return false }
         applied = route
         original = route == .system ? nil : previous
-        if route == .system, ownsWindowsMapping {
-            saveWindowsOriginal(nil)
-            ownsWindowsMapping = false
+        if route == .system, ownsForwardedMapping {
+            saveForwardedOriginal(nil)
+            ownsForwardedMapping = false
         }
         return true
     }
@@ -80,7 +86,7 @@ final class CapsLockMapping {
     private func isOurs(_ entry: [String: Any]) -> Bool {
         let target = entry[Self.destination] as? UInt64
         return Self.isCaps(entry) && (target == Self.rightControl
-            || (ownsWindowsMapping && (target == Self.language1 || target == Self.rightOption)))
+            || (ownsForwardedMapping && (target == Self.language1 || target == Self.rightOption || target == Self.f18)))
     }
 
     private static func destination(for route: CapsLockRoute) -> UInt64? {
@@ -89,6 +95,7 @@ final class CapsLockMapping {
         case .homi: rightControl
         case .windows(.hangul): language1
         case .windows(.rightAlt): rightOption
+        case .emacs: f18
         }
     }
 }

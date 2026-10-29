@@ -5,7 +5,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// 설정 창 — input menu 의 "설정…" 이나 menu bar 의 한/A 에서 연다. 바꾸는 즉시 저장되고 다음 key 부터 쓰인다.
-/// 주인이 고르는 것만 둔다: 한/영 전환 key, Windows App 의 전환 key, 한자 key 와 방식, app 목록.
+/// 주인이 고르는 것만 둔다: 한/영 전환 key, Windows App·Emacs 의 Caps Lock 전달, 한자 key 와 방식, app 목록.
 final class SettingsWindow {
     static let shared = SettingsWindow()
 
@@ -63,34 +63,15 @@ private struct SettingsView: View {
             }
 
             Section {
-                Toggle(isOn: $model.value.windowsAppCapsLock) {
-                    Text("한/영 전환 key 를 Windows 에 보내기")
-                    Text("조합과 한/영 상태는 원격 Windows 가 맡는다.")
+                Picker("Windows App 에 보낼 key", selection: windowsAppKey) {
+                    Text("안함").tag(Preferences.WindowsCapsLockKey?.none)
+                    Text("오른쪽 Alt").tag(Preferences.WindowsCapsLockKey?.some(.rightAlt))
+                    Text("한/영").tag(Preferences.WindowsCapsLockKey?.some(.hangul))
                 }
-                if model.value.windowsAppCapsLock {
-                    LabeledContent("Mac 에서 누를 key", value: "Caps Lock")
-                    if !model.value.toggleKeys.contains(.capsLock) {
-                        Text("위의 Mac 한/영 전환 key 에서 Caps Lock 을 켜야 동작한다.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    Picker("Windows 에 보낼 key", selection: $model.value.windowsAppCapsLockKey) {
-                        Text("오른쪽 Alt").tag(Preferences.WindowsCapsLockKey.rightAlt)
-                        Text("한/영 key (실험)").tag(Preferences.WindowsCapsLockKey.hangul)
-                    }
-                    if model.value.windowsAppCapsLockKey == .rightAlt {
-                        Text("오른쪽 Alt 로 한/영을 전환하는 Windows 설정에서 사용한다.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    } else {
-                        Text("현재 확인한 Windows App 에서는 한/영 전환에 실패했다.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-            } header: {
-                Text("Windows App 의 한/영 전환")
-            } footer: {
-                Text(model.value.windowsAppCapsLock
-                     ? "현재 Caps Lock 만 지원하며, Windows App 에서는 길게 눌러도 대문자 고정이 되지 않는다."
-                     : "현재 Caps Lock 만 지원한다.")
+                .pickerStyle(.menu)
+                .help("Mac 의 한/영 전환 key 에서 Caps Lock 을 켜면, Windows App 에서 Caps Lock 으로 선택한 key 를 보낸다. 길게 눌러도 대문자 고정은 하지 않는다. 한/영은 현재 Windows App 에서 전환에 실패한 실험 항목이다.")
+                Toggle("Emacs 자체 입력기에 Caps Lock 사용", isOn: $model.value.emacsCapsLock)
+                    .help("위의 Caps Lock 전환도 켜야 한다. Emacs 에서 F18 을 toggle-input-method 에 연결하면 Caps Lock 으로 전환한다. 조합과 한/영 상태는 Emacs 가 맡고, 기존 Shift+Space 는 그대로 쓸 수 있다.")
             }
 
             Section("한자") {
@@ -130,11 +111,23 @@ private struct SettingsView: View {
             } header: {
                 Text("한/영 전환 없는 app")
             } footer: {
-                Text("한/영 전환과 조합을 app 자체나 원격 컴퓨터의 입력기에 맡긴다. Caps Lock 도 원래대로 동작한다. Windows App 에서는 위의 한/영 전환 설정을 따른다.")
+                Text("한/영 전환과 조합을 app 자체나 원격 컴퓨터의 입력기에 맡긴다. Windows App·Emacs 의 Caps Lock 전달을 켜면 이 목록에서 빼도 homi 는 조합하지 않는다.")
             }
         }
         .formStyle(.grouped)
         .frame(width: 540, height: 720)
+    }
+
+    /// 기존 켜짐·목적지 값을 한 선택으로 보인다. 한 번만 저장·알려 중간 목적지로 remap 하지 않는다.
+    private var windowsAppKey: Binding<Preferences.WindowsCapsLockKey?> {
+        Binding(
+            get: { model.value.windowsAppCapsLock ? model.value.windowsAppCapsLockKey : nil },
+            set: { key in
+                var value = model.value
+                value.windowsAppCapsLock = key != nil
+                if let key { value.windowsAppCapsLockKey = key }
+                model.value = value
+            })
     }
 
     /// 한/영 전환 key 하나를 켜고 끈다 — 하나는 남긴다 (모두 끄면 한/영을 바꿀 수 없다).

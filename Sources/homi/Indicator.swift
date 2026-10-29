@@ -39,6 +39,7 @@ final class Indicator: NSObject {
 
 /// homi 가 선택됐는지 지켜본다 — 선택된 동안에만 한/A 를 보이고, Caps Lock 을 오른쪽 Control 로 바꾼다.
 /// 전환 key 로 고른 Caps Lock 은 일반 app 에서 오른쪽 Control, Windows App 전달 옵션에서는 고른 key 로 바꾼다.
+/// Emacs 전달 옵션에서는 F18 로 보내 Emacs 자체 입력기의 전환 명령을 실행한다.
 /// 그 밖(다른 input source, 비밀번호 칸의 ABC, 다른 한/영 전환 없는 app)에서는 Caps Lock 이 원래대로 동작한다.
 final class SourceWatcher: NSObject {
     override init() {
@@ -106,15 +107,17 @@ final class SourceWatcher: NSObject {
 /// (F18 로 바꿨을 때는 Ghostty·iTerm2 가 입력기가 먹은 F18 을 terminal 로 보냈다 — docs/macos-input.md.)
 /// MacBook 에는 물리 오른쪽 Control 이 없어 헷갈릴 key 도 없다. 관리자 권한이 필요 없다 (macOS 27 에서 확인).
 /// Windows App 전달 옵션에서는 LANG1 또는 오른쪽 Option 으로 바꾼다. 원격 검증 범위는 docs/apps/windows-app.md.
+/// Emacs 전달 옵션에서는 F18 로 바꾼다 (docs/apps/emacs.md).
 /// 다른 도구가 건 mapping 은 보존한다.
 enum CapsLockRemap {
+    // Windows 전달부터 쓰던 저장 key 를 유지해 기존 소유 기록을 읽는다. Emacs 전달도 같은 복원값을 공유한다.
     private static let ownershipKey = "windowsCapsLockOriginalMapping"
     private static let client = IOHIDEventSystemClientCreateSimpleClient(kCFAllocatorDefault)
     private static let mapping = CapsLockMapping(read: {
         IOHIDEventSystemClientCopyProperty(client, kIOHIDUserKeyUsageMapKey as CFString) as? [[String: Any]] ?? []
     }, write: { value in
         IOHIDEventSystemClientSetProperty(client, kIOHIDUserKeyUsageMapKey as CFString, value as CFArray)
-    }, windowsOriginal: UserDefaults.standard.array(forKey: ownershipKey) as? [[String: Any]], saveWindowsOriginal: { value in
+    }, forwardedOriginal: UserDefaults.standard.array(forKey: ownershipKey) as? [[String: Any]], saveForwardedOriginal: { value in
         // key 처리 경로가 아니라 source·app·설정 알림에서만 저장한다.
         if let value { UserDefaults.standard.set(value, forKey: ownershipKey) }
         else { UserDefaults.standard.removeObject(forKey: ownershipKey) }

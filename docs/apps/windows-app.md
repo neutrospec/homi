@@ -4,8 +4,8 @@
 |---|---|
 | bundle ID | `com.microsoft.rdc.macos` |
 | 엔진 | — (원격 Windows 화면에 key 를 보낸다, RDP) |
-| 확인한 version | 입력 경로: 11.4.2 (3104) · 2026-09-27 · macOS 27.0. key 변환표·Caps Lock 전달: 11.4.3 (3115) · 2026-10-10 · macOS 27.0.1 |
-| homi 규칙 | 기본은 한/영 전환 없는 app. 한/영 전환 설정에서 Windows 에 보낼 key 를 오른쪽 Alt·LANG1 중 선택 (현재 Caps Lock 만 지원). 오른쪽 Alt 는 주인 환경에서 정상 확인; LANG1 은 전환 실패 |
+| 확인한 version | 입력 경로: 11.4.2 (3104) · 2026-09-27 · macOS 27.0. Caps Lock 전달: 11.4.3 (3115) · 2026-10-10 · macOS 27.0.1. key 변환표 재확인: 11.4.4 (3132) · 2026-10-29 · macOS 27.2 |
+| homi 규칙 | 기본은 한/영 전환 없는 app. `Windows App 에 보낼 key`에서 안함·오른쪽 Alt·한/영 중 선택 (현재 Caps Lock 만 지원). 오른쪽 Alt 는 주인 환경에서 정상 확인; 한/영(LANG1)은 전환 실패 |
 
 ## 특징
 
@@ -75,7 +75,7 @@
 
 ### 목적지 선택 (2026-10-10)
 
-주인 요청으로 Windows 에 보낼 key 의 선택을 추가했다. 현재 설정 위치는 **Windows App 의 한/영 전환 → Windows 에 보낼 key** 다.
+주인 요청으로 Windows 에 보낼 key 의 선택을 추가했다. 당시 설정 위치는 **Windows App 의 한/영 전환 → Windows 에 보낼 key** 였다.
 **한/영 전환 key 를 Windows 에 보내기**를 켜고, **Mac 에서 누를 key**와 Windows 목적지를 나란한 항목으로 확인한다.
 현재 지원하는 Mac key 는 Caps Lock 이며, 일반 한/영 전환 설정에서 꺼져 있으면 켜야 한다고 안내한다. 두 목적지를 구분해 고르며,
 선택은 즉시 저장되고 다음 app·설정 알림에서 HID mapping 에 반영된다.
@@ -111,6 +111,40 @@
 남은 실사용 검증: Mac 의 다른 app·ABC 로 나간 뒤 Caps Lock 의 기존 동작, Caps Lock 을 누른 채 app 을 옮겼을 때
 양쪽 key 해제, wake·crash 뒤 복원과 장기 사용을 확인한다. 이번 정상 동작 보고를 이 경계들의 통과로 확대하지 않는다.
 실패하면 원격의 실제 key·Scancode 를 먼저 관찰한다. `0x70` 을 전용 한/영 key 로 단정하거나 오른쪽 Alt 로 몰래 대체하지 않는다.
+
+### 한 줄 설정과 LANG1 재검토 (2026-10-29)
+
+주인 요청으로 설정을 **Windows App 에 보낼 key — 안함 / 오른쪽 Alt / 한/영** 한 줄로 합쳤다.
+기존 켜짐·목적지 저장 형식과 오른쪽 Alt 선택을 유지한다. 선택 변경은 한 번만 저장·알려 중간 목적지로 remap 하지 않는다.
+Caps Lock 만 지원하며 Mac 의 전환 key 에서 켜야 한다는 조건, 길게 누르기 동작, 한/영의 실험 상태는 도움말에 남겼다.
+일반 전환 key 로 확장한 것은 아니며 [일반화 검토](#전환-key-일반화-검토-2026-10-10)는 계속 별도 안건이다.
+
+**재검토 결론**: homi 의 `0x700000090`은 Mac HID LANG1 값으로 맞다. 그러나 **Windows 전용 한/영 key 전달이 구현됐다고 볼 수 없다.**
+현재 Windows App 11.4.4 (3132)의 arm64 binary 를 읽기 전용으로 조사해 이전 불일치가 남았음을 확인했다:
+
+| Mac keyCode | Windows App 의 static Scancode |
+|---|---|
+| LANG1 `104` | `0x70` (KanaMode) |
+| 오른쪽 Option `61` | `0xe038` (오른쪽 Alt) |
+| Caps Lock `57` | `0x3a` |
+
+- `translationTable` 두 사본은 각각 103쌍으로 같으며, `Scancode.rawValue`의 전체 106개 값에 전용 한/영의 `0x72`가 없다.
+  `toScancode`의 keyboardType 특수 처리는 Mac keyCode `50`·`10`만 교환하므로 LANG1 에 적용되지 않는다.
+  Scancode 명칭은 [Chromium 의 고정된 platform 표](https://github.com/chromium/chromium/blob/863ae6f44a6d93d0aaa3674b0554f4a9298d5fd1/ui/events/keycodes/dom/dom_code_data.inc#L318)와 대조했다.
+- 근거: Xcode `nm`·`llvm-objdump`와 원본 Mach-O byte 검사. 전체 binary SHA-256
+  `0358135a73cdbb8e4a8faecd113e1e44dc2238fa9e09433b20ad54b76515b4be`.
+  arm64 `toScancode`는 `0x100583ff8`, `Scancode.rawValue` 표는 `0x1019ebb08`, translation object 는 `0x1021203a8`·`0x1021204a0`이다.
+- 이 static 경로에서는 HID 목적지 숫자만 바꿔 `0x72`를 고를 수 없다. 실패의 유력한 설명이며,
+  실제 원격 수신·Windows keyboard 종류나 다른 입력 경로까지 확인한 것은 아니다. Windows 설정 오류로 단정하지 않는다.
+- 주인은 이번에도 오른쪽 Alt 가 잘 동작한다고 확인했다. 요청대로 한/영 전달은 검토만 했으며, 입력 경로는 변경하지 않았다.
+  설정 정리본 설치 뒤에도 주인은 한/영 선택이 동작하지 않으며 아직 성공한 적이 없다고 재확인했다.
+  원격의 keyboard 종류·수신 key 는 미관측이다. Windows 를 103/106 으로 바꾸면 해결된다고 안내할 근거는 없으며,
+  추가 조사는 정상인 오른쪽 Alt 설정을 유지한 채 실제 수신 Scancode 를 확인하는 순서다.
+
+검증: `swift build`·Debug 전체 **201개 test** 통과. 제품의 설정 view 를 HID·IMK·설정 저장에 연결하지 않은 preview process 에서
+안함·오른쪽 Alt·한/영·Caps Lock 꺼짐 상태로 그려 확인했다. 원격 입력 시험을 새로 수행한 것은 아니다.
+Release build·자체 서명·설치 뒤 14:22:48 KST 에 새 process 가 시작됐고, 기존 켜짐·`rightAlt` 선택과 homi·하위 ABC layout 을 확인했다.
+설치본 CDHash 는 `44ac62788d05100ef4a4ebc60f288d64e887ae0b`다.
 
 ### 전환 key 일반화 검토 (2026-10-10)
 
@@ -148,3 +182,4 @@ Shift+Space 를 전환 key 로 쓰는 경우에도 같은 목적지(예: 오른�
 | 2026-10-10 | 11.4.3 | 주인 요청으로 오른쪽 Alt·한/영 key 목적지 선택을 추가·설치. 178개 test·설정 view 확인; 오른쪽 Alt 원격 결과는 미검증 |
 | 2026-10-10 | 11.4.3 | 주인이 오른쪽 Alt 를 선택해 원격 한/영 전환·입력 정상 확인. 저장된 전달 켜짐·rightAlt 선택도 확인 |
 | 2026-10-10 | 11.4.3 | 설정을 Mac 전환 key 와 Windows App 의 전환으로 나눔. 누를 key·보낼 key 와 현재 Caps Lock 지원 범위를 명시 |
+| 2026-10-29 | 11.4.4 | 설정을 안함·오른쪽 Alt·한/영 한 줄로 합침. static 변환표의 LANG1 → `0x70`, 전용 한/영 `0x72` 부재를 재확인. 입력 경로는 유지 |

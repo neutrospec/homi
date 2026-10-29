@@ -37,11 +37,14 @@ public struct Preferences: Sendable, Equatable, Codable {
     public var windowsAppCapsLock: Bool
     /// 옛 시험본의 LANG1 선택은 유지한다. 오른쪽 Alt 는 주인이 설정에서 고른다.
     public var windowsAppCapsLockKey: WindowsCapsLockKey
+    /// Emacs 자체 입력기에 Caps Lock 을 F18 로 보낸다. 기본은 꺼짐. Emacs 쪽 전환 binding 이 필요하다.
+    public var emacsCapsLock: Bool
     /// 활성화될 때마다 영문으로 시작하는 app.
     public var englishStartApps: [String]
     /// ESC 로 영문 전환하는 app — 조합 중이면 확정하고, ESC 는 app 으로 간다.
     public var escapeApps: [String]
-    /// 한/영 전환 없는 app — homi 가 한/영 전환도 조합도 하지 않고 key 를 그대로 넘긴다. Caps Lock 도 원래대로.
+    /// 한/영 전환 없는 app — homi 가 한/영 전환도 조합도 하지 않고 key 를 그대로 넘긴다.
+    /// Caps Lock 의 Windows App·Emacs 전달은 `CapsLockRoute` 가 정한다.
     /// app 자체의 입력기(Emacs)나 원격 컴퓨터의 입력기(Windows App)가 한/영을 맡는다.
     /// Remote Desktop 은 여기가 아니다 — homi 가 한/영을 keyboard layout 으로 알린다 (`AppProfile.keyboardLayoutFollowsMode`).
     public var passThroughApps: [String]
@@ -49,13 +52,14 @@ public struct Preferences: Sendable, Equatable, Codable {
     public init(
         toggleKeys: Set<ToggleKey>, hanjaKey: HanjaKey, hanjaRecentWord: Bool,
         englishStartApps: [String], escapeApps: [String], passThroughApps: [String], windowsAppCapsLock: Bool = false,
-        windowsAppCapsLockKey: WindowsCapsLockKey = .hangul
+        windowsAppCapsLockKey: WindowsCapsLockKey = .hangul, emacsCapsLock: Bool = false
     ) {
         self.toggleKeys = toggleKeys
         self.hanjaKey = hanjaKey
         self.hanjaRecentWord = hanjaRecentWord
         self.windowsAppCapsLock = windowsAppCapsLock
         self.windowsAppCapsLockKey = windowsAppCapsLockKey
+        self.emacsCapsLock = emacsCapsLock
         self.englishStartApps = englishStartApps
         self.escapeApps = escapeApps
         self.passThroughApps = passThroughApps
@@ -90,6 +94,7 @@ public struct Preferences: Sendable, Equatable, Codable {
         windowsAppCapsLock = try container.decodeIfPresent(Bool.self, forKey: .windowsAppCapsLock) ?? base.windowsAppCapsLock
         windowsAppCapsLockKey = (try? container.decodeIfPresent(WindowsCapsLockKey.self, forKey: .windowsAppCapsLockKey))
             ?? base.windowsAppCapsLockKey
+        emacsCapsLock = try container.decodeIfPresent(Bool.self, forKey: .emacsCapsLock) ?? base.emacsCapsLock
         englishStartApps = try container.decodeIfPresent([String].self, forKey: .englishStartApps) ?? base.englishStartApps
         escapeApps = try container.decodeIfPresent([String].self, forKey: .escapeApps) ?? base.escapeApps
         passThroughApps = try container.decodeIfPresent([String].self, forKey: .passThroughApps) ?? base.passThroughApps

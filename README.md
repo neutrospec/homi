@@ -52,6 +52,10 @@ scripts/install.sh --register
 
 자세한 조작과 설정은 입력기의 설정 창(입력 메뉴 > 설정…)에서 고른다.
 
+Emacs 는 자체 한글 입력기를 쓴다. Caps Lock 을 함께 쓰려면 설정의 `Emacs 자체 입력기에 Caps Lock 사용`을 켜고,
+Emacs 의 F18 을 `toggle-input-method`에 연결한다.
+조건과 설정 예는 [Emacs 원장](docs/apps/emacs.md#caps-lock-전달-2026-10-29)에 있다.
+
 ## 같이 켜 두면 안 되는 것
 
 - **입력 소스를 바꾸는 다른 도구**(Hammerspoon·Karabiner 의 입력 소스 전환 등)는 끈다 — 그 도구가 ABC 로 바꾸면 homi 가 밀려나 "갑자기 ABC 로 돌아간다".

@@ -7,14 +7,14 @@ private final class HID {
     var mapping: CapsLockMapping.Map = []
     var succeeds = true
     var writes = 0
-    var windowsOriginal: CapsLockMapping.Map?
-    init(windowsOriginal: CapsLockMapping.Map? = nil) { self.windowsOriginal = windowsOriginal }
+    var forwardedOriginal: CapsLockMapping.Map?
+    init(forwardedOriginal: CapsLockMapping.Map? = nil) { self.forwardedOriginal = forwardedOriginal }
     lazy var caps = CapsLockMapping(read: { [unowned self] in self.mapping }, write: { [unowned self] in
         self.writes += 1
         guard self.succeeds else { return false }
         self.mapping = $0
         return true
-    }, windowsOriginal: windowsOriginal, saveWindowsOriginal: { [unowned self] in self.windowsOriginal = $0 })
+    }, forwardedOriginal: forwardedOriginal, saveForwardedOriginal: { [unowned self] in self.forwardedOriginal = $0 })
 
     func destination(_ source: UInt64) -> UInt64? {
         mapping.first { ($0[CapsLockMapping.source] as? UInt64) == source }?[CapsLockMapping.destination] as? UInt64
@@ -114,12 +114,12 @@ func windowsDestinationFailureAndReplacement() {
 
 @Test("새 process 는 남은 Windows mapping 을 원래 값으로 저장하지 않는다")
 func windowsMappingFromPreviousProcess() {
-    let hid = HID(windowsOriginal: [])
+    let hid = HID(forwardedOriginal: [])
     hid.set(CapsLockMapping.capsLock, to: CapsLockMapping.language1)
     hid.caps.apply(.homi)
     hid.caps.apply(.system)
     #expect(hid.destination(CapsLockMapping.capsLock) == nil)
-    #expect(hid.windowsOriginal == nil)
+    #expect(hid.forwardedOriginal == nil)
 }
 
 @Test("소유 기록 없는 LANG1 mapping 은 다른 도구의 값으로 보존한다")
@@ -139,11 +139,11 @@ func windowsOwnershipRecoveryAndFailure() {
     let first = HID()
     first.set(CapsLockMapping.capsLock, to: 123)
     first.caps.apply(.windows(.hangul))
-    let next = HID(windowsOriginal: first.windowsOriginal)
+    let next = HID(forwardedOriginal: first.forwardedOriginal)
     next.mapping = first.mapping
     next.caps.apply(.system)
     #expect(next.destination(CapsLockMapping.capsLock) == 123)
-    #expect(next.windowsOriginal == nil)
+    #expect(next.forwardedOriginal == nil)
 
     let failed = HID()
     failed.succeeds = false
@@ -152,7 +152,7 @@ func windowsOwnershipRecoveryAndFailure() {
     failed.succeeds = true
     failed.caps.apply(.system)
     #expect(failed.destination(CapsLockMapping.capsLock) == nil)
-    #expect(failed.windowsOriginal == nil)
+    #expect(failed.forwardedOriginal == nil)
 }
 
 @Test("Windows 목적지를 바꾸면 Caps Lock 은 오른쪽 Alt 에 해당하는 HID key 를 보낸다")
@@ -200,11 +200,11 @@ func windowsRightAltRestartRestoresOriginal() {
     let first = HID()
     first.set(CapsLockMapping.capsLock, to: 123)
     first.caps.apply(.windows(.rightAlt))
-    let next = HID(windowsOriginal: first.windowsOriginal)
+    let next = HID(forwardedOriginal: first.forwardedOriginal)
     next.mapping = first.mapping
     next.caps.apply(.system)
     #expect(next.destination(CapsLockMapping.capsLock) == 123)
-    #expect(next.windowsOriginal == nil)
+    #expect(next.forwardedOriginal == nil)
 }
 
 @Test("소유 기록 없는 오른쪽 Alt mapping 과 외부의 새 mapping 은 보존한다")
@@ -223,4 +223,53 @@ func externalRightAltMappingSurvives() {
     replaced.set(CapsLockMapping.capsLock, to: 456)
     replaced.caps.apply(.system)
     #expect(replaced.destination(CapsLockMapping.capsLock) == 456)
+}
+
+@Test("Emacs 에서는 Caps Lock 을 F18 로 보내며 Windows·homi·원래 mapping 을 복원한다")
+func emacsCapsMappingRoundTrip() {
+    let hid = HID()
+    hid.set(CapsLockMapping.capsLock, to: 123)
+    hid.set(7, to: 9)
+    hid.caps.apply(.homi)
+    hid.caps.apply(.emacs)
+    #expect(hid.destination(CapsLockMapping.capsLock) == 0x7_0000_006D)
+    hid.caps.apply(.windows(.rightAlt))
+    #expect(hid.destination(CapsLockMapping.capsLock) == 0x7_0000_00E6)
+    hid.caps.apply(.emacs)
+    #expect(hid.destination(CapsLockMapping.capsLock) == 0x7_0000_006D)
+    hid.caps.apply(.homi)
+    #expect(hid.destination(CapsLockMapping.capsLock) == CapsLockMapping.rightControl)
+    hid.caps.apply(.system)
+    #expect(hid.destination(CapsLockMapping.capsLock) == 123)
+    #expect(hid.destination(7) == 9)
+}
+
+@Test("Emacs mapping 의 실패 재시도·wake·새 process 복원은 최초 값을 보존한다")
+func emacsCapsMappingRecovery() {
+    let hid = HID()
+    hid.set(CapsLockMapping.capsLock, to: 123)
+    hid.succeeds = false
+    let failed = hid.caps.apply(.emacs)
+    #expect(!failed)
+    #expect(hid.destination(CapsLockMapping.capsLock) == 123)
+    hid.succeeds = true
+    hid.caps.apply(.emacs)
+    hid.mapping = []
+    hid.caps.invalidate()
+    hid.caps.apply(.emacs)
+    #expect(hid.destination(CapsLockMapping.capsLock) == 0x7_0000_006D)
+    let next = HID(forwardedOriginal: hid.forwardedOriginal)
+    next.mapping = hid.mapping
+    next.caps.apply(.system)
+    #expect(next.destination(CapsLockMapping.capsLock) == 123)
+    #expect(next.forwardedOriginal == nil)
+}
+
+@Test("다른 도구의 F18 mapping 은 Emacs 왕복 뒤에도 보존한다")
+func externalF18MappingSurvivesEmacs() {
+    let hid = HID()
+    hid.set(CapsLockMapping.capsLock, to: 0x7_0000_006D)
+    hid.caps.apply(.emacs)
+    hid.caps.apply(.system)
+    #expect(hid.destination(CapsLockMapping.capsLock) == 0x7_0000_006D)
 }

@@ -2,12 +2,13 @@ import Foundation
 import Testing
 @testable import InputSession
 
-@Test("Windows App 의 Caps Lock 은 기본값에서 원래 key — 다른 app 의 경로도 그대로")
+@Test("Windows App·Emacs 의 Caps Lock 전달은 기본값에서 꺼짐 — 다른 app 의 경로도 그대로")
 func capsLockRouteDefaults() {
     let settings = Preferences.standard
     #expect(!settings.windowsAppCapsLock)
+    #expect(!settings.emacsCapsLock)
     #expect(CapsLockRoute.resolve(homiSelected: true, app: AppRules.windowsAppID, preferences: settings) == .system)
-    #expect(CapsLockRoute.resolve(homiSelected: true, app: "org.gnu.Emacs", preferences: settings) == .system)
+    #expect(CapsLockRoute.resolve(homiSelected: true, app: AppRules.emacsAppID, preferences: settings) == .system)
     #expect(CapsLockRoute.resolve(homiSelected: true, app: "com.apple.TextEdit", preferences: settings) == .homi)
 }
 
@@ -18,7 +19,7 @@ func capsLockRouteWindowsScope(key: Preferences.WindowsCapsLockKey) {
     settings.windowsAppCapsLockKey = key
     #expect(CapsLockRoute.resolve(homiSelected: true, app: AppRules.windowsAppID, preferences: settings) == .windows(key))
     #expect(CapsLockRoute.resolve(homiSelected: true, app: "com.apple.TextEdit", preferences: settings) == .homi)
-    #expect(CapsLockRoute.resolve(homiSelected: true, app: "org.gnu.Emacs", preferences: settings) == .system)
+    #expect(CapsLockRoute.resolve(homiSelected: true, app: AppRules.emacsAppID, preferences: settings) == .system)
     #expect(CapsLockRoute.resolve(homiSelected: false, app: AppRules.windowsAppID, preferences: settings) == .system)
     settings.toggleKeys.remove(.capsLock)
     #expect(CapsLockRoute.resolve(homiSelected: true, app: AppRules.windowsAppID, preferences: settings) == .system)
@@ -69,4 +70,60 @@ func unknownWindowsCapsKeyPreservesOtherPreferences() throws {
     #expect(value.windowsAppCapsLock)
     #expect(value.toggleKeys == [.capsLock])
     #expect(value.passThroughApps == ["example"])
+}
+
+@Test("Emacs 의 Caps Lock 은 옵션을 켰을 때만 전달하고 ABC·Caps Lock 해제에서는 원래 key 다")
+func emacsCapsLockScope() {
+    var settings = Preferences.standard
+    settings.emacsCapsLock = true
+    settings.windowsAppCapsLock = true
+    settings.windowsAppCapsLockKey = .rightAlt
+    #expect(CapsLockRoute.resolve(homiSelected: true, app: AppRules.emacsAppID, preferences: settings) == .emacs)
+    #expect(CapsLockRoute.resolve(homiSelected: false, app: AppRules.emacsAppID, preferences: settings) == .system)
+    #expect(CapsLockRoute.resolve(homiSelected: true, app: "com.apple.TextEdit", preferences: settings) == .homi)
+    #expect(CapsLockRoute.resolve(homiSelected: true, app: AppRules.windowsAppID, preferences: settings) == .windows(.rightAlt))
+    settings.toggleKeys = [.shiftSpace]
+    #expect(CapsLockRoute.resolve(homiSelected: true, app: AppRules.emacsAppID, preferences: settings) == .system)
+    settings.toggleKeys.insert(.capsLock)
+    settings.emacsCapsLock = false
+    #expect(CapsLockRoute.resolve(homiSelected: true, app: AppRules.emacsAppID, preferences: settings) == .system)
+    #expect(CapsLockRoute.resolve(homiSelected: true, app: AppRules.windowsAppID, preferences: settings) == .windows(.rightAlt))
+    settings.passThroughApps.removeAll { $0 == AppRules.emacsAppID }
+    #expect(CapsLockRoute.resolve(homiSelected: true, app: AppRules.emacsAppID, preferences: settings) == .homi)
+    #expect(!AppRules.profile(for: AppRules.emacsAppID, preferences: settings).passThrough)
+    settings.emacsCapsLock = true
+    #expect(CapsLockRoute.resolve(homiSelected: true, app: AppRules.emacsAppID, preferences: settings) == .emacs)
+    settings.passThroughApps.append("example.other")
+    #expect(CapsLockRoute.resolve(homiSelected: true, app: "example.other", preferences: settings) == .system)
+}
+
+@Test("Emacs 전달을 켜면 목록에서 빼도 F18·Shift+Space·한글 key 를 넘기고 local mode·조합은 건드리지 않는다")
+func emacsKeepsItsOwnInputMethod() {
+    var settings = Preferences.standard
+    settings.emacsCapsLock = true
+    settings.passThroughApps = []
+    settings.toggleKeys.insert(.shiftSpace)
+    let profile = AppRules.profile(for: AppRules.emacsAppID, preferences: settings)
+    #expect(profile.passThrough)
+    #expect(!AppRules.profile(for: "com.apple.TextEdit", preferences: settings).passThrough)
+    for mode in [Mode.english, Mode.korean] {
+        var session = Session()
+        for key in [KeyEvent(keyCode: 79), KeyEvent(keyCode: 49, modifiers: .shift), KeyEvent(keyCode: 0)] {
+            let outcome = session.handle(key, mode: mode, profile: profile)
+            #expect(outcome == Outcome(handled: false, actions: [], mode: mode))
+        }
+    }
+}
+
+@Test("옛 설정에서 Emacs 전달은 켜지지 않고, 저장한 선택과 Windows 목적지는 함께 복원된다", arguments: [false, true])
+func emacsCapsPreferencePersistence(enabled: Bool) throws {
+    var settings = try JSONDecoder().decode(Preferences.self, from: Data(#"{"toggleKeys":["capsLock"],"windowsAppCapsLock":true,"windowsAppCapsLockKey":"rightAlt"}"#.utf8))
+    #expect(!settings.emacsCapsLock)
+    #expect(settings.windowsAppCapsLock)
+    #expect(settings.windowsAppCapsLockKey == .rightAlt)
+    settings.emacsCapsLock = enabled
+    let restored = try JSONDecoder().decode(Preferences.self, from: JSONEncoder().encode(settings))
+    #expect(restored == settings)
+    #expect(CapsLockRoute.resolve(homiSelected: true, app: AppRules.emacsAppID, preferences: restored) == (enabled ? .emacs : .system))
+    #expect(CapsLockRoute.resolve(homiSelected: true, app: AppRules.windowsAppID, preferences: restored) == .windows(.rightAlt))
 }

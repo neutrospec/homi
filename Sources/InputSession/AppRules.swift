@@ -71,6 +71,7 @@ public struct Trigger: Sendable, Equatable {
 /// 각 app 의 사실과 까닭, 확인한 version 은 원장 `docs/apps/<app>.md` 에 있다 — 바꾸기 전에 읽고, 바꾼 뒤에 갱신한다.
 public enum AppRules {
     public static let windowsAppID = "com.microsoft.rdc.macos"
+    public static let emacsAppID = "org.gnu.Emacs"
 
     public static func profile(for app: String, preferences: Preferences = .standard) -> AppProfile {
         var profile = quirks[app] ?? AppProfile()
@@ -78,6 +79,7 @@ public enum AppRules {
         if preferences.escapeApps.contains(app) { profile.englishTriggers.insert(esc, at: 0) }
         profile.passThrough = preferences.passThroughApps.contains(app)
             || (app == windowsAppID && preferences.windowsAppCapsLock)
+            || (app == emacsAppID && preferences.emacsCapsLock)
         profile.toggleKeys = preferences.toggleKeys
         profile.hanjaKey = preferences.effectiveHanjaKey
         profile.hanjaRecentWord = preferences.hanjaRecentWord
