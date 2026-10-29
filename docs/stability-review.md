@@ -17,7 +17,7 @@
 
 | 안건 | 판단 · 중요도 | 문서·교훈에 비춘 다음 행동 |
 |---|---|---|
-| Caps Lock 전환 누락 | **2026-10-29 실제 누락 관측, tap 판정의 교정 검토 우선** · 기본 한/영 전환에 직접 영향 | [code review 의 반례](#caps-lock-전환-code-review-2026-10-29)에서 live counter 와 event 시점의 혼용을 확인했다. [실관측의 원인](macos-input.md#caps-lock-전환-누락-관측-2026-10-29)은 미확정이다. 전달 지연을 바꾼 regression 을 먼저 준비하며, 단축키 보호를 없애지 않는다. |
+| Caps Lock 전환 누락 | **2026-10-29 교정·주인 시험 통과** · 기본 한/영 전환에 직접 영향 | [code review 의 반례](#caps-lock-전환-code-review-2026-10-29)와 실제 동시 비교에서 정상 tap 의 거짓 거부를 확인했다. gesture 교정 뒤 짧은 전환 34회·hold 4회 및 주인의 정상 동작 확인을 얻었다. [fallback·일상 사용의 남은 범위](lessons.md#정상-caps-tap-을-기존-판정이-거부한다-2026-10-29)는 계속 확인한다. |
 | Telegram 복귀 뒤 첫 key 의 영문 | **2026-10-29 주인 보고, 기본 입력의 우선 조사** | [원장](apps/telegram.md#창-전환-뒤-첫-key-가-영문-2026-10-29-미해결). Caps 를 누르지 않고 다음 key 부터 한글로 회복한다는 조건 때문에 tap 취소와 분리한다. 첫 key 의 IMK 도착·app 식별·mode·client 반영을 가르며, 주입한 activation model 을 실제 원인으로 단정하지 않는다. |
 | 현재 설치본의 입력칸 이동 | **최우선 확인** · 실제 발생했던 회귀 | 주인의 변경 전 기본 입력 정상 보고는 [후속 기록](lessons.md#2026-10-09-activation-교정callback-관측)에 있다. Chrome 의 개별 경로 확인과 model 통과는 구분한다. |
 | activation 과 mode 초기화의 경계 | **재현 test 후 교정·설치** · 기본 입력에 직접 영향 | 아래 두 counterexample 의 mode 경계를 `ModeActivation` 으로 교정했다. [검증·제한](lessons.md#재활성화가-mode-를-reset-하고-실제-client-의-시작-규칙을-놓친다-2026-10-09)과 [LaunchBar 요구](apps/launchbar.md)를 함께 확인한다. |
@@ -52,7 +52,7 @@ unit test·비교 action 을 실제 입력 성공으로 확대하지 않는다.
    release 처리를 `10.11 → 10.4` 로 옮기자 결과가 `toggle → none` 으로 바뀌었다. **event 전달 순서가 맞아도 정상 tap 을 버린다.**
    반대로 ⌘C 처럼 IMK 에 오지 않는 key 가 `10.05` 에 발생하고 press 를 `10.06` 에 처리하면,
    두 sample 에 이미 같은 횟수가 들어가 단축키를 tap 으로 인정한다. 시간 구간이 잘못된 하나의 원인에서 거짓 거부·거짓 허용이 모두 나온다.
-   이 중 거짓 거부가 [혼합 입력의 누락](apps/orca.md#caps-lock-누락-관측-2026-10-29)과 가장 잘 맞지만, 실제 homi 의 snapshot 은 아직 없다.
+   이 code review 당시에는 실제 homi 의 snapshot 이 없었다. 이후 [동시 비교](apps/orca.md#기존-판정과-gesture-후보의-동시-비교-2026-10-29-1320-kst)로 거짓 거부를 포착했다.
 2. **별도 교정 후보 — hold timer 가 release 미도착을 계속 누름으로 취급한다.**
    [HomiInputController.capsLockHeld](../Sources/homi/HomiInputController.swift)는 현재 key 의 누름 상태를 확인하지 않고,
    `ModifierTap.holdReached` 는 armed·counter 일치만 본다. 물리 release `10.1` 의 전달이 `10.6` 으로 늦고 timer 가 `10.5` 에 먼저 실행되면,
