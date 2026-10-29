@@ -19,9 +19,11 @@ extension KeyEvent {
 }
 
 extension ModifierEvent {
-    /// flagsChanged 에서 판단에 쓰는 것만 옮긴다. `activity` 는 지금의 system key·mouse 누름 횟수 (`Activity.now()`).
-    nonisolated init(_ event: NSEvent, activity: [UInt32]) {
-        self.init(keyCode: event.keyCode, modifiers: KeyEvent(event).modifiers, time: event.timestamp, activity: activity)
+    /// flagsChanged 당시의 방향과 활동 번호를 함께 옮긴다.
+    nonisolated init(_ event: NSEvent, activity: ModifierActivity) {
+        let position = ModifierPosition(keyCode: event.keyCode, flags: UInt64(event.modifierFlags.rawValue))
+        self.init(keyCode: event.keyCode, modifiers: KeyEvent(event).modifiers, time: event.timestamp, activity: activity,
+            isDown: position.isDown, oppositeSideDown: position.oppositeSideDown)
     }
 }
 

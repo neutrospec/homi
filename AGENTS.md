@@ -3,7 +3,8 @@
 **homi** (`com.unocult.inputmethod.homi`) — macOS 한글 입력기. 주인 한 사람이 매일 쓰는 도구이고,
 목표는 **두벌식 한글 입력이 완벽하게 동작하는 것** 하나다. 기능을 늘리는 프로젝트가 아니다 — 잡다한 기능·옵션·변죽은 만들지 않는다.
 
-> **현재 (2026-10-10)**: M0–M4·M6·M7 을 주인이 확인했다. 지금은 M5 — 일상 사용과 app 호환성.
+> **현재 (2026-10-29)**: M0–M4·M6·M7 을 주인이 확인했다. 지금은 M5 — 일상 사용과 app 호환성. [Caps Lock 의 정상 tap 을 기존 판정이 거부하는 경로](docs/lessons.md#정상-caps-tap-을-기존-판정이-거부한다-2026-10-29)를 확인했다.
+> **설치본**: 13:45 에 시작된 gesture 교정본이다. 짧은 전환 34회와 누른 채 대문자 고정 4회를 관측했고, 주인이 누락 개선·긴 누름 동작을 확인했다. Debug·Release 201개 test 통과. 일상 사용·다른 app·fallback 의 한계는 계속 확인한다. 앞선 timestamp 검색 실험은 [전환이 전부 막혀 rollback](docs/lessons.md#event-snapshot-실험본이-caps-lock-전환을-전부-거부한다-2026-10-29-rollback)했다.
 > 설치본의 변경·검증 범위는 [activation 기록](docs/lessons.md#2026-10-09-activation-교정callback-관측)과 [Windows Caps Lock 실험](docs/apps/windows-app.md#caps-lock-전달-실험-2026-10-10), 개선 안건은 [안정성 검토](docs/stability-review.md), 남은 작업은 [다음 작업](#다음-작업)에 있다.
 > 이상하면 주인이 곧바로 "최근 key 기록 저장" 을 누른다 → [진행 단계](#진행-단계)
 
@@ -81,7 +82,9 @@ macOS 기본 한국어 입력기(`com.apple.inputmethod.Korean.2SetKorean`)에�
 - 전환 key 는 설정에서 고른다 (여럿 함께, 하나는 남긴다) — **Caps Lock**, **오른쪽 ⌘**, **오른쪽 ⌥** 의 단독 tap, **Shift+Space**. 기본은 Caps Lock·오른쪽 ⌘.
   - Caps Lock: 전환 key 일 때만, homi 가 선택된 동안 오른쪽 Control 로 remap 해 tap 으로 받는다. **짧게 = 전환, 길게(0.5초) = 대문자 고정** —
     macOS 처럼 누르고 있는 채로 켜진다. 다른 input source 와 한/영 전환 없는 app 에서는 원래대로다.
-  - 오른쪽 ⌘·⌥: 짧게 = 전환. 사이에 다른 key·mouse 가 있었으면(⌘C·⌘Tab) 아니다 — system 의 누름 횟수로 판정, 권한 불필요.
+  - 오른쪽 ⌘·⌥: 짧게 = 전환. 사이에 다른 key·mouse 가 있었으면(⌘C·⌘Tab) 아니다.
+    관찰 가능한 환경에서는 물리 누름·뗌 사이의 활동을 쓰고, 권한 부재·연결이 모호한 press 는 기존 system 누름 횟수로 판정한다.
+    [관찰 경로와 fallback 의 한계](docs/macos-input.md#quartz-와-imk-사이-modifier-event-의-연결-2026-10-29)를 따른다.
     전환에 쓰지 않는 쪽은 한자 key 로 고를 수 있다.
   - Shift+Space: terminal(Ghostty·iTerm2)에서는 영문 → 한글 전환 때 space 가 샌다 — 주인이 알고 고르는 선택지다.
   - 수식키 tap 은 어느 app 에도 새지 않는다 — 전환 key 의 기본이 수식키인 이유 (함정 10).
@@ -149,7 +152,8 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
    callback 안의 TIS 선택 하나로 원인을 판단할 수 없다. 늦은 mark 확인도 web 입력칸 이동 때 확정이 새 칸으로 새었다 —
    client 하나를 여러 입력칸이 공유하므로 bound client 만으로는 부족하다. 늦은 확정은 제거했다.
    source 전환 구분은 미해결이다 (`docs/apps/chrome.md`).
-4. **입력기는 ⌘ 단축키의 key 를 못 본다** — menu 가 먼저 가져가고, ⌘Tab 의 Tab 은 system 이 가져간다. 수식키 tap 은 system 의 누름 횟수로 판정한다.
+4. **입력기는 ⌘ 단축키의 key 를 못 본다** — menu 가 먼저 가져가고, ⌘Tab 의 Tab 은 system 이 가져간다.
+   수식키 tap 은 app 앞의 활동 관측을 쓰며, 연결할 수 없으면 기존 system 누름 횟수로 판정한다. IMK 의 timestamp·metadata 보존을 전제하지 않는다.
 5. **Caps Lock** 은 그대로 받으면 system 전환 옵션·activation delay·lock echo·LED·bubble 과 얽힌다 — 그래서 remap 해서 tap 으로 받는다.
 6. **`activateServer`·`setValue` 안에서 client 에게 묻거나 기다리지 않는다** — Chrome deadlock, Spotlight 멈춤 사례.
    homi 아래 layout 을 정하는 `overrideKeyboard` 만 activate 때 부른다 (선행 입력기들도 activate·`setValue` 에서 부른다).
@@ -186,6 +190,8 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
   `~/Library/Input Methods/homi.app` 과 atomic 교환 → 실행 중인 homi 종료. 교환 전 실패하면 기존 app·process 는 그대로 남는다.
   다음 입력 때 system 이 새 binary 로 띄운다. `--register` 는 처음 한 번 (TIS 등록 + enable).
 - 개발 도구 (`tools/`, 제품 아님):
+  - `swift run caps-probe --seconds 90` — Caps Lock 의 물리 HID·remap 뒤 modifier 와 인접 입력의 시각·counter 를 읽기 전용으로 관찰한다.
+    일반 key code·문자는 수집하지 않으며, 수집 종료 뒤 출력한다. [관측 범위와 제한](docs/macos-input.md#caps-lock-전환-누락-관측-2026-10-29).
   - `swift run tis list|current|watch|register|enable|disable|select` — input source 조회·관찰·조작.
   - `scripts/probe.sh` — test client 창 (log: `build/probe.log`). key event, handled 여부, 입력기가 묻는 것·시키는 것, input source 변화를 시간순으로 보여준다.
     입력기가 client 에게 무엇을 하는지는 추측하지 말고 여기서 본다.
@@ -244,6 +250,9 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 - 실험 도구(`tools/`)는 관찰 가능하게 만든다 — 무엇이 어떤 순서로 일어났는지 log 로 보이게.
 
 ## 다음 작업
+
+Caps Lock 전환 누락은 기본 입력 문제로 먼저 조사한다. [현재 근거와 다음 검증](docs/macos-input.md#caps-lock-전환-누락-관측-2026-10-29)을 따른다.
+다음은 실제 IMK 의 event·counter 시점과 취소 사유이며, keyboard 결함이나 homi 단독 결함을 아직 단정하지 않는다.
 
 1. [activation 교정·callback 관측](docs/lessons.md#2026-10-09-activation-교정callback-관측): 새 규칙의 native text·LaunchBar·Chrome 기본 경로를 확인한다.
    주인이 일반 probe 의 긴 입력을 확인했고 실제 insert·mark 의 관측 연결도 확인했다. 자동 검사는 probe crash 로 중단됐다.

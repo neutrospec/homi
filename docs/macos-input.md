@@ -184,13 +184,82 @@ probe run 1, 한→영:
 - **전환 key 는 remap 한 수식키다.** Caps Lock 은 homi 가 선택된 동안 `UserKeyMapping`(공개 API `IOHIDEventSystemClientSetProperty`, 관리자 권한 없이 ✅)으로
   오른쪽 Control 로 바꿔 flagsChanged 로 받는다. 처음엔 F18 로 바꿔 keyDown 으로 받았는데 terminal 에 F18 의 문자가 샜다 (아래 "먹었다" 판정) —
   그래서 글자를 만들지 않는 수식키로 바꿨다. homi 는 `TICapsLockLanguageSwitchCapable` 을 선언하지 않으므로 선택된 동안 system 의 Caps Lock 전환이 끼지 않는다. ✅
-- **수식키 tap 은 누를 때와 뗄 때 system 전체의 key·mouse 누름 횟수가 같은지로 판정한다** (`CGEventSource.counterForEventType`) —
-  입력기가 못 본 ⌘C 의 C 도 세고, 권한이 필요 없다. ✅ Caps Lock 을 단독으로 0.5초 누르고 있으면 그때 대문자 고정을 뒤집는다 — macOS 처럼 떼기 전에. ✅ 주인
+- **수식키 tap 은 app 앞에서 관찰한 누름·뗌 사이의 활동으로 판정한다.** 입력기가 못 본 ⌘C 의 C 도 센다.
+  2026-10-29 의 [gesture 연결과 fallback](#quartz-와-imk-사이-modifier-event-의-연결-2026-10-29)을 따른다. ✅ 코드·실제 IMK 비교
+  권한이 없거나 press 연결이 모호하면 기존 `CGEventSource.counterForEventType` 비교를 유지한다. 이 API 는 권한 없이 읽을 수 있지만
+  event 당시의 snapshot 은 아니므로 [시간 구간의 문제](stability-review.md#caps-lock-전환-code-review-2026-10-29)가 남는다.
+  Caps Lock 을 단독으로 0.5초 누르면 떼기 전에 대문자 고정을 뒤집는 것이 요구사항이다. 기존 동작의 주인 확인과 새 hold 경계의 검증을 구분한다.
 - `recognizedEvents` 가 keyDown 말고 다른 event 도 받겠다고 하면 IMK 의 기본 mouse 처리(조합 영역 밖 click → `commitComposition`)가 꺼진다 —
   그래서 homi 는 leftMouseDown 도 받아 직접 확정한다. ✅ `IMKInputController.h` (recognizedEvents 주석)
 - **전환 직후의 첫 key 는 새 모드였다** — 35번 전환에 틀린 경우 0 (probe run 4). ✅
-  homi 내부 전환과 다음 key 는 같은 흐름에서 차례로 처리된다 (`ToggleTests`·`ModifierKeysTests` 가 고정).
+  **전환으로 인정된 뒤**의 내부 mode 변경과 다음 key 는 같은 흐름에서 처리된다. `ToggleTests` 의 첫 key 검사는 `.toggle` 을 직접 주입한다.
+  정상 tap 자체가 인정되는지는 별개이며, [live counter 를 섞는 판정의 반례](stability-review.md#caps-lock-전환-code-review-2026-10-29)가 있다.
   이 관측이 재진입 activation 의 mode reset 까지 검증한 것은 아니다. 그 교정과 제한은 [교훈](lessons.md#재활성화가-mode-를-reset-하고-실제-client-의-시작-규칙을-놓친다-2026-10-09)에 둔다.
+
+### Caps Lock 전환 누락 관측 (2026-10-29)
+
+주인은 어제까지 괜찮았으나 오늘 Mac 의 일반 app 에서 Caps Lock 전환 누락이 늘었다고 보고했다.
+최초 관측 시 실행 중인 binary 는 2026-10-10 설치본(CDHash `de243ec81f0f85b0d84c6520192e6aa068b62cfa`),
+환경은 macOS 27.2 (`26B123`)다. 주인은 후속 대화에서 **오늘 OS update 가 있었다**고 확인했다.
+`/Library/Receipts/InstallHistory.plist` 에 27.2 설치가 2026-10-29 06:34:27 KST 로 기록돼 있다.
+그 직전 macOS 설치 기록은 27.0.1 이며, update 직전 실행 중이던 정확한 build 는 확보하지 못했다.
+update 와 누락 증가의 시간상 연관은 조사 단서이며 인과관계는 미확정이다. binary 가 같다는 사실만으로 code 결함을 배제하지 않는다.
+
+- **관측** ✅: PN06 (USB) 의 물리 Caps Lock 누름·뗌과 remap 뒤 오른쪽 Control 신호가 모두 들어온 구간에서 모드 전환이 빠졌다.
+  [Orca 원장](apps/orca.md#caps-lock-누락-관측-2026-10-29)에 횟수와 app version 을 둔다. 누락과 외부 관찰기의 activity counter 변화가 함께 나타났다.
+  종류를 구분한 검사에서는 `keyDown` counter 가 변했고, 해당 누름·뗌 구간의 mouse·scroll counter 변화는 없었다.
+- **code** ✅: `HomiInputController` 는 event 처리 시점에 `Activity.now()` 를 읽고, `ModifierTap.release` 는 press 때와 counter 가 다르면 `.none` 을 반환한다.
+  [Apple 의 counter 정의](https://developer.apple.com/documentation/coregraphics/cgeventsource/counterforeventtype(_:eventtype:)?changes=_2_4)는
+  WindowServer 시작 이후의 누적 횟수다. event 에 붙은 과거 snapshot 이 아니다 (2026-10-29 조회).
+- **가설** 🔶: event 전달과 live counter 조회의 시점 차이로, tap 밖의 key 도 중간 입력으로 오인할 여지가 있다.
+  외부 관찰기에는 누르는 중 입력이 없고 다음 입력이 release 뒤 214ms·290ms 인 사례에서도 counter 가 변했다.
+  homi 가 **실제로 읽은** counter·취소 사유를 확보한 결과는 아니다. 다른 process 의 snapshot 을 같다고 단정하지 않는다.
+- **측정 한계**: 첫 streaming 관찰기는 callback 밖에서도 같은 run loop 에서 출력·TIS·app·mapping 질의를 했다.
+  이 부하가 관찰을 늦출 수 있어 현재 도구는 수집을 멈춘 뒤 출력하고 `counterSampleLagMs` 를 남긴다.
+  HID tap 단계의 Quartz timestamp 는 단위 해석이 맞지 않는 값을 관측해 시간 간격의 증거에서 제외했다. 도구는 session tap 만 쓴다.
+  교정 뒤 batch 방식은 실행 smoke check 까지만 했으며, 실입력 검사를 다시 통과했다고 세지 않는다.
+- **현재 판단**: 포착한 누락에서 key 신호 자체가 소실된 keyboard 결함 가능성은 낮아졌다. software 판정 경로를 먼저 조사한다.
+  homi 단독 결함·macOS 변화·app 과의 상호작용 중 원인은 미확정이다. 초기 읽기 전용 관측에서는 설치본·system 설정을 바꾸지 않았다.
+  이후 교정본의 전환 실패와 rollback 은 [교훈](lessons.md#event-snapshot-실험본이-caps-lock-전환을-전부-거부한다-2026-10-29-rollback), 실제 전달 경로의 관측은 아래에 둔다.
+  `activity` 검사를 무조건 없애면 Ctrl 조합·⌘C·⌘Tab 을 tap 으로 잘못 처리할 수 있어 즉시 적용하지 않는다.
+- **후속 code review**: [전환 판정의 반례와 검증 공백](stability-review.md#caps-lock-전환-code-review-2026-10-29)을 확인했다.
+  처리 지연만으로 정상 tap 을 버리는 model 은 성립하지만, 이것을 이번 실관측의 원인 확정으로 확대하지 않는다.
+- **13:20 동시 비교** ✅: [Orca 의 실제 IMK 비교](apps/orca.md#기존-판정과-gesture-후보의-동시-비교-2026-10-29-1320-kst)에서
+  관찰상 단독 tap 29개 중 기존 코드가 4개를 거부했고 gesture 후보는 전부 인정했다. keyboard 신호 누락과 판정 거부를 분리했다.
+  당시 press·release 의 live counter 값 자체는 모두 log 에 넣지 않았으므로, 어떤 event 가 counter 를 바꾸었는지까지 특정한 것은 아니다.
+
+읽기 전용 도구: `swift run caps-probe --seconds 90`. HID 는 Caps Lock element 만, Quartz 는 해당 modifier 신호와 인접 입력의 시각·counter 차이만 본다.
+일반 key code·문자는 조회·출력하지 않는다. 권한은 요청 없이 `BLOCKED`, 관측 누락·buffer 초과는 `INCOMPLETE` 로 표시한다.
+app·source·mapping 은 시작·종료 snapshot 이므로 event 마다의 client 를 보증하지 않는다. homi 모드 변경은 별도 subsystem log 와 대조한다.
+
+### Quartz 와 IMK 사이 modifier event 의 연결 (2026-10-29)
+
+macOS 27.2 (`26B123`)에서 기존 전환 판정을 유지한 진단본으로 Caps Lock 단독 누름·뗌을 관찰했다.
+Quartz 의 session event tap 은 별도 thread 에서 원본을 반환하고, IMK 쪽은 수식키의 시각·방향·opaque metadata 만 비교했다.
+일반 입력의 key code·문자는 읽거나 기록하지 않았다.
+
+- **timestamp 는 같지 않다** ✅: Ghostty 의 첫 표본은 Quartz press `21796.264679750`, IMK press `21796.267433958` 초였다.
+  다른 press·release 에서도 수 ms 차이가 났다. IMK event 의 `cgEvent.timestamp` 도 원본 Quartz 시각을 되찾아 주지 않았다.
+  따라서 부동소수점 변환 오차만 허용하는 timestamp 검색으로 실제 IMK event 를 연결할 수 없다.
+- **IMK callback 은 중복될 수 있다** ✅: Orca 에서 Quartz press `21870.013258208` 하나에
+  IMK press `21870.017572833`·`21870.018796458` 이 왔다. release 도 두 번 왔고, 실제 mode 변경은 한 번이었다.
+  같은 시각의 중복만 제거하면 되는 문제가 아니다.
+- **`eventSourceUserData` 도 보존되지 않았다** ✅: Caps Lock 을 remap 한 오른쪽 Control event 에만
+  식별용 상수를 넣은 짧은 실험에서 IMK 는 `0`을 반환했다. 이 결과는 모든 app 의 모든 metadata 가 사라진다는 뜻이 아니다.
+  원본 key code·flags·기존 전환 판정은 유지했다. 다음 비교 진단본에서는 이 metadata 쓰기를 제거했다.
+- **OS update 의 영향은 미확정**: 이전 OS 에서 같은 비교 실험을 하지 않았다. 위 차이가 27.2 에서 새로 생긴 것인지는 알 수 없다.
+- **remap 된 modifier 의 직접 상태 조회도 관찰과 같지 않았다** ✅: 13:48 의 Caps Lock 긴 누름 4회에서
+  관찰기는 오른쪽 Control 의 press 뒤 아직 release 가 없는 상태였으나, `CGEventSource.keyState(.hidSystemState, key: 62)` 는 모두 `false`였다.
+  이 조회를 hold 의 추가 거부 조건으로 쓰지 않는다. 같은 gesture 의 관찰 상태·활동·경과 시간으로 판단한 뒤 네 번 모두 release 전에 실행됐고
+  주인도 정상 동작을 확인했다. 다른 key·source state ID·OS version 에서의 반환값까지 일반화하지 않는다.
+
+새 후보는 물리 press·release 를 관찰 단계에서 gesture 번호로 묶고, 같은 app·source context 의 미처리 press 가
+하나일 때만 IMK 에 연결한다. IMK timestamp 에 가까운 event 를 고르는 방식은 쓰지 않는다.
+중복 callback·관찰 공백·buffer 초과·context 변경을 test 하되, callback 의 모든 전달 순서까지 증명한 것은 아니다.
+[Orca 동시 비교](apps/orca.md#기존-판정과-gesture-후보의-동시-비교-2026-10-29-1320-kst)에서 실제 연결을 확인했다.
+관찰 권한이 없거나 대응이 모호한 press 는 해당 gesture 에 기존 counter 판정을 유지한다. 이 fallback 에는 기존 시간차의 한계가 남는다.
+관찰 공백·context 변경으로 이미 연결한 release 를 잃으면 전환하지 않는다. 입력칸 종료 때는 release 를 계속 기다리지 않고 binding 을 버린다.
+새 action 의 실제 적용과 일상 사용 검증은 별도이며 **비교 결과만으로 간헐 누락의 해결을 선언하지 않는다**.
 
 ### homi process 와 HID mapping 의 수명
 

@@ -102,26 +102,26 @@ func rapidToggles() {
 @Test("짧게 단독으로 눌렀다 떼면 tap")
 func modifierTap() {
     var tap = ModifierTap()
-    tap.press(at: 10.0, activity: [1, 2, 3])
-    let result = tap.release(at: 10.1, activity: [1, 2, 3])
+    tap.press(at: 10.0, activity: .counter([1, 2, 3]))
+    let result = tap.release(at: 10.1, activity: .counter([1, 2, 3]))
     #expect(result == .tap)
 }
 
 @Test("오래 단독으로 누르고 있다가 떼면 hold — Caps Lock 은 대문자 고정")
 func modifierHold() {
     var tap = ModifierTap()
-    tap.press(at: 10.0, activity: [1])
-    let result = tap.release(at: 10.0 + ModifierTap.holdAfter, activity: [1])
+    tap.press(at: 10.0, activity: .counter([1]))
+    let result = tap.release(at: 10.0 + ModifierTap.holdAfter, activity: .counter([1]))
     #expect(result == .hold)
 }
 
 @Test("⌘C·⌘Tab 처럼 사이에 key 가 눌렸으면 아무것도 아니다 (입력기가 그 key 를 못 봤어도)")
 func modifierWithKeyInBetween() {
     var tap = ModifierTap()
-    tap.press(at: 10.0, activity: [1, 2, 3])
-    let short = tap.release(at: 10.1, activity: [2, 2, 3])
-    tap.press(at: 20.0, activity: [1, 2, 3])
-    let long = tap.release(at: 21.0, activity: [1, 3, 3])
+    tap.press(at: 10.0, activity: .counter([1, 2, 3]))
+    let short = tap.release(at: 10.1, activity: .counter([2, 2, 3]))
+    tap.press(at: 20.0, activity: .counter([1, 2, 3]))
+    let long = tap.release(at: 21.0, activity: .counter([1, 3, 3]))
     #expect(short == .none)
     #expect(long == .none)
 }
@@ -129,10 +129,10 @@ func modifierWithKeyInBetween() {
 @Test("다른 수식키가 끼면 취소, 누른 적 없이 떼면 아무것도 아니다")
 func modifierCancelled() {
     var tap = ModifierTap()
-    tap.press(at: 10.0, activity: [1])
+    tap.press(at: 10.0, activity: .counter([1]))
     tap.cancel()
-    let afterCancel = tap.release(at: 10.1, activity: [1])
-    let withoutPress = tap.release(at: 10.2, activity: [1])
+    let afterCancel = tap.release(at: 10.1, activity: .counter([1]))
+    let withoutPress = tap.release(at: 10.2, activity: .counter([1]))
     #expect(afterCancel == .none)
     #expect(withoutPress == .none)
 }
@@ -140,10 +140,10 @@ func modifierCancelled() {
 @Test("누르고 있는 채로 hold 시간이 지나면 그때 hold — 뗄 때는 아무것도 아니다 (macOS 의 Caps Lock 처럼)")
 func holdReachedWhilePressed() {
     var tap = ModifierTap()
-    tap.press(at: 10.0, activity: [1])
-    let reached = tap.holdReached(activity: [1])
-    let again = tap.holdReached(activity: [1])
-    let released = tap.release(at: 11.0, activity: [1])
+    tap.press(at: 10.0, activity: .counter([1]))
+    let reached = tap.holdReached(at: 10.5, pressedAt: 10, activity: .counter([1]))
+    let again = tap.holdReached(at: 10.5, pressedAt: 10, activity: .counter([1]))
+    let released = tap.release(at: 11.0, activity: .counter([1]))
     #expect(reached)
     #expect(!again)
     #expect(released == .none)
@@ -152,9 +152,9 @@ func holdReachedWhilePressed() {
 @Test("hold 시간 전에 다른 key 가 눌렸으면 hold 가 아니다")
 func holdNotReachedWithKey() {
     var tap = ModifierTap()
-    tap.press(at: 10.0, activity: [1])
-    let reached = tap.holdReached(activity: [2])
-    let released = tap.release(at: 10.1, activity: [2])
+    tap.press(at: 10.0, activity: .counter([1]))
+    let reached = tap.holdReached(at: 10.5, pressedAt: 10, activity: .counter([2]))
+    let released = tap.release(at: 10.1, activity: .counter([2]))
     #expect(!reached)
     #expect(released == .none)
 }
@@ -162,10 +162,10 @@ func holdNotReachedWithKey() {
 @Test("누른 적 없거나 이미 뗀 뒤의 timer 는 아무것도 아니다")
 func holdReachedAfterRelease() {
     var tap = ModifierTap()
-    let before = tap.holdReached(activity: [1])
-    tap.press(at: 10.0, activity: [1])
-    _ = tap.release(at: 10.1, activity: [1])
-    let after = tap.holdReached(activity: [1])
+    let before = tap.holdReached(at: 10.5, pressedAt: 10, activity: .counter([1]))
+    tap.press(at: 10.0, activity: .counter([1]))
+    _ = tap.release(at: 10.1, activity: .counter([1]))
+    let after = tap.holdReached(at: 10.5, pressedAt: 10, activity: .counter([1]))
     #expect(!before)
     #expect(!after)
 }

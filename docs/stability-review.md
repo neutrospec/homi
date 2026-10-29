@@ -17,6 +17,8 @@
 
 | 안건 | 판단 · 중요도 | 문서·교훈에 비춘 다음 행동 |
 |---|---|---|
+| Caps Lock 전환 누락 | **2026-10-29 실제 누락 관측, tap 판정의 교정 검토 우선** · 기본 한/영 전환에 직접 영향 | [code review 의 반례](#caps-lock-전환-code-review-2026-10-29)에서 live counter 와 event 시점의 혼용을 확인했다. [실관측의 원인](macos-input.md#caps-lock-전환-누락-관측-2026-10-29)은 미확정이다. 전달 지연을 바꾼 regression 을 먼저 준비하며, 단축키 보호를 없애지 않는다. |
+| Telegram 복귀 뒤 첫 key 의 영문 | **2026-10-29 주인 보고, 기본 입력의 우선 조사** | [원장](apps/telegram.md#창-전환-뒤-첫-key-가-영문-2026-10-29-미해결). Caps 를 누르지 않고 다음 key 부터 한글로 회복한다는 조건 때문에 tap 취소와 분리한다. 첫 key 의 IMK 도착·app 식별·mode·client 반영을 가르며, 주입한 activation model 을 실제 원인으로 단정하지 않는다. |
 | 현재 설치본의 입력칸 이동 | **최우선 확인** · 실제 발생했던 회귀 | 주인의 변경 전 기본 입력 정상 보고는 [후속 기록](lessons.md#2026-10-09-activation-교정callback-관측)에 있다. Chrome 의 개별 경로 확인과 model 통과는 구분한다. |
 | activation 과 mode 초기화의 경계 | **재현 test 후 교정·설치** · 기본 입력에 직접 영향 | 아래 두 counterexample 의 mode 경계를 `ModeActivation` 으로 교정했다. [검증·제한](lessons.md#재활성화가-mode-를-reset-하고-실제-client-의-시작-규칙을-놓친다-2026-10-09)과 [LaunchBar 요구](apps/launchbar.md)를 함께 확인한다. |
 | callback 이 확정한 mark 의 세대 | **관측 연결, 정책 교정 보류** · 유실 위험 | [client 호출 단계](macos-input.md#client-호출-단계의-관측)를 기록한다. token 만으로 old/new mark 의 확정 대상을 결정하지 않으며 다음 key 까지 commit 을 미루지 않는다. |
@@ -26,6 +28,54 @@
 | Enter·ESC·Tab resend 의 순서와 대상 | **검증 채택, 교정 보류** · 명령 유실·잘못된 대상의 위험, 빈도 미상 | own probe 의 두 창·두 app 으로 순서와 focus 변경을 확인한다. [재전송 교훈](lessons.md#terminal-에서-조합-중-escenter-가-사라진다-2026-09-25-m4--apple-입력기-때부터) 때문에 일괄 제거·자동 drop·다른 post API 로의 교체를 바로 적용하지 않는다. |
 | 종료 뒤 Caps Lock remap | **검증 채택, 교정 보류** · 기본 key 에 영향, macOS 27 실관측 없음 | [mapping 수명](macos-input.md#homi-process-와-hid-mapping-의-수명)을 근거로 일반 종료·설치 종료와 crash 뒤 상태를 구분한다. snapshot 에 mapping 을 포함한다. guardian daemon 은 추가하지 않는다. |
 | Windows App 의 한/영 key 전달 | **2026-10-10 Caps Lock → 오른쪽 Alt 는 주인 확인, LANG1 은 전환 실패** · 기본값 꺼짐 | [원장](apps/windows-app.md#목적지-선택-2026-10-10)의 목적지 선택과 검증 범위를 따른다. [선택한 전환 key 의 일반화](apps/windows-app.md#전환-key-일반화-검토-2026-10-10)는 검증 채택: Shift+Space 의 별도 probe 부터, 오른쪽 ⌘·⌥ 는 단축키 보존까지 확인한다. 원격 Windows 설정·일반 조합 경로·local mode 소유는 바꾸지 않는다. |
+
+### Caps Lock 전환 code review (2026-10-29)
+
+**후속 실험**: event snapshot 교정은 Debug·Release 191개 test 를 통과했으나 실제 IMK 에서 모두 `missing` 이 되어
+Caps 전환이 막혔다. 기존 설치본으로 복구했으며 [실패·다음 진단](lessons.md#event-snapshot-실험본이-caps-lock-전환을-전부-거부한다-2026-10-29-rollback)을 따른다.
+실제 IMK 는 [timestamp·metadata 를 보존하지 않았고 중복 callback 도 보냈다](macos-input.md#quartz-와-imk-사이-modifier-event-의-연결-2026-10-29).
+timestamp 검색은 철회했다. gesture 연결 후보는 기존 판정을 유지한 별도 설치본에서 [실제 29쌍을 연결](apps/orca.md#기존-판정과-gesture-후보의-동시-비교-2026-10-29-1320-kst)했다.
+기존 코드만 거부한 4개 tap 을 확인한 뒤 종료 경계 regression 을 보완했다. Debug·Release 201개 test 를 통과한
+[교정본을 설치](lessons.md#정상-caps-tap-을-기존-판정이-거부한다-2026-10-29)했고 실제 짧은 전환 34회와 주인의 누락 개선 확인을 얻었다.
+같은 시험의 긴 누름은 release 에서 처리돼 보완했고, 이후 네 번 모두 누른 채 처리됨을 관측했다. 주인도 긴 누름의 정상 동작을 확인했다.
+unit test·비교 action 을 실제 입력 성공으로 확대하지 않는다.
+
+제품 코드 기준은 `4326e70` 다. 읽기 전용 관찰 뒤 `ModifierTap`·`ModifierKeys`·IMK adapter·hold timer·mapping·기존 test 를 검토했다.
+현재 source 를 `/private/tmp` 에 compile 한 model 에서 아래 반례를 확인했다. **시간·counter·mapping 소실은 주입한 조건**이며,
+실제 IMK 가 오늘 그 순서로 처리했다는 증명은 아니다. 이 code review 당시에는 제품 코드·설치본·system 설정을 바꾸지 않았다.
+
+1. **우선 교정 검토 — tap 의 시간 구간과 counter 의 시간 구간이 다르다.**
+   [HomiInputController](../Sources/homi/HomiInputController.swift)의 `Activity.now()` 는 처리할 때의 누적 횟수이고,
+   [ModifierEvent adapter](../Sources/homi/Client.swift)는 원래 event timestamp 를 붙인다.
+   [ModifierTap.release](../Sources/InputSession/ModifierTap.swift)는 counter 차이를 무조건 누르는 동안의 활동으로 해석한다.
+   model 의 물리 시각은 press `10.0`, release `10.1`, 다음 key `10.3` 이다. press 처리 `10.01` 은 같게 두고
+   release 처리를 `10.11 → 10.4` 로 옮기자 결과가 `toggle → none` 으로 바뀌었다. **event 전달 순서가 맞아도 정상 tap 을 버린다.**
+   반대로 ⌘C 처럼 IMK 에 오지 않는 key 가 `10.05` 에 발생하고 press 를 `10.06` 에 처리하면,
+   두 sample 에 이미 같은 횟수가 들어가 단축키를 tap 으로 인정한다. 시간 구간이 잘못된 하나의 원인에서 거짓 거부·거짓 허용이 모두 나온다.
+   이 중 거짓 거부가 [혼합 입력의 누락](apps/orca.md#caps-lock-누락-관측-2026-10-29)과 가장 잘 맞지만, 실제 homi 의 snapshot 은 아직 없다.
+2. **별도 교정 후보 — hold timer 가 release 미도착을 계속 누름으로 취급한다.**
+   [HomiInputController.capsLockHeld](../Sources/homi/HomiInputController.swift)는 현재 key 의 누름 상태를 확인하지 않고,
+   `ModifierTap.holdReached` 는 armed·counter 일치만 본다. 물리 release `10.1` 의 전달이 `10.6` 으로 늦고 timer 가 `10.5` 에 먼저 실행되면,
+   model 은 대문자 고정 action 을 내고, 뒤늦은 release 는 `held` 때문에 버렸다. 짧은 tap 의 timestamp 로 재판정하지 않는다.
+   이 순서의 실제 발생은 미관측이다. timer 수명 교정은 유지하며, 떼기 전 대문자 고정 요구를 없애는 변경으로 대신하지 않는다.
+3. **별도 교정 후보 — 좌우 modifier 를 합친 flag 로 오른쪽 key 의 누름·뗌을 판정한다.**
+   `KeyEvent` adapter 는 좌우 정보를 버리고, [ModifierKeys.track](../Sources/InputSession/ModifierKeys.swift)는 `.control` 이 남아 있으면 press 로 본다.
+   왼쪽 Control 을 누른 채 Caps Lock 을 눌렀다 떼면, Caps release 뒤에도 `.control` 이 남아 timer 를 다시 건다.
+   model 은 이 상태에서 Caps 를 누르고 있지 않은데 대문자 고정 action 을 냈다. `.command`·`.option` 도 같은 판정 방식이다.
+   양쪽 key 의 상태를 구분할 검증이 필요하며, 이번 단독 Caps 누락의 원인으로 지목하지 않는다.
+4. **별도 교정 후보 — 같은 remap 경로이면 실제 mapping 을 확인하지 않는다.**
+   [CapsLockMapping.apply](../Sources/homi/CapsLockMapping.swift)는 `applied == route` 일 때 read 전에 성공을 반환한다.
+   model 은 적용 후 mapping 을 비운 다음 같은 `.homi` 를 요청해도 성공을 반환했고 mapping 은 비어 있었다.
+   [mapping 수명](macos-input.md#homi-process-와-hid-mapping-의-수명)과 cache 의 수명이 다르지만, `SourceWatcher` 의 invalidate 는 wake 에만 있다.
+   이번 관측에는 오른쪽 Control 신호가 있었으므로 이 경로를 누락의 우선 원인으로 삼지 않는다. 다른 도구의 mapping 을 보존하는 기존 교훈도 지킨다.
+
+**검증 공백**: `ToggleTests` 의 첫 key 검사는 이미 인정된 `.toggle` 을 직접 넣고, `ModifierKeysTests` 는 counter 증가가 누르는 동안의 입력이라고 전제한다.
+`HoldTimerTests` 는 owner 수명을 검사한다. 이 test 들의 통과는 위 시간 구간·전달 지연·좌우 구분의 반례를 배제하지 않는다.
+거부된 modifier 는 `guard let action` 에서 기록 없이 반환하므로, 기존 ring buffer 만으로 counter 불일치·cancel·hold 를 구분할 수도 없다.
+
+다음 교정의 기준은 **같은 물리 event 순서에서 전달 지연만 달라져도 tap·chord 의 뜻은 같아야 한다**는 것이다.
+정상 tap → 다음 key, 보이지 않는 Ctrl·⌘ 단축키, 짧은 tap 의 늦은 release, 실제 hold, lifecycle 취소를 함께 검증한다.
+단순 counter 제거·tap 을 press 에서 확정·임의 유예 시간은 단축키·대문자 고정 요구를 보존하지 못하므로 바로 적용하지 않는다.
 
 ### activation 의 두 counterexample
 

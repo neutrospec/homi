@@ -4,7 +4,7 @@
 |---|---|
 | bundle ID | `com.mitchellh.ghostty` |
 | 엔진 | 자체 (`SurfaceView_AppKit.swift`) |
-| 확인한 version | 1.3.1 (15212) · 2026-09-25 · macOS 27.0 |
+| 확인한 version | 조합·한자: 1.3.1 (15212) · 2026-09-25 · macOS 27.0. Caps 진단: 1.4.0 (18457) · 2026-10-29 · macOS 27.2 |
 | homi 규칙 | ESC·Ctrl-B·Ctrl-A(Ctrl 단독) → 영문, 조합 중 Return·keypad Enter·ESC·Tab 다시 보내기, 한자는 조합 중인 글자만 |
 
 ## 특징
@@ -43,3 +43,4 @@
 |---|---|---|
 | 2026-09-25 | 1.3.1 | F18 이 샘 → 수식키 전환, 조합 중 Enter·ESC·Tab 다시 보내기 (`c08572b`) |
 | 2026-09-25 | 1.3.1 | 선택 영역을 한자 변환에서 뺌 — 선택은 출력이다 (`c884edd`) |
+| 2026-10-29 | 1.4.0 | Caps 단독 비교에서 Quartz 와 IMK 의 timestamp 불일치 확인. [전달 구조 관측](../macos-input.md#quartz-와-imk-사이-modifier-event-의-연결-2026-10-29). app 우회 추가 없음 |

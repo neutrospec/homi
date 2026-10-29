@@ -13,6 +13,7 @@ import Synchronization
 nonisolated final class HomiInputController: IMKInputController {
     private let session = SessionDriver(hanja: hanjaDictionary)
     private var modifierKeys = ModifierKeys()
+    private var modifierBinding = ModifierEventBinding()
     private lazy var capsLockHold = HoldTimer(owner: self)
     /// 이 controller 가 맡은 입력칸의 app — controller 는 client 하나에 묶여 있어 바뀌지 않는다.
     private var app: String?
@@ -61,7 +62,7 @@ nonisolated final class HomiInputController: IMKInputController {
         let id = app ?? "unknown"
         log.info("deactivate \(id, privacy: .public), controller: \(self.traceID, privacy: .public)")
         record("deactivate \(id)")
-        cancelModifiers()
+        cancelModifiers(endingGesture: true)
         let target = client().map { Client(proxy: $0, owner: self) }
         session.deactivate { target?.apply($0) }
     }
@@ -113,7 +114,7 @@ nonisolated final class HomiInputController: IMKInputController {
                 return false
             case .leftMouseDown:
                 record("mouseDown")
-                cancelModifiers()
+                cancelModifiers(endingGesture: true)
                 commit()
                 return false
             default:
@@ -152,9 +153,27 @@ nonisolated final class HomiInputController: IMKInputController {
     /// 수식키 — tap·hold 의 판정과 뜻(한/영 전환·한자·대문자 고정)은 `ModifierKeys` 가 주인의 설정대로 정하고, 여기서는 그 일을 한다.
     private func modifiersChanged(_ event: NSEvent, app: String, client: Client) {
         let profile = profile(for: app)
-        let result = modifierKeys.changed(ModifierEvent(event, activity: Activity.now()), profile: profile)
+        guard !profile.passThrough else { cancelModifiers(endingGesture: true); return }
+        let raw = ModifierEvent(event, activity: LegacyActivity.now())
+        let observer = ModifierActivityObserver.shared
+        let translated = modifierBinding.translate(raw,
+            claim: { observer.claim(keyCode: raw.keyCode, app: app) },
+            release: { observer.release(for: $0, app: app) })
+        let result = modifierKeys.changed(translated, profile: profile)
         capsLockHold.cancel()
         if result.startsHoldTimer { scheduleCapsLockHold() }
+        if [54, 61, 62].contains(event.keyCode) {
+            let origin: String
+            switch translated.activity {
+            case .events: origin = "event"
+            case .counter: origin = "legacy"
+            case .missing: origin = "missing"
+            }
+            // 전환 수식키의 판정만 기록한다. 일반 입력 key code·문자는 포함하지 않는다.
+            let phase = translated.isDown ? "press" : "release"
+            let action = result.action.map { String(describing: $0) } ?? "none"
+            log.info("modifier decision: \(phase, privacy: .public), evidence: \(origin, privacy: .public), action: \(action, privacy: .public), controller: \(self.traceID, privacy: .public)")
+        }
         guard let action = result.action else { return }
         modeActivation.inputStarted(app: app, trusted: self.app != nil)
         record("modifier kc=\(event.keyCode) → \(action)")
@@ -174,19 +193,27 @@ nonisolated final class HomiInputController: IMKInputController {
     }
 
     /// key 를 치거나 입력칸을 떠났다 — 누르고 있던 수식키는 tap 이 아니다.
-    private func cancelModifiers() {
+    private func cancelModifiers(endingGesture: Bool = false) {
         modifierKeys.cancel()
+        if endingGesture { modifierBinding.end() }
+        else { modifierBinding.cancel() }
         capsLockHold.cancel()
     }
 
     /// Caps Lock 을 누르고 `holdAfter` 가 지나면, 아직 단독으로 누르고 있을 때 대문자 고정을 뒤집는다 — 떼기 전에 (macOS 처럼).
     private func scheduleCapsLockHold() {
-        capsLockHold.schedule(after: ModifierTap.holdAfter) { $0.capsLockHeld() }
+        guard let pressTime = modifierKeys.capsLockPressTime else { return }
+        let delay = max(0, pressTime + ModifierTap.holdAfter - ProcessInfo.processInfo.systemUptime)
+        capsLockHold.schedule(after: delay) { $0.capsLockHeld() }
     }
 
     private func capsLockHeld() {
-        guard modifierKeys.capsLockHeld(activity: Activity.now()) == .capsLock else { return }
+        let evidence = ModifierActivityObserver.shared.hold(for: modifierKeys.capsLockPressTime,
+            captured: modifierBinding.usesCapturedCaps)
+        guard modifierKeys.capsLockHeld(at: ProcessInfo.processInfo.systemUptime,
+            pressedAt: evidence.pressedAt, activity: evidence.activity) == .capsLock else { return }
         record("caps lock hold")
+        log.info("modifier hold: caps lock, controller: \(self.traceID, privacy: .public)")
         CapsLockState.toggle()
     }
 
@@ -289,7 +316,7 @@ nonisolated final class HomiInputController: IMKInputController {
         observeClient("sourceEnd.begin", lifecycle: true)
         defer { observeClient("sourceEnd.return", lifecycle: true) }
         log.info("source end handled, controller: \(self.traceID, privacy: .public)")
-        cancelModifiers()
+        cancelModifiers(endingGesture: true)
         let target = client().map { Client(proxy: $0, owner: self) }
         session.sourceChanged(selected: selected) { target?.apply($0) }
     }
@@ -298,7 +325,7 @@ nonisolated final class HomiInputController: IMKInputController {
         observeClient("controllerClose.begin", lifecycle: true)
         defer { observeClient("controllerClose.return", lifecycle: true) }
         log.info("closing controller: \(self.traceID, privacy: .public)")
-        cancelModifiers()
+        cancelModifiers(endingGesture: true)
         commit()
         let controller = Unchecked(self)
         MainActor.assumeIsolated {
@@ -359,12 +386,12 @@ nonisolated struct Unchecked<Value>: @unchecked Sendable {
     init(_ value: Value) { self.value = value }
 }
 
-/// system 전체의 key·mouse 누름 횟수. 입력기가 못 본 key(⌘C 의 C, ⌘Tab 의 Tab)도 센다 — 권한이 필요 없다.
-nonisolated enum Activity {
-    static func now() -> [UInt32] {
-        [CGEventType.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel].map {
+/// 관찰 권한이 없는 환경의 기존 판정. event 시각과 조회 시각이 다르다는 한계가 남는다.
+nonisolated enum LegacyActivity {
+    static func now() -> ModifierActivity {
+        .counter([CGEventType.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel].map {
             CGEventSource.counterForEventType(.hidSystemState, eventType: $0)
-        }
+        })
     }
 }
 

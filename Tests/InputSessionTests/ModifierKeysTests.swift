@@ -12,7 +12,9 @@ private let leftShift: UInt16 = 56
 
 /// flagsChanged 하나 — `modifiers` 는 바뀐 뒤 눌려 있는 수식키.
 private func flags(_ keyCode: UInt16, _ modifiers: Modifiers, at time: Double, activity: [UInt32] = [0]) -> ModifierEvent {
-    ModifierEvent(keyCode: keyCode, modifiers: modifiers, time: time, activity: activity)
+    let flag: Modifiers = keyCode == capsLock ? .control : keyCode == rightCommand ? .command : .option
+    return ModifierEvent(keyCode: keyCode, modifiers: modifiers, time: time, activity: .counter(activity),
+        isDown: modifiers.contains(flag))
 }
 
 private func profile(
@@ -69,8 +71,8 @@ func capsLockHeldWhilePressed() {
     var keys = ModifierKeys()
     let caps = profile([.capsLock])
     _ = keys.changed(flags(capsLock, .control, at: 10), profile: caps)
-    let held = keys.capsLockHeld(activity: [0])
-    let again = keys.capsLockHeld(activity: [0])
+    let held = keys.capsLockHeld(at: 10.5, pressedAt: 10, activity: .counter([0]))
+    let again = keys.capsLockHeld(at: 10.5, pressedAt: 10, activity: .counter([0]))
     let up = keys.changed(flags(capsLock, [], at: 11), profile: caps)
     #expect(held == .capsLock)
     #expect(again == nil)

@@ -18,6 +18,7 @@ enum HomiApp {
             fatalError("cannot create IMKServer — is homi running from its app bundle?")
         }
         log.info("started")
+        ModifierActivityObserver.shared.start()
         let watcher = SourceWatcher()
         withExtendedLifetime((server, watcher)) { app.run() }
     }

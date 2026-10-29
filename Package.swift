@@ -26,6 +26,7 @@ let package = Package(
         .executableTarget(name: "replace-app", path: "tools/replace-app"),
         .testTarget(name: "InstallTests", dependencies: ["replace-app"]),
         // 개발 도구 — 제품이 아니다 (tools/)
+        .executableTarget(name: "caps-probe", path: "tools/caps-probe"),
         .executableTarget(
             name: "tis",
             path: "tools/tis",

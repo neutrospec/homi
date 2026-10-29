@@ -49,6 +49,54 @@
 
 ## homi 의 결함
 
+### 정상 Caps tap 을 기존 판정이 거부한다 (2026-10-29)
+
+- **증상**: Caps Lock 단독 시험은 정상이지만 평소 입력을 섞으면 한/영 전환이 빠진다. keyboard 문제를 전제하지 않고 관찰했다.
+- **확인한 결함**: `4326e70`은 event 의 timestamp 와 처리 시점의 live counter 를 섞어 tap 을 판정한다.
+  물리 release 뒤에 생긴 활동도 release 를 늦게 처리하면 중간 입력으로 오인할 수 있다. 순수 반례는 [code review](stability-review.md#caps-lock-전환-code-review-2026-10-29)에 있다.
+- **실제 증거**: 같은 IMK callback 에서 기존 판정과 새 후보를 비교했다. [Orca 29쌍](apps/orca.md#기존-판정과-gesture-후보의-동시-비교-2026-10-29-1320-kst) 중
+  4개의 관찰상 단독 tap 을 기존 코드만 거부했다. 어떤 event 가 live counter 를 바꾸었는지는 별도로 남으며 OS update 와의 인과관계도 미확정이다.
+- **교정**: 별도 관찰 thread 가 물리 누름·뗌 사이의 활동과 gesture 번호만 기억한다. IMK 에서 유일하게 연결한 gesture 의 snapshot 으로 판단하고
+  mode 변경은 계속 IMK 안에서 동기적으로 처리한다. 중복 callback 은 같은 press 를 재사용하고 release 는 한 번만 적용한다.
+  권한 부재·모호한 press 에서는 기존 counter 경로를 유지한다. 그 경로의 시간차 한계까지 해결한 것은 아니다.
+- **함께 막은 경계**: 짧게 뗀 key 의 늦은 release 가 hold 로 오인되지 않도록 실제 눌림·같은 press·0.5초 경과를 함께 확인한다.
+  좌우 modifier 를 구분한다. keyDown 뒤 중복 press 는 다시 arm 하지 않으며, 입력칸 종료로 release 가 안 와도 복귀 후 첫 새 tap 을 막지 않는다.
+  마지막 경계는 실패하는 regression 을 먼저 확인했다. timestamp 검색과 metadata 식별 실험은 제품 코드에서 제거했다.
+- **검증 범위**: 비교 진단은 새 action 을 실행하지 않았다. 실제 적용 뒤의 입력·hold·focus 이동은 주인 시험으로 확인한다. push 는 그 뒤다.
+- **설치**: `swift build`, Debug·Release 전체 201개 test 통과(HangulCore 18, InputSession 149, Homi 31, Install 3).
+  13:32 KST 에 설치했고 13:33 에 process 시작·gesture 관찰 준비를 확인했다. 자체 인증서 `homi code signing`,
+  CDHash `686f2190b15963148e871777aee4a950064266f7`. 이 설치본은 비교 진단이 아니라 새 판정을 실제 mode 변경에 적용한다.
+  일반 조합·Windows App mapping·Telegram 첫 key 의 별도 문제는 수정하지 않았다.
+- **사용 확인**: [13:35 시험](apps/orca.md#교정본의-실제-사용-2026-10-29-1335-kst)에서 짧은 전환 34회가 모두 mode 변경으로 이어졌고,
+  주인이 누락 개선을 확인했다. 다만 긴 누름 4회는 release 에서 대문자 고정을 처리했다. 이 결과를 hold timer 성공으로 확대하지 않는다.
+  remap 된 오른쪽 Control 의 `keyState(.hidSystemState, key: 62)` 를 추가 veto 로 쓰던 hold 경계를 제거하고,
+  이미 연결한 같은 press 의 관찰 상태로 판단한다. 직접 조회와 관찰의 차이를 함께 기록해 확인한다.
+  이 보완본도 `swift build`, Debug·Release 201개 test 를 통과했다. 13:45 에 시작된 설치본의 CDHash 는
+  `cd0baf2767e62f15aceca5a9ad877522ff270b1b`이며 자체 인증서 서명·gesture 관찰 준비를 확인했다.
+  13:48 에 긴 누름 4회 모두 release 전에 대문자 고정을 처리했고 release 에서는 다시 처리하지 않았다. 주인도 정상 동작을 확인했다.
+  직접 조회는 네 번 모두 `false`, 관찰된 눌림은 `true`였다. [API 관측의 범위](macos-input.md#quartz-와-imk-사이-modifier-event-의-연결-2026-10-29)를 따른다.
+  이번 재현 시험의 통과를 모든 app·관찰 불가 환경·일상 사용 기간의 무결함으로 확대하지 않는다.
+
+### event snapshot 실험본이 Caps Lock 전환을 전부 거부한다 (2026-10-29, rollback)
+
+- **증상**: live counter 의 시간차를 교정한 실험본 설치 후 주인이 Caps Lock 전환이 전혀 되지 않는다고 보고했다.
+  12:25–12:26 의 실제 IMK log 에 press·release 가 도착했지만 모두 `evidence: missing, action: none` 이었다.
+- **확인한 결함**: snapshot 을 찾지 못하면 전환하지 않는 경로를 넣었으나, 실제 IMK 와 Quartz event 의 연결을 설치 전에 검증하지 못했다.
+  생성한 CGEvent → NSEvent 의 timestamp test 는 실제 IMK bridge 의 표현을 검증하지 않는다.
+  후속 진단에서 [timestamp 불일치·중복 callback·metadata 미보존](macos-input.md#quartz-와-imk-사이-modifier-event-의-연결-2026-10-29)을 확인했다.
+- **검증의 한계**: Debug·Release 191개 test 는 모두 통과했다. 순수 판정·합성 event adapter·atomic store 의 통과를 실제 IMK 연결의 증거로 확대했다.
+- **대응**: 12:26 에 기존 서명본(CDHash `de243ec81f0f85b0d84c6520192e6aa068b62cfa`)으로 복구했고 주인이 전환 회복을 확인했다.
+  원래의 간헐 누락은 여전히 보고됐다. 당시 working tree 의 timestamp snapshot 교정은 실험 코드로 두고 재설치하지 않았다.
+  기존 `4326e70` 판정을 유지하고 수식키의 시각·방향만 비교하는 별도 진단본으로 실제 연결부터 확인한다. push 하지 않았다.
+  12:35 에 이 진단본을 설치했다. 원본 controller 의 `Activity.now()` 를 먼저 읽고 같은 값으로 판정하며,
+  관찰 기록은 비교 log 에만 쓴다(Release 기존 178개 test 통과). 진단 source 위치는 `build/modifier-diagnostic-path.txt` 에 있다.
+  13:15 에 gesture 연결을 **비교만 하는** 다음 진단본이 시작됐다. 실제 전환은 `4326e70`의 `ModifierKeys`·`ModifierTap`·adapter·timer 를
+  이름만 구분해 유지한다. 새 코드는 전환·대문자 고정을 실행하지 않고 제안 결과만 기록한다. metadata 를 쓰는 실험도 제거했다.
+  후보 코드의 Debug·Release 199개 및 별도 진단본의 Release 199개 test 가 통과했다. 실제 IMK 비교는 별도 검증이며 아직 통과로 세지 않는다.
+  진단 source 위치는 `build/modifier-shadow-path.txt` 에 있다. 이 분리 설치본을 working tree 전체와 같다고 취급하지 않는다.
+  자체 인증서 `homi code signing`, CDHash `c88f80e2defabf06d07a189380ce1159eea91b99`. 시작 log 의
+  `legacy decisions, gesture comparison only`와 관찰기 준비를 확인했다. 이후 [13:20 비교](apps/orca.md#기존-판정과-gesture-후보의-동시-비교-2026-10-29-1320-kst)에서 실제 연결을 확인했다.
+
 ### Mac LANG1 을 Windows 전용 한/영 전달로 취급한다 (2026-10-10, 미해결)
 
 - **증상**: Windows App 전달 옵션을 켜니 Caps Lock 대문자 고정은 사라졌지만 한/영 전환도 안 됐다 (주인).

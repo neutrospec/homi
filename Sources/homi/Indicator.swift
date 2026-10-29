@@ -73,6 +73,7 @@ final class SourceWatcher: NSObject {
     /// 잠에서 깨면 key mapping 이 풀렸을 수 있다 — 다시 건다.
     @objc func woke(_ note: Notification) {
         CapsLockRemap.invalidate()
+        ModifierActivityObserver.shared.setContext(app: nil, force: true)
         sourceChanged(note)
     }
 
@@ -95,6 +96,7 @@ final class SourceWatcher: NSObject {
         let app = front ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
         let route = CapsLockRoute.resolve(homiSelected: selected, app: app, preferences: settings)
         CapsLockRemap.apply(route)
+        ModifierActivityObserver.shared.setContext(app: selected ? app : nil)
         Indicator.shared.setVisible(selected)
         return selected
     }

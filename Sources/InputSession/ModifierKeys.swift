@@ -6,14 +6,19 @@ public struct ModifierEvent: Sendable, Equatable {
     public var modifiers: Modifiers
     /// event 의 시각 (초).
     public var time: Double
-    /// system 전체의 key·mouse 누름 횟수 — 사이에 다른 key 가 눌렸는지 본다 (`ModifierTap`).
-    public var activity: [UInt32]
+    /// 이 event 에 대응하는 활동 번호 — 현재 system counter 와 구분한다.
+    public var activity: ModifierActivity
+    public var isDown: Bool
+    public var oppositeSideDown: Bool
 
-    public init(keyCode: UInt16, modifiers: Modifiers, time: Double, activity: [UInt32]) {
+    public init(keyCode: UInt16, modifiers: Modifiers, time: Double, activity: ModifierActivity,
+        isDown: Bool, oppositeSideDown: Bool = false) {
         self.keyCode = keyCode
         self.modifiers = modifiers
         self.time = time
         self.activity = activity
+        self.isDown = isDown
+        self.oppositeSideDown = oppositeSideDown
     }
 }
 
@@ -55,6 +60,8 @@ public struct ModifierKeys: Sendable {
 
     public init() {}
 
+    public var capsLockPressTime: Double? { capsLock.pressTime }
+
     /// 수식키가 바뀌었다 (flagsChanged). `profile` 에 주인이 고른 전환 key·한자 key 가 있다.
     public mutating func changed(_ event: ModifierEvent, profile: AppProfile) -> Result {
         guard !profile.passThrough else {
@@ -66,25 +73,25 @@ public struct ModifierKeys: Sendable {
         case Self.rightCommand:
             option.cancel()
             capsLock.cancel()
-            let result = Self.track(&command, event, flag: .command, others: [.shift, .control, .option, .function])
+            let result = Self.track(&command, event, others: [.shift, .control, .option, .function])
             return Result(action: result == .tap ? Self.meaning(.rightCommand, .rightCommand, profile) : nil)
         case Self.rightOption:
             command.cancel()
             capsLock.cancel()
-            let result = Self.track(&option, event, flag: .option, others: [.shift, .control, .command, .function])
+            let result = Self.track(&option, event, others: [.shift, .control, .command, .function])
             return Result(action: result == .tap ? Self.meaning(.rightOption, .rightOption, profile) : nil)
         case Self.capsLock where profile.toggleKeys.contains(.capsLock):
             // 짧게 = 전환, 길게 = 대문자 고정 (macOS 와 같게). 길게는 보통 누르고 있는 동안 timer 가 처리한다 — 뗄 때의 hold 는 그러지 못했을 때.
             command.cancel()
             option.cancel()
-            let result = Self.track(&capsLock, event, flag: .control, others: [.shift, .command, .option, .function])
+            let result = Self.track(&capsLock, event, others: [.shift, .command, .option, .function])
             let action: Action? =
                 switch result {
                 case .tap: .toggle
                 case .hold: .capsLock
                 case .none: nil
                 }
-            return Result(action: action, startsHoldTimer: event.modifiers.contains(.control))
+            return Result(action: action, startsHoldTimer: event.isDown && capsLock.pressTime != nil)
         default:
             // 다른 수식키가 끼었다. (대문자 고정을 뒤집을 때 오는 echo 도 여기로 — 이미 판정이 끝난 뒤다.)
             cancel()
@@ -93,8 +100,8 @@ public struct ModifierKeys: Sendable {
     }
 
     /// Caps Lock 을 누른 지 `ModifierTap.holdAfter` 가 지났다 (IMK 층의 timer). 아직 단독으로 누르고 있으면 대문자 고정 — 한 번만.
-    public mutating func capsLockHeld(activity: [UInt32]) -> Action? {
-        capsLock.holdReached(activity: activity) ? .capsLock : nil
+    public mutating func capsLockHeld(at time: Double, pressedAt: Double?, activity: ModifierActivity) -> Action? {
+        capsLock.holdReached(at: time, pressedAt: pressedAt, activity: activity) ? .capsLock : nil
     }
 
     /// key 를 치거나 입력칸을 떠났다 — 누르고 있던 수식키는 tap 이 아니다.
@@ -114,11 +121,11 @@ public struct ModifierKeys: Sendable {
     }
 
     /// 수식키 하나의 누름·뗌을 판정기에 넘긴다. 누를 때 다른 수식키가 함께면 tap 이 아니다.
-    private static func track(_ tap: inout ModifierTap, _ event: ModifierEvent, flag: Modifiers, others: Modifiers)
+    private static func track(_ tap: inout ModifierTap, _ event: ModifierEvent, others: Modifiers)
         -> ModifierTap.Result
     {
-        guard !event.modifiers.contains(flag) else {
-            if event.modifiers.isDisjoint(with: others) {
+        guard !event.isDown else {
+            if event.modifiers.isDisjoint(with: others), !event.oppositeSideDown {
                 tap.press(at: event.time, activity: event.activity)
             } else {
                 tap.cancel()
