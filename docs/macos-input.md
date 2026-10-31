@@ -93,8 +93,8 @@ macOS 가 focus 전환 때 다른 source 를 복원하는 경로까지 없애지
   주인은 웹에서 ⌘Tab 복귀 직후 없었고, 그 창에서 기다리다가 다시 선택할 수 있었다고 정정했다. 다른 app 을 다시 다녀와 회복했다고 해석하지 않는다.
   접근성 menu 조회에는 ABC 만 있었지만 화면 전체·동일 입력칸 focus 는 미확인이라 보기 착오와 정상적인 context 제한도 배제하지 않는다.
 
-다음 재발에서는 app 이동·잠금·재설치로 상태를 바꾸기 전에, 시각·app bundle ID 와 `tis list --all`·`tis current`, homi PID·실행 경로·binary 식별,
-HID mapping 을 함께 확보한다. System Settings 에도 사라졌는지와 Secure Keyboard Entry 상태를 확인할 읽기 전용 관찰을 준비한다.
+다음 재발에서는 app 이동·잠금·재설치 전에 아래 `tis snapshot`으로 상태를 확보한다. System Settings의 등록이나 실제 menu 표시까지
+이 명령이 확인하는 것은 아니므로, 주인이 본 화면·시각과 함께 대조한다.
 
 - parent·mode 의 enabled 와 현재 source/layout 은 함께 읽는다. enabled 만으로 menu 의 선택 가능 여부를 판정하지 않는다.
 - `kTISPropertyInputSourceIsSelectCapable` 은 현재 상태와 무관한 **static capability**다. gray menu 의 detector 로 쓰지 않는다.
@@ -108,6 +108,42 @@ HID mapping 을 함께 확보한다. System Settings 에도 사라졌는지와 S
   ✅ (`Watcher.report`·`SourceWatcher.sourceChanged` + [Orca 동시 관측](apps/orca.md#input-menu-의-homi-누락-보고와-회복-2026-10-31-미해결)).
 
 이 관찰을 typing 경로에 넣거나 system 상태를 바꾸지 않는다. 관찰 중 `imklaunchagent` 를 종료하지 않는다.
+
+### 읽기 전용 availability snapshot (2026-11-01)
+
+`tools/tis`의 `snapshot`은 일회성 JSON 관측이다. 평소 `swift build --product tis`로 준비한 뒤,
+재발 시 agent의 shell에서 다음 명령을 실행한다. Terminal로 직접 이동하면 관측할 front app이 바뀔 수 있다.
+
+```sh
+.build/debug/tis snapshot
+```
+
+| 수집값 | 해석 범위 |
+|---|---|
+| 앞뒤 front app의 bundle ID·PID·launchDate, 현재 source | 관측 사이의 변화를 비교한다. 앞뒤가 같아도 중간 전환·복귀를 배제하지 않는다. |
+| 현재 layout, 최근 ASCII-capable source·layout, homi parent·mode의 enabled/selected/static selectCapable | 서로 다른 TIS 속성이다. 등록·enabled만으로 특정 입력칸의 menu 표시나 선택 성공을 판단하지 않는다. |
+| Secure Event Input | system 전역 활성 여부이며 켠 app이나 제한 원인을 알려주지 않는다. |
+| homi process 후보의 PID·시작 시각·실행 경로·종료 여부 | `NSRunningApplication`의 bundle ID 조회 결과다. 빈 목록은 이 API에서 찾지 못했다는 뜻이며, PID만으로 process 수명을 확정하지 않는다. |
+| user·system 설치 위치의 on-disk UUID·CDHash | 디스크의 파일만 식별한다. UUID는 architecture별, CDHash는 host native architecture의 display 결과이며 서명 검증 결과가 아니다. 실행 중인 loaded UUID는 `not_collected`로 남긴다. |
+| 현재 Caps Lock source의 HID mapping 목적지 | 현재 설정값만 읽는다. 물리 key 전달·mapping 적용 성공·설정 소유권은 확인하지 않는다. |
+
+수집은 순차적이고 원자적이지 않다. 항목마다 시작·끝 시각을 붙이고, 설치 경로의 전후 file metadata가 달라지면 변경을 표시한다.
+metadata가 같아도 UUID와 CDHash가 같은 설치 순간을 보았다고 보장하지 않는다. 외부 도구에는 출력 상한과 timeout을 두지만,
+이 제한이 main thread의 TIS·AppKit·HID 동기 호출까지 중단시키는 것은 아니다.
+
+성공한 빈 조회와 nil·타입 오류·실패를 구분한다. `partial=true`이면 확인 가능한 값과 실패 사유를 모두 출력하고 exit 1,
+완전 수집은 exit 0, 사용법·JSON 출력 준비 오류는 exit 2다. `not_collected`는 의도적 제외이며 그 자체로 partial이 되지 않는다.
+exit 1의 JSON도 버리지 않는다. 결과는 stdout에만 출력하며 자동 저장·상시 감시는 없다.
+입력 내용·key 기록·AX·window title·웹 URL·사용자 log는 조회하지 않는다. 결과의 homi 실행 경로에는 사용자 홈 경로가 포함될 수 있다.
+source 선택·enable·등록, HID 변경, app activation이나 복구 동작은 호출하지 않는다.
+
+**검증**: 새 TIS test 11개는 빈 조회·nil·CF 타입 오류, 수집 순서·전후 변화·부분 실패, 여러 process 후보,
+설치 파일 교체·출력 형식 오류, child의 timeout·출력 상한·pipe 설정 실패를 검사한다.
+`swift build`와 Release tool build가 성공했고 Debug·Release 각각 326개 test에서 기존 일반 key 재진입 known issue 1개 외 새 실패나 warning은 없었다.
+2026-11-01 08:46 KST, Debug·Release 명령을 실제 실행해 exit 0·`partial=false`와 올바른 JSON key를 확인했다.
+각 수집의 앞뒤는 Emacs·homi 선택으로 같았고 디스크 UUID는 기존 설치 기록과 일치했다.
+이는 정상 상태의 도구 검사이며 비활성 재현이나 원인 교정의 증거는 아니다. 제품 코드를 바꾸거나 재설치하지 않았다.
+근거는 `build/availability-snapshot-20261101/`의 `final-debug-tests.log`·`release-tests.log`·`command-verification.json`·`smoke-final-{debug,release}.json`이다.
 
 ## client 호출은 IMK lifecycle 을 재진입시킬 수 있다
 

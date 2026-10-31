@@ -14,6 +14,7 @@ let usage = """
       list [--all]     keyboard input source 목록. 기본은 활성화된 것만, --all 은 설치된 전부
                        E = enabled, S = selected, A = ASCII-capable
       current          지금 선택된 input source 와 그 아래 keyboard layout
+      snapshot         읽기 전용 JSON 관측 (완전 0, 부분 1, 사용 오류 2)
       watch            선택·활성 변화를 시간순으로 출력 (Ctrl-C 로 끝)
       register <path>  input method bundle 을 TIS 에 등록
       enable <id>      활성화 — System Settings 의 목록에 넣는다
@@ -124,6 +125,18 @@ case "list":
     keyboardSources(all: args.contains("--all")).map(row).forEach { print($0) }
 case "current":
     current()
+case "snapshot":
+    guard args.count == 1 else { fail("snapshot") }
+    let result = collectSnapshot(liveSnapshotQueries())
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    encoder.keyEncodingStrategy = .convertToSnakeCase
+    do {
+        let data = try encoder.encode(result)
+        FileHandle.standardOutput.write(data)
+        FileHandle.standardOutput.write(Data([10]))
+        exit(result.partial ? 1 : 0)
+    } catch { fail("snapshot JSON encoding failed") }
 case "watch":
     watch()
 case "register":

@@ -88,7 +88,7 @@ activation layout은 [제품 경계 검사](#4-activation의-layout-호출--제�
 | activation 과 mode 초기화의 경계 | **재현 test 후 교정·설치** · 기본 입력에 직접 영향 | 아래 두 counterexample 의 mode 경계를 `ModeActivation` 으로 교정했다. [검증·제한](lessons.md#재활성화가-mode-를-reset-하고-실제-client-의-시작-규칙을-놓친다-2026-10-09)과 [LaunchBar 요구](apps/launchbar.md)를 함께 확인한다. |
 | 늦은 client ID 와 fallback mode 이전 | **2026-10-31 교정·설치·probe 실제 입력 주인 확인** | [교정과 검증 범위](lessons.md#늦은-client-id-가-실제-app-의-mode-기억을-덮는다-2026-10-31). 무변화 key 는 이전하지 않으며 조합·toggle 보존과 새 activation 경계를 test 했다. 실제 Telegram 원인으로 확인한 것은 아니다. |
 | callback 이 확정한 mark 의 세대 | **2026-10-31 적용 범위 교정·설치·주인 확인** · 유실 위험 | [교훈](lessons.md#이전-mark-의-확인이-다음-조합을-지운다-2026-10-31). client 확정의 기존 판단은 유지하되 아직 보내지 않았던 mark 까지 확인한 것으로 처리하지 않는다. 다음 key 까지 commit 을 미루지 않는다. |
-| 비활성·누락의 상태 관측 | **채택·2026-10-31 실패 보고 중 snapshot 확보** · 입력 자체를 막는 증상, 원인 미확정 | [Orca 관측](apps/orca.md#input-menu-의-homi-누락-보고와-회복-2026-10-31-미해결): 등록·process 유지, Secure Event Input=false, 같은 창에서 기다린 뒤 회복 보고. menu 전체·focus 와 context 제한을 다음에 대조하며, 보기 착오도 배제하지 않는다. typing 경로는 건드리지 않는다. |
+| 비활성·누락의 상태 관측 | **2026-11-01 읽기 전용 도구 구현** · 입력 자체를 막는 증상, 원인 미확정 | [Orca 당시 관측](apps/orca.md#input-menu-의-homi-누락-보고와-회복-2026-10-31-미해결)은 유지한다. 다음 재발에 [tis snapshot](macos-input.md#읽기-전용-availability-snapshot-2026-11-01)으로 TIS·process 후보·설치본·Secure Input·Caps mapping을 모은다. menu 전체·focus와 context 제한은 이 도구 밖이며 보기 착오도 배제하지 않는다. |
 | ChatGPT 복귀 뒤 source 전환 UI 지연 | **2026-10-31 11:56 전후 주인 보고, 미해결** | [보고 순서·log 범위](apps/chatgpt.md#복귀-뒤-source-전환-지연-보고-2026-10-31-미해결). 같은 `⌃Space`에 무표시 → 이름 popup → 커서 옆 표시. UI 와 실제 source 선택을 분리하고, activation 을 전환 완료로 세지 않는다. 개별 시도의 source·focus 대응이 다음 관측이다. |
 | ChatGPT renderer helper 판별 | **실제 판별 함수의 false 확인·commit 정책은 검증 후보** | [현재 bundle 의 이름 불일치](apps/chatgpt.md#별도-code-review-renderer-helper-이름-판별). 판별식 확대 전에 실제 commit·click·focus 경로를 확인한다. source 전환 UI 지연의 원인으로 채택하지 않는다. |
 | controller 진단 ID | **2026-10-31 교정·새 process 기록 확인** | [수명 구분](lessons.md#controller-진단-id-의-수명-구분). process PID·UUID 와 생성 번호를 쓴다. 과거 동일 hash log 는 한 controller 로 합치지 않는다. |
@@ -431,7 +431,7 @@ client 반영 단계·질의 횟수를 검사하는 bridge test, 현재 상태�
    주인의 기본 입력 정상 보고를 개별 Chrome·native 경로의 통과로 확대하지 않는다. 실패하면 새 우회보다 기본 경로를 먼저 복구한다.
 2. activation 교정본의 native text·LaunchBar·Chromium 경로를 확인한다. client 확인의 action 단계는 관측하고 적용 대상을 확인한 뒤 정책을 결정한다.
    후보 revision 은 한자 경로를 따로 교정·검증한다.
-3. 제품 signing 실패 때 기존 설치본 보존은 [교정·검증을 마쳤다](lessons.md#인증서가-없으면-제품-설치가-ad-hoc-서명으로-계속된다-2026-10-31). [binary 식별](macos-input.md#실행본과-진단-기록의-연결-2026-11-01)과 [export 충돌](lessons.md#같은-초에-저장한-진단-기록이-이전-파일을-덮어쓴다-2026-11-01)도 교정·설치했다. 비활성 snapshot은 typing을 바꾸지 않는 작업으로 준비한다.
+3. 제품 signing 실패 때 기존 설치본 보존은 [교정·검증을 마쳤다](lessons.md#인증서가-없으면-제품-설치가-ad-hoc-서명으로-계속된다-2026-10-31). [binary 식별](macos-input.md#실행본과-진단-기록의-연결-2026-11-01)과 [export 충돌](lessons.md#같은-초에-저장한-진단-기록이-이전-파일을-덮어쓴다-2026-11-01)도 교정·설치했다. 다음 재발에는 [읽기 전용 snapshot](macos-input.md#읽기-전용-availability-snapshot-2026-11-01)을 사용한다.
    비활성 재발을 기다리는 동안 다른 검토를 멈출 필요는 없다.
 4. resend·Caps 종료·caret 질의·cold 판별은 영향과 실제 증거에 따라 조사한다. Chrome source 왕복은 위 기본 경로를 해치지 않는 교정 근거가 있을 때 다시 시작한다.
 

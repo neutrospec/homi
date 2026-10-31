@@ -32,6 +32,7 @@ let package = Package(
             path: "tools/tis",
             swiftSettings: [.defaultIsolation(MainActor.self)]
         ),
+        .testTarget(name: "TISTests", dependencies: ["tis"], swiftSettings: [.defaultIsolation(MainActor.self)]),
         .executableTarget(
             name: "probe",
             dependencies: ["InputSession"],

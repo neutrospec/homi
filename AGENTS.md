@@ -209,7 +209,8 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 - 개발 도구 (`tools/`, 제품 아님):
   - `swift run caps-probe --seconds 90` — Caps Lock 의 물리 HID·remap 뒤 modifier 와 인접 입력의 시각·counter 를 읽기 전용으로 관찰한다.
     일반 key code·문자는 수집하지 않으며, 수집 종료 뒤 출력한다. [관측 범위와 제한](docs/macos-input.md#caps-lock-전환-누락-관측-2026-10-29).
-  - `swift run tis list|current|watch|register|enable|disable|select` — input source 조회·관찰·조작.
+  - `swift run tis list|current|watch|snapshot|register|enable|disable|select` — input source 조회·관찰·조작.
+    `snapshot`은 [읽기 전용 JSON 관측](docs/macos-input.md#읽기-전용-availability-snapshot-2026-11-01)이다. 재발 때는 미리 build한 `.build/debug/tis snapshot`을 focus 이동 없이 실행한다. 부분 실패의 exit 1에서도 JSON은 보존한다.
   - `scripts/probe.sh` — test client 창 (log: `build/probe.log`). key event, handled 여부, 입력기가 묻는 것·시키는 것, input source 변화를 시간순으로 보여준다.
     입력기가 client 에게 무엇을 하는지는 추측하지 말고 여기서 본다.
   - `tools/probe/browser.html`·`browser-trace.js` — Chrome 기본 입력칸 비교와 입력 내용 없는 DOM event 관찰.
@@ -281,13 +282,14 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
    주인이 일반 probe 의 긴 입력을 확인했고 실제 insert·mark 의 관측 연결도 확인했다. 자동 검사는 probe crash 로 중단됐다.
    notification·검사 진행을 나눈 최소 재현 또는 수동 검증으로 남은 경계를 확인한다. 원인 확인 없이 actor 검사를 우회하지 않는다.
    정상 사용 보고를 모든 경로의 통과로 확대하지 않는다. callback token 만으로 commit 대상을 결정하지 않는다.
-2. [개선 안건](docs/stability-review.md): signing 실패 시 기존 설치본 보존은 교정·검증했다. [binary 식별](docs/macos-input.md#실행본과-진단-기록의-연결-2026-11-01)과 [export 충돌](docs/lessons.md#같은-초에-저장한-진단-기록이-이전-파일을-덮어쓴다-2026-11-01)도 교정·설치했으며, 비활성 당시 읽기 전용 진단은 남는다.
+2. [개선 안건](docs/stability-review.md): signing 실패 시 기존 설치본 보존은 교정·검증했다. [binary 식별](docs/macos-input.md#실행본과-진단-기록의-연결-2026-11-01)과 [export 충돌](docs/lessons.md#같은-초에-저장한-진단-기록이-이전-파일을-덮어쓴다-2026-11-01)도 교정·설치했다. 비활성 당시 상태를 모을 [읽기 전용 snapshot](docs/macos-input.md#읽기-전용-availability-snapshot-2026-11-01)을 준비했으며 원인 판단은 재발 관측과 구분한다.
    [구조 개선 네 항목](docs/stability-review.md#구조-개선-계획-2026-10-31)은 모두 설치·주인 확인을 마쳤다. 이어 [남은 세 경계](docs/stability-review.md#구조-개선-뒤-남은-세-경계-2026-10-31)를 교정·설치했고 대표 app 의 실제 입력·resend 를 주인이 정상 확인했다. 후보 뜻 표시 누락은 재발 때 조사한다.
    [2026-10-31 focus·source review](docs/stability-review.md#focus와-source-전환-code-review-2026-10-31)의 fallback mode 이전·controller 진단 ID 를 교정·설치했다.
    probe 실제 입력은 주인이 확인했다. [activation layout의 제품 경계 검사](docs/stability-review.md#4-activation의-layout-호출--제품-경계-검증정책-유지)는 보강했으며 중복 억제는 보류한다. ChatGPT commit 정책·실제 layout 재진입은 별도 검증 후 판단한다. 최근 증상의 원인 확정은 아니다.
    후보 뜻 표시·resend·Caps 종료 등 남은 안건은 영향과 증거에 따라 검증한다. 기본 입력이 다른 source 왕복보다 먼저다.
    [일본어 입력기의 recipe](docs/research/japanese-ime-recipes.md)는 외부 근거이며 실제 homi 검증과 구분한다.
 3. [비활성·누락](docs/macos-input.md#input-menu-의-비활성누락-2026-10-09-미해결): 재발 당시 상태를 먼저 확보한다.
+   app 이동·잠금·재설치 전에 `tis snapshot`을 실행하고 주인의 실제 menu 관측과 대조한다. snapshot 자체는 menu나 대상 입력칸을 읽지 않는다.
    재진입·수명·설치 수정이 이 증상을 해결했다는 증거는 없다. 재발을 기다리는 동안 다른 검토를 멈추지 않는다.
 
 다른 source 왕복의 교정은 [Chrome 원장](docs/apps/chrome.md#다음-작업)에 남겨 후순위로 둔다.
