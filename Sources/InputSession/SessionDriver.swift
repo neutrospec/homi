@@ -1,12 +1,20 @@
 import HangulCore
 
+/// 명시적 조합 종료의 방침. caller 의 판단을 나타내며 실제 client 의 확정 여부를 증명하는 값은 아니다.
+public enum CompositionEnd: Sendable, Equatable {
+    /// homi 가 조합을 client 에 확정한다.
+    case commitToClient
+    /// client 가 이미 확정했다고 판단한 경로. 조합·후보는 끝내되 같은 글자를 다시 넣지 않는다.
+    case alreadyCommittedByClient
+}
+
 /// controller 하나의 Session 과 client 반영을 함께 맡는다. client 호출 중의 lifecycle 도 여기로 들어온다.
 /// 한 thread 의 동기 경계다 — lock·timer·비동기 재시도를 쓰지 않는다.
 public final class SessionDriver {
     private var session: Session
     private var depth = 0
     private var pendingDeactivation: (([Action]) -> Void)?
-    private var pendingCommit: (insert: Bool, apply: ([Action]) -> Void)?
+    private var pendingCommit: (ending: CompositionEnd, apply: ([Action]) -> Void)?
     private var presentations: [() -> Void] = []
     private var finishing = false
     private var mutationDepth = 0
@@ -68,40 +76,35 @@ public final class SessionDriver {
 
     /// deactivate 가 빠지는 외부 process 의 source 전환도 명시적인 종료다.
     public func sourceChanged(selected: Bool, apply: @escaping ([Action]) -> Void) {
-        if !selected { commit(apply: apply) }
-    }
-
-    /// client 가 이미 확정한 글자는 다시 넣지 않는다. 외부 callback 은 반환 전에 Session 을 끝낸다.
-    /// 처리 도중의 callback 만 같은 event 의 반영 끝까지 보류한다 — 다음 key·입력칸으로 넘기지 않는다.
-    public func clientConfirmed(apply: @escaping ([Action]) -> Void) {
-        commit(insert: false, apply: apply)
+        if !selected { end(.commitToClient, apply: apply) }
     }
 
     public func deactivate(apply: @escaping ([Action]) -> Void) {
         if depth > 0 { pendingDeactivation = apply }
-        else { commit(apply: apply) }
+        else { end(.commitToClient, apply: apply) }
     }
 
-    public func commit(insert: Bool = true, apply: @escaping ([Action]) -> Void) {
+    /// 외부 callback 은 반환 전에 끝내고, 재진입한 요청만 같은 event 의 반영 뒤 처리한다.
+    /// 이미 확정한 것으로 처리하는 요청은 뒤의 commit·deactivate 가 재삽입으로 바꾸지 못한다.
+    public func end(_ ending: CompositionEnd, apply: @escaping ([Action]) -> Void) {
         if depth > 0 {
-            // 이미 client 가 확정한 조합은 뒤의 deactivate 가 다시 넣어서는 안 된다.
-            let shouldInsert = insert && (pendingCommit?.insert ?? true)
-            pendingCommit = (shouldInsert, apply)
+            let merged = pendingCommit?.ending == .alreadyCommittedByClient ? .alreadyCommittedByClient : ending
+            pendingCommit = (merged, apply)
         } else {
-            withEvent { finish(insert: insert, apply: apply) }
+            withEvent { finish(ending: ending, apply: apply) }
         }
     }
 
     private func drain() {
         while pendingCommit != nil || pendingDeactivation != nil {
-            let request = pendingCommit ?? pendingDeactivation.map { (insert: true, apply: $0) }!
+            let request = pendingCommit ?? pendingDeactivation.map { (ending: .commitToClient, apply: $0) }!
             pendingCommit = nil
             pendingDeactivation = nil
-            finish(insert: request.insert, apply: request.apply)
+            finish(ending: request.ending, apply: request.apply)
         }
     }
 
-    private func finish(insert: Bool, apply: ([Action]) -> Void) {
+    private func finish(ending: CompositionEnd, apply: ([Action]) -> Void) {
         finishing = true
         defer { finishing = false }
         revision &+= 1
@@ -110,7 +113,7 @@ public final class SessionDriver {
         mutationDepth -= 1
         updateTraceState()
         let actions = committed.filter {
-            if case .insert = $0 { return insert }
+            if case .insert = $0 { return ending == .commitToClient }
             return true
         }
         if !actions.isEmpty { apply(actions) }

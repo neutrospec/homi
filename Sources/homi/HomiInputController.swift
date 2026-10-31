@@ -17,7 +17,7 @@ nonisolated final class HomiInputController: IMKInputController {
         profile: { AppRules.profile(for: $0, preferences: preferences.withLock { $0 }) },
         fallbackApp: { MainActor.assumeIsolated { NSWorkspace.shared.frontmostApplication?.bundleIdentifier } ?? "unknown" },
         notice: { [weak self] in self?.inputNotice($0) })
-    private var app: String? { coordinator.app }
+    private var app: String? { coordinator.clientApp?.bundleID }
     private var modifierKeys = ModifierKeys()
     private var modifierBinding = ModifierEventBinding()
     private lazy var capsLockHold = HoldTimer(owner: self)
@@ -35,7 +35,7 @@ nonisolated final class HomiInputController: IMKInputController {
         observeClient("activate.begin", lifecycle: true)
         defer { observeClient("activate.return", lifecycle: true) }
         let activation = coordinator.activate()
-        let (app, mode, layout) = (activation.app, activation.mode, activation.layout)
+        let (app, mode, layout) = (activation.app.bundleID, activation.mode, activation.layout)
         // homi 가 넘긴 key 는 이 layout 으로 문자가 된다 — 늘 ABC, 원격 화면의 한글 모드만 두벌식 (`AppProfile.keyboardLayout`).
         // 새 시작의 layout 은 activate 에서만 준비한다. 같은 event 의 재활성화는 기존 layout 도 이어 간다.
         if !activation.resuming, let proxy = sender as? any IMKTextInput & NSObjectProtocol {
@@ -75,7 +75,7 @@ nonisolated final class HomiInputController: IMKInputController {
         log.info("commit requested from \(id, privacy: .public), controller: \(controllerID, privacy: .public), source selected: \(selected, privacy: .public), sender: \(senderType, privacy: .public), inside event: \(busy)")
         if sourceSelected == true {
             let target = client().map { Client(proxy: $0, owner: self) }
-            session.clientConfirmed { target?.apply($0) }
+            session.end(.alreadyCommittedByClient) { target?.apply($0) }
         } else {
             commit()
         }
@@ -228,11 +228,9 @@ nonisolated final class HomiInputController: IMKInputController {
 
     /// 조합 중인 글자를 이 controller 가 맡은 client 에 확정한다.
     /// deactivate·commitComposition 의 sender 는 이미 다른 client 일 수 있어 쓰지 않는다 (docs/research).
-    /// `insert` 가 false 면 client 가 조합을 이미 확정했다 — homi 의 조합만 버리고 글자는 넣지 않는다.
-    private func commit(insert: Bool = true) {
-        if !insert { record("  finished by client — not inserting") }
+    private func commit() {
         let target = client().map { Client(proxy: $0, owner: self) }
-        session.commit(insert: insert) { target?.apply($0) }
+        session.end(.commitToClient) { target?.apply($0) }
     }
 
     /// source 전환 알림은 deactivate 가 빠져도 온다. bound client 에만 확정하고, 반복은 무해하다.

@@ -17,7 +17,7 @@ public protocol ModeStore {
 public final class InputCoordinator {
     public let driver: SessionDriver
     /// 실제 client 에서 얻은 ID 만 cache 한다. fallback 은 다음 event 에 다시 확인한다.
-    public private(set) var app: String?
+    public private(set) var clientApp: ClientAppID?
     /// 종료 flush 와 실제 입력 event 를 구분한다. driver 의 depth 로 대신하면 새 시작을 continuation 으로 오인한다.
     public private(set) var inputDepth = 0
     public var needsStart: Bool { activation.needsStart }
@@ -31,7 +31,7 @@ public final class InputCoordinator {
     }
 
     public struct Activation {
-        public let app: String
+        public let app: InputApp
         public let mode: Mode
         public let passThrough: Bool
         public let layout: String
@@ -61,9 +61,9 @@ public final class InputCoordinator {
         activation.activate(resumingInput: resuming)
         driver.activate()
         notice(.becameActive)
-        if !driver.isHandlingEvent, inputDepth == 0, let app { prepareMode(for: app) }
-        let app = app ?? fallbackApp()
-        let profile = profile(app)
+        if !driver.isHandlingEvent, inputDepth == 0, let clientApp { prepareMode(for: .client(clientApp)) }
+        let app = clientApp.map(InputApp.client) ?? .fallback(fallbackApp())
+        let profile = profile(app.bundleID)
         let mode = mode(for: app)
         let layoutMode: Mode = activation.needsStart && profile.startsInEnglish ? .english : mode
         return Activation(app: app, mode: mode, passThrough: profile.passThrough,
@@ -78,9 +78,9 @@ public final class InputCoordinator {
             prepareMode(for: app)
             before()
             let mode = mode(for: app)
-            let input = activation.beginInput(app: app, trusted: self.app != nil)
+            let input = activation.beginInput(app: app)
             var outcome = driver.perform({
-                $0.handle(key, mode: mode, profile: profile(app), selectedText: client.selectedText,
+                $0.handle(key, mode: mode, profile: profile(app.bundleID), selectedText: client.selectedText,
                     textBefore: client.textBefore)
             }, apply: { _ in })
             preserveInputMode(input, outcome: outcome, from: mode)
@@ -101,12 +101,12 @@ public final class InputCoordinator {
         showMode: (Mode) -> Void = { _ in }, capsLock: () -> Void = {}) {
         withInput(client: client) { app in
             prepareMode(for: app)
-            let profile = profile(app)
-            guard let action = action(app, profile) else { return }
+            let profile = profile(app.bundleID)
+            guard let action = action(app.bundleID, profile) else { return }
             switch action {
             case .toggle:
                 let mode = mode(for: app)
-                let input = activation.beginInput(app: app, trusted: self.app != nil)
+                let input = activation.beginInput(app: app)
                 driver.perform({ $0.toggle(from: mode, profile: profile) }, apply: { outcome in
                     preserveInputMode(input, outcome: outcome, from: mode)
                     switchMode(to: outcome.mode, from: mode, app: app)
@@ -115,7 +115,7 @@ public final class InputCoordinator {
                 })
             case .hanja:
                 let mode = mode(for: app)
-                let input = activation.beginInput(app: app, trusted: self.app != nil)
+                let input = activation.beginInput(app: app)
                 driver.perform({
                     $0.hanjaTapped(mode: mode, profile: profile, selectedText: client.selectedText,
                         textBefore: client.textBefore)
@@ -136,7 +136,7 @@ public final class InputCoordinator {
         withInput(client: client) { _ in
             before()
             let target = boundClient()
-            driver.commit { target?.apply($0) }
+            driver.end(.commitToClient) { target?.apply($0) }
         }
     }
 
@@ -144,57 +144,56 @@ public final class InputCoordinator {
         withInput(client: client) { _ in }
     }
 
-    private func withInput<Result>(client: any InputClient, _ body: (String) -> Result) -> Result {
+    private func withInput<Result>(client: any InputClient, _ body: (InputApp) -> Result) -> Result {
         inputDepth += 1
         defer { inputDepth -= 1 }
         return driver.withEvent {
             notice(.becameActive)
             // bundleIdentifier 질의도 재진입한다 — 반드시 SessionDriver 경계 안에 둔다.
             let app = resolveApp(client)
-            notice(.received(app: app))
+            notice(.received(app: app.bundleID))
             return body(app)
         }
     }
 
-    private func resolveApp(_ client: any InputClient) -> String {
-        if let app { return app }
-        let id = client.bundleIdentifier() ?? ""
-        let resolved = id.isEmpty ? fallbackApp() : id
-        if !id.isEmpty {
-            app = resolved
-            notice(.appResolved(app: resolved, mode: mode(for: resolved), passThrough: profile(resolved).passThrough))
-        }
-        return resolved
+    private func resolveApp(_ client: any InputClient) -> InputApp {
+        if let clientApp { return .client(clientApp) }
+        guard let id = ClientAppID(client.bundleIdentifier()) else { return .fallback(fallbackApp()) }
+        clientApp = id
+        let app = InputApp.client(id)
+        notice(.appResolved(app: id.bundleID, mode: mode(for: app), passThrough: profile(id.bundleID).passThrough))
+        return app
     }
 
-    private func mode(for app: String) -> Mode { modes.withMemory { $0.mode(for: app) } }
+    private func mode(for app: InputApp) -> Mode { modes.withMemory { $0.mode(for: app.bundleID) } }
 
-    private func prepareMode(for app: String) {
-        let profile = profile(app)
-        let trusted = self.app != nil
-        let initializing = activation.needsStart && trusted
+    private func prepareMode(for app: InputApp) {
+        let profile = profile(app.bundleID)
+        let initializing: Bool
+        if case .client = app { initializing = activation.needsStart }
+        else { initializing = false }
         let (mode, changed) = modes.withMemory { memory in
             let before = memory
-            let mode = activation.prepare(app: app, trusted: trusted, profile: profile, memory: &memory)
+            let mode = activation.prepare(app: app, profile: profile, memory: &memory)
             return (mode, memory != before ? memory : nil)
         }
         if let changed { modes.save(changed) }
         if initializing || changed != nil {
-            notice(.modePrepared(app: app, mode: mode, passThrough: profile.passThrough))
+            notice(.modePrepared(app: app.bundleID, mode: mode, passThrough: profile.passThrough))
         }
     }
 
-    private func switchMode(to mode: Mode, from old: Mode, app: String) {
+    private func switchMode(to mode: Mode, from old: Mode, app: InputApp) {
         guard mode != old else { return }
         let updated = modes.withMemory { memory in
-            memory.remember(mode, for: app)
+            memory.remember(mode, for: app.bundleID)
             return memory
         }
         modes.save(updated)
-        notice(.modeChanged(app: app, mode: mode, passThrough: profile(app).passThrough))
+        notice(.modeChanged(app: app.bundleID, mode: mode, passThrough: profile(app.bundleID).passThrough))
     }
 
-    private func preserveInputMode(_ input: ModeActivation.Input?, outcome: Outcome, from mode: Mode) {
+    private func preserveInputMode(_ input: ModeActivation.FallbackInput?, outcome: Outcome, from mode: Mode) {
         // Session 의 mutating 접근이 끝난 뒤에만 읽는다. 진단 cache 를 판단에 쓰지 않는다.
         activation.inputHandled(input, modeChanged: outcome.mode != mode,
             composing: !driver.composing.isEmpty || driver.hasCandidates)

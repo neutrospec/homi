@@ -7,7 +7,7 @@ public struct ModeActivation: Sendable {
     private var generation: UInt64 = 0
 
     /// client 질의 중 들어온 새 activation 을 이전 입력의 결과가 소비하지 않도록 시작을 식별한다.
-    public struct Input: Sendable {
+    public struct FallbackInput: Sendable {
         fileprivate let generation: UInt64
         fileprivate let app: String
     }
@@ -21,32 +21,33 @@ public struct ModeActivation: Sendable {
         generation &+= 1
     }
 
-    /// trusted 는 client 의 실제 ID(또는 그 cache)다. fallback app 의 시작 규칙으로 기억을 reset 하지 않는다.
-    public mutating func prepare(app: String, trusted: Bool, profile: AppProfile, memory: inout ModeMemory) -> Mode {
-        if trusted {
+    /// client 의 실제 ID(또는 그 cache)에서만 시작 규칙을 적용한다. fallback 의 기억은 reset 하지 않는다.
+    public mutating func prepare(app: InputApp, profile: AppProfile, memory: inout ModeMemory) -> Mode {
+        if case .client(let id) = app {
             if needsStart {
                 needsStart = false
                 generation &+= 1
-                return memory.activate(app, profile: profile)
+                return memory.activate(id.bundleID, profile: profile)
             }
             if let fallbackInputApp {
                 // 같은 입력 시작에서 ID 만 늦게 알아냈다. 지금 선택된 mode 를 실제 app 의 기억으로 옮긴다.
                 // 새 activation 의 startsInEnglish 는 다음 실제 시작 때 적용한다.
-                memory.remember(memory.mode(for: fallbackInputApp), for: app)
+                memory.remember(memory.mode(for: fallbackInputApp), for: id.bundleID)
                 self.fallbackInputApp = nil
                 generation &+= 1
             }
         }
-        return memory.mode(for: app)
+        return memory.mode(for: app.bundleID)
     }
 
     /// Session 판단·client 질의 전에 시작을 잡는다. 통과하는 key 자체로는 시작 규칙을 소비하지 않는다.
-    public func beginInput(app: String, trusted: Bool) -> Input? {
-        trusted ? nil : Input(generation: generation, app: app)
+    public func beginInput(app: InputApp) -> FallbackInput? {
+        guard case .fallback(let id) = app else { return nil }
+        return FallbackInput(generation: generation, app: id)
     }
 
     /// 판단 결과를 client 에 반영하기 전에 호출한다. composing 은 한자 후보의 조합도 포함한다.
-    public mutating func inputHandled(_ input: Input?, modeChanged: Bool, composing: Bool) {
+    public mutating func inputHandled(_ input: FallbackInput?, modeChanged: Bool, composing: Bool) {
         guard let input, input.generation == generation, modeChanged || composing else { return }
         needsStart = false
         fallbackInputApp = input.app

@@ -121,8 +121,8 @@ callback 의 적용 범위를 확인하기 전에는 insert 생략 정책을 바
 | 순서 | 개선 | 범위·통과 기준 | 상태 |
 |---|---|---|---|
 | 1 | 제품의 입력 순서를 test 에서 직접 실행 | app 식별 → mode 준비 → Session 판단 → client 반영을 `InputCoordinator`로 모은다. test 는 client·환경만 대체한다. ID 질의부터 끝나는 동기 경계와 실제 입력/종료 flush 구분을 보존하고, 설치 후 기본 입력을 확인한다. | 완료 — 설치·주인 확인 |
-| 2 | app 식별 근거와 종료 의도를 type 으로 표현 | 실제 client ID·fallback, client 자체 확정·homi 확정의 뜻을 명확히 한다. `String`·`trusted`·`insert: false`의 조합으로 잘못된 상태를 만들 가능성을 줄인다. 현재 종료 정책은 먼저 test 로 고정하며 callback token 을 입력칸 소유권으로 취급하지 않는다. | 다음 |
-| 3 | app 판별과 호환 정책 분리 | Chromium 발견 결과와 commit 정책을 분리하고, 미확인·확인된 부재를 구별한다. cold 판별을 옮길 때 첫 callback 의 행동을 먼저 검사한다. ChatGPT 에 우회를 적용할지는 실제 app 검증 후 따로 결정한다. | 대기 |
+| 2 | app 식별 근거와 종료 의도를 type 으로 표현 | 실제 client ID·fallback, client 자체 확정·homi 확정의 뜻을 명확히 한다. `String`·`trusted`·`insert: false`의 조합으로 잘못된 상태를 만들 가능성을 줄인다. 현재 종료 정책은 먼저 test 로 고정하며 callback token 을 입력칸 소유권으로 취급하지 않는다. | 완료 — 설치·주인 확인 |
+| 3 | app 판별과 호환 정책 분리 | Chromium 발견 결과와 commit 정책을 분리하고, 미확인·확인된 부재를 구별한다. cold 판별을 옮길 때 첫 callback 의 행동을 먼저 검사한다. ChatGPT 에 우회를 적용할지는 실제 app 검증 후 따로 결정한다. | 다음 |
 | 4 | 입력 revision 과 UI revision 분리 | 무변화 modifier event 가 필요한 후보 표시를 취소하지 않도록 한다. 실제 후보 변경·확정·focus 종료 뒤에는 오래된 UI 가 뜨지 않는지 검사한다. | 대기 |
 
 ### 1번: 입력 coordinator 추출
@@ -146,6 +146,30 @@ modifier 한자 질의·resend 권한·두 controller 의 mode 공유를 추가�
 시험 범위는 `한글` 조합·Backspace 뒤 `ㄹ` 재입력, Caps Lock 으로 영문 `a`·한글 `가` 전환 입력,
 다른 app 에 갔다가 `⌘Tab`으로 돌아와 `가` 입력이다. 정상 여부는 주인 보고이며 도구의 합성 key 결과가 아니다.
 근거는 `build/coordinator-{build,debug-tests,release-tests,install,startup}-20261031.log`다.
+
+### 2번: app 식별 근거와 조합 종료 방침
+
+`709002f` 기준 동작을 유지하면서 두 경계를 type 으로 표현했다.
+
+- [InputApp](../Sources/InputSession/InputApp.swift)은 `client(ClientAppID)`와 `fallback(String)`을 구분한다.
+  `ClientAppID`는 nil·빈 답으로는 생성되지 않고 coordinator 는 이 type 만 cache 한다. `ModeActivation`에는 app 과 근거가 함께 전달되므로
+  별도의 `trusted` 값과 엇갈리지 않는다. 늦은 ID 보정을 위한 token 도 fallback 에서만 만드는 `FallbackInput`으로 명시했다.
+  ID 를 모를 때 첫 key 를 fallback 으로 해석하는 한계는 남으며, app ID 는 개별 입력칸의 identity 가 아니다.
+- [CompositionEnd](../Sources/InputSession/SessionDriver.swift)는 `commitToClient`와 `alreadyCommittedByClient`를 구분한다.
+  `insert: false` 대신 방침을 명시하며, 겹친 명시적 종료 중 재삽입 금지와 마지막 callback 대상을 유지한다.
+  deactivate 는 같은 event 의 재활성화로 취소할 수 있어 명시적 종료와 별도로 둔다. bound client 선택·flush 시점도 유지한다.
+  이 type 은 caller 의 방침이며 실제 client 의 확정 증거가 아니다. Chromium 판별·commit 정책은 3번의 별도 검토 대상이다.
+
+변경 전에 추가한 세 test 로 **같은 ID 문자열의 fallback/client 구분(nil·빈 답), 종료 순서와 무관한 재삽입 방지·후보 정리,
+명시적 commit 대상의 우선순위**를 고정했다. 변경 전 세 test 와 변경 후 관련 58개 test 가 통과했다.
+근거는 `build/typed-boundaries-{before,after}-20261031.log`다. 새 간헐 결함을 재현·해결했다는 뜻은 아니다.
+
+`swift build`와 Debug·Release 각각 **226개 test**가 통과했다. 2026-10-31 **14:06:34 KST** 에 자체 서명본을 설치했고
+(CDHash `94e3ad6b19d4f49503e15a4e1a5c058cb6029050`), 새 PID `3115`의 시작·modifier observer 준비·probe 입력 수신을 확인했다.
+주인은 `한` 조합 → 다른 app 으로 `⌘Tab` → probe 복귀 → `글` → Caps Lock·영문 `a` → Caps Lock·한글 `가`의
+결과가 **`한글a가`**로 정상임을 확인했다. 도구에서도 probe 의 최종 text 와 한/영 mode 왕복을 관측했다.
+기록은 `build/typed-boundaries-{build,debug-tests,release-tests,install,runtime}-20261031.log`다.
+이 확인을 다른 app 이나 알려진 source 왕복 문제의 해결로 확대하지 않는다.
 
 ## focus와 source 전환 code review (2026-10-31)
 

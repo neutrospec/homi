@@ -35,7 +35,7 @@ private final class ActivationHost: InputClient {
     }
     var clientApp: String?
     var fallback: String
-    var knownApp: String? { coordinator.app }
+    var knownApp: String? { coordinator.clientApp?.bundleID }
     var inputDepth: Int { coordinator.inputDepth }
     var appProfile: (String) -> AppProfile = { AppProfile(startsInEnglish: $0 == startingApp || $0 == fallbackApp) }
     var text = ""
@@ -112,7 +112,7 @@ private final class ActivationHost: InputClient {
     func mouseDown() { coordinator.mouseDown(client: self, boundClient: { self }) }
 
     func deactivate() { driver.deactivate(apply: apply) }
-    func commit(insert: Bool = true) { driver.commit(insert: insert, apply: apply) }
+    func commit() { driver.end(.commitToClient, apply: apply) }
 }
 
 @Test("activation: mark 중 재활성화는 조합과 한글 mode 를 함께 이어 간다")
@@ -562,11 +562,27 @@ func coordinatorConstructionAndActivationDoNotQueryClient() {
     #expect(environmentCalls == 0)
     let activation = coordinator.activate()
     #expect(environmentCalls > 0)
-    #expect(activation.app == fallbackApp)
+    #expect(activation.app == .fallback(fallbackApp))
     #expect(activation.layout == "com.apple.keylayout.ABC")
     #expect(!activation.resuming)
-    #expect(coordinator.app == nil)
+    #expect(coordinator.clientApp == nil)
     #expect(coordinator.needsStart)
     #expect(modes.memory.mode(for: fallbackApp) == .korean)
     #expect(modes.saved.isEmpty)
+}
+
+@Test("app 식별: 같은 ID 문자열이어도 fallback 은 실제 client 의 시작 근거가 아니다", arguments: [nil, ""] as [String?])
+func fallbackWithSameIDDoesNotBecomeClientIdentity(unansweredID: String?) {
+    let host = ActivationHost(clientApp: unansweredID, fallback: startingApp)
+    host.activate()
+    host.modifierWithoutAction()
+    #expect(host.knownApp == nil)
+    #expect(host.coordinator.needsStart)
+    #expect(host.memory.mode(for: startingApp) == .korean)
+    host.clientApp = startingApp
+    host.type("g")
+    #expect(host.knownApp == startingApp)
+    #expect(host.memory.mode(for: startingApp) == .english)
+    #expect(host.text == "g")
+    #expect(host.marked.isEmpty)
 }

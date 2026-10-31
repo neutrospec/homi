@@ -39,9 +39,9 @@ private final class Host {
         }
     }
     func deactivate() { driver.deactivate(apply: apply) }
-    func commit(insert: Bool = true) { driver.commit(insert: insert, apply: apply) }
+    func commit() { driver.end(.commitToClient, apply: apply) }
     func sourceChanged(selected: Bool) { driver.sourceChanged(selected: selected, apply: apply) }
-    func clientConfirmed() { driver.clientConfirmed(apply: apply) }
+    func clientConfirmed() { driver.end(.alreadyCommittedByClient, apply: apply) }
 }
 
 /// Chrome 의 여러 DOM 입력칸은 proxy 하나를 공유한다. markedRange 답은 이전 mark 를 그대로 돌려줄 수 있다.
@@ -73,7 +73,7 @@ private final class SharedClient {
         fields[focus].text += fields[focus].marked
         fields[focus].marked = ""
         // 2026-10-09 lifecycle·DOM 관찰: 이전 칸은 이미 compositionend, proxy 는 여전히 mark 를 보고한다.
-        driver.clientConfirmed(apply: apply)
+        driver.end(.alreadyCommittedByClient, apply: apply)
         focus = 1
     }
 }
@@ -85,7 +85,7 @@ func confirmedCompositionCannotFollowSharedClientFocus() {
     host.clickNextField()
     #expect(host.driver.composing.isEmpty)
     host.type("gks")
-    host.driver.commit(apply: host.apply)
+    host.driver.end(.commitToClient, apply: host.apply)
     #expect(host.fields[0].text == "글")
     #expect(host.fields[1].text == "한")
     #expect(host.fields.allSatisfy { $0.marked.isEmpty })
@@ -254,7 +254,7 @@ func hostCommittedDuringMark() {
     host.onMark = {
         host.text += host.marked
         host.marked = ""
-        host.commit(insert: false)
+        host.clientConfirmed()
         host.deactivate()
     }
     host.type("s")
@@ -333,4 +333,50 @@ func presentationAfterLifecycleDrain() {
         host.sourceChanged(selected: false)
     })
     #expect(presented)
+}
+
+@Test("종료 요청: client 확정은 순서와 무관하게 재삽입을 막고 마지막 명시적 요청에 정리를 보낸다", arguments: [false, true])
+func pendingEndRetainsClientConfirmation(clientFirst: Bool) {
+    let host = Host()
+    host.driver.perform({ $0.handle(optionReturn, mode: .korean, selectedText: { "한자" }) },
+        apply: { host.apply($0.actions) })
+    var first: [Action] = []
+    var last: [Action] = []
+    var deactivated: [Action] = []
+    host.driver.withEvent {
+        if clientFirst {
+            host.driver.end(.alreadyCommittedByClient) { first += $0 }
+            host.driver.end(.commitToClient) { last += $0 }
+        } else {
+            host.driver.end(.commitToClient) { first += $0 }
+            host.driver.end(.alreadyCommittedByClient) { last += $0 }
+        }
+        host.driver.deactivate { deactivated += $0 }
+        host.driver.activate()
+        #expect(host.driver.hasExplicitEnd)
+        #expect(host.driver.hasCandidates)
+        #expect(first.isEmpty && last.isEmpty)
+    }
+    #expect(first.isEmpty)
+    #expect(last == [.hideCandidates])
+    #expect(deactivated.isEmpty)
+    #expect(!host.driver.hasCandidates)
+    #expect(!host.driver.hasExplicitEnd)
+}
+
+@Test("종료 요청: 명시적 commit 의 대상은 앞뒤 deactivate 가 바꾸지 않는다", arguments: [false, true])
+func pendingCommitKeepsTargetAcrossDeactivation(deactivationFirst: Bool) {
+    let host = Host()
+    host.type("gks")
+    var committed: [Action] = []
+    var deactivated: [Action] = []
+    host.driver.withEvent {
+        if deactivationFirst { host.driver.deactivate { deactivated += $0 } }
+        host.driver.end(.commitToClient) { committed += $0 }
+        if !deactivationFirst { host.driver.deactivate { deactivated += $0 } }
+        #expect(committed.isEmpty && deactivated.isEmpty)
+    }
+    #expect(committed == [.insert("한")])
+    #expect(deactivated.isEmpty)
+    #expect(host.driver.composing.isEmpty)
 }

@@ -25,7 +25,7 @@ struct ClientTraceTests {
         #expect(observed?.cachedState == .init(composing: false, candidates: false))
         #expect(trace.snapshot.cachedState == .init(composing: false, candidates: true))
         #expect(!driver.isMutatingSession)
-        driver.commit(apply: { _ in })
+        driver.end(.commitToClient, apply: { _ in })
         #expect(trace.snapshot.cachedState == .init(composing: false, candidates: false))
     }
 
