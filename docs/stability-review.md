@@ -120,7 +120,7 @@ callback 의 적용 범위를 확인하기 전에는 insert 생략 정책을 바
 
 | 순서 | 개선 | 범위·통과 기준 | 상태 |
 |---|---|---|---|
-| 1 | 제품의 입력 순서를 test 에서 직접 실행 | app 식별 → mode 준비 → Session 판단 → client 반영을 `InputCoordinator`로 모은다. test 는 client·환경만 대체한다. ID 질의부터 끝나는 동기 경계와 실제 입력/종료 flush 구분을 보존하고, 설치 후 기본 입력을 확인한다. | 구현·검증 중 |
+| 1 | 제품의 입력 순서를 test 에서 직접 실행 | app 식별 → mode 준비 → Session 판단 → client 반영을 `InputCoordinator`로 모은다. test 는 client·환경만 대체한다. ID 질의부터 끝나는 동기 경계와 실제 입력/종료 flush 구분을 보존하고, 설치 후 기본 입력을 확인한다. | 완료 — 설치·주인 확인 |
 | 2 | app 식별 근거와 종료 의도를 type 으로 표현 | 실제 client ID·fallback, client 자체 확정·homi 확정의 뜻을 명확히 한다. `String`·`trusted`·`insert: false`의 조합으로 잘못된 상태를 만들 가능성을 줄인다. 현재 종료 정책은 먼저 test 로 고정하며 callback token 을 입력칸 소유권으로 취급하지 않는다. | 다음 |
 | 3 | app 판별과 호환 정책 분리 | Chromium 발견 결과와 commit 정책을 분리하고, 미확인·확인된 부재를 구별한다. cold 판별을 옮길 때 첫 callback 의 행동을 먼저 검사한다. ChatGPT 에 우회를 적용할지는 실제 app 검증 후 따로 결정한다. | 대기 |
 | 4 | 입력 revision 과 UI revision 분리 | 무변화 modifier event 가 필요한 후보 표시를 취소하지 않도록 한다. 실제 후보 변경·확정·focus 종료 뒤에는 오래된 UI 가 뜨지 않는지 검사한다. | 대기 |
@@ -142,7 +142,9 @@ modifier 한자 질의·resend 권한·두 controller 의 mode 공유를 추가�
 
 검증: `swift build`와 Debug·Release 각각 **223개 test** 통과(기존 213개 유지, 새 경계 검사 10개).
 2026-10-31 **13:39:26 KST** 에 자체 서명본을 설치했다(CDHash `a856f69785c9cc548667c0455a1dec67e0a9ce9d`).
-새 PID `30602`의 시작과 modifier observer 준비를 확인했다. probe 의 실제 keyboard 검사는 주인 확인을 기다린다.
+새 PID `30602`의 시작과 modifier observer 준비를 확인했다. 주인이 요청한 probe 실제 keyboard 시험이 정상 동작했다고 보고했다.
+시험 범위는 `한글` 조합·Backspace 뒤 `ㄹ` 재입력, Caps Lock 으로 영문 `a`·한글 `가` 전환 입력,
+다른 app 에 갔다가 `⌘Tab`으로 돌아와 `가` 입력이다. 정상 여부는 주인 보고이며 도구의 합성 key 결과가 아니다.
 근거는 `build/coordinator-{build,debug-tests,release-tests,install,startup}-20261031.log`다.
 
 ## focus와 source 전환 code review (2026-10-31)
