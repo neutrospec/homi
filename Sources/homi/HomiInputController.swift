@@ -21,8 +21,8 @@ nonisolated final class HomiInputController: IMKInputController {
     /// SessionDriver 의 종료 flush 와 실제 입력 event 를 구분한다.
     private var inputDepth = 0
     private var receivedEvent = false
-    /// 같은 process 안의 controller 를 구분한다. 입력 내용이나 client 문서 위치를 담지 않는다.
-    var traceID: String { String(UInt(bitPattern: ObjectIdentifier(self).hashValue), radix: 16) }
+    /// process 와 생성 순서를 식별한다. 객체 해제 뒤 주소가 재사용돼도 ID 는 재사용하지 않는다.
+    let traceID = ControllerTraceID.make()
 
     /// flagsChanged 는 수식키 tap(오른쪽 ⌘·⌥, Caps Lock)을 보려고 받는다. 그러면 IMK 의 기본 mouse 처리
     /// (조합 영역 밖을 click 하면 commitComposition) 가 꺼지므로 leftMouseDown 도 받아 직접 확정한다 — IMKInputController.h.
@@ -106,7 +106,6 @@ nonisolated final class HomiInputController: IMKInputController {
             switch event.type {
             case .keyDown:
                 prepareMode(for: app)
-                modeActivation.inputStarted(app: app, trusted: self.app != nil)
                 return keyDown(event, app: app, client: Client(proxy: proxy, owner: self))
             case .flagsChanged:
                 prepareMode(for: app)
@@ -128,11 +127,13 @@ nonisolated final class HomiInputController: IMKInputController {
         let key = KeyEvent(event)
         record("key \(key)")
         let mode = memory.withLock { $0.mode(for: app) }
+        let input = modeActivation.beginInput(app: app, trusted: self.app != nil)
         // 질의·상태 변경·client 반영을 같은 동기 경계에 둔다. 그 사이의 lifecycle 은 경계 끝에서 처리한다.
         var outcome = session.perform({
             $0.handle(key, mode: mode, profile: profile(for: app), selectedText: { client.selectedText() },
                 textBefore: { client.textBefore($0) })
         }, apply: { _ in })
+        preserveInputMode(input, outcome: outcome, from: mode)
         if outcome.resend && !Resend.allowed() {
             // 다시 보낼 수 없으면 먹지 않는다 — key 를 잃는 것보다 예전처럼 넘기는 게 낫다.
             outcome.handled = false
@@ -175,17 +176,22 @@ nonisolated final class HomiInputController: IMKInputController {
             log.info("modifier decision: \(phase, privacy: .public), evidence: \(origin, privacy: .public), action: \(action, privacy: .public), controller: \(self.traceID, privacy: .public)")
         }
         guard let action = result.action else { return }
-        modeActivation.inputStarted(app: app, trusted: self.app != nil)
         record("modifier kc=\(event.keyCode) → \(action)")
         switch action {
         case .toggle:
             toggle(app: app, profile: profile, client: client)
         case .hanja:
             let mode = memory.withLock { $0.mode(for: app) }
+            let input = modeActivation.beginInput(app: app, trusted: self.app != nil)
             session.perform({
                 $0.hanjaTapped(mode: mode, profile: profile, selectedText: { client.selectedText() },
                     textBefore: { client.textBefore($0) })
-            }, apply: { if let outcome = $0 { client.apply(outcome.actions) } })
+            }, apply: {
+                if let outcome = $0 {
+                    preserveInputMode(input, outcome: outcome, from: mode)
+                    client.apply(outcome.actions)
+                }
+            })
         case .capsLock:
             // 표시는 macOS 의 Caps Lock 표시에 맡긴다 — homi 가 따로 띄우면 겹친다 (주인, 2026-09-25).
             CapsLockState.toggle()
@@ -219,11 +225,20 @@ nonisolated final class HomiInputController: IMKInputController {
 
     private func toggle(app: String, profile: AppProfile, client: Client) {
         let mode = memory.withLock { $0.mode(for: app) }
+        let input = modeActivation.beginInput(app: app, trusted: self.app != nil)
         session.perform({ $0.toggle(from: mode, profile: profile) }, apply: { outcome in
+            preserveInputMode(input, outcome: outcome, from: mode)
             switchMode(to: outcome.mode, from: mode, app: app)
             client.apply(outcome.actions)
             showMode(outcome.mode, near: client)
         })
+    }
+
+    /// 실제 조합·mode 변경이 있을 때만 불확실한 app 의 입력을 늦은 ID 보정에 이어 준다.
+    private func preserveInputMode(_ input: ModeActivation.Input?, outcome: Outcome, from mode: Mode) {
+        // Session 판단이 반환된 뒤라 mutating 접근은 끝났다. 진단 cache 를 입력 판단에 쓰지 않는다.
+        modeActivation.inputHandled(input, modeChanged: outcome.mode != mode,
+            composing: !session.composing.isEmpty || session.hasCandidates)
     }
 
     /// 커서 옆 말풍선. 커서 줄의 위치는 지금(key 처리 도중, app 이 homi 를 기다리는 동안) 묻고 — 그 밖에서 client 를 부르면

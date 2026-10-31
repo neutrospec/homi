@@ -44,6 +44,40 @@ sequenceDiagram
 - system 은 입력기를 **고르는 순간** 띄운다 (부모 process = launchd). 입력칸이 바뀔 때마다 `activateServer`·`deactivateServer` 가 오고,
   같은 app 안에서도 3ms 안에 deactivate → activate → deactivate 가 몰려오는 일이 있다. ✅
 
+### 문서별 input source 복원 재확인 (2026-10-31)
+
+주인은 homi 를 골라도 다른 창에서는 ABC 로 돌아가 있어 다시 선택하는 일이 종종 있다고 보고했다.
+homi 내부의 한/영 mode 와 **macOS 의 ABC ↔ homi 선택은 별도 상태**다. 내부 전환에 TIS 를 쓰지 않는 설계는
+macOS 가 focus 전환 때 다른 source 를 복원하는 경로까지 없애지는 않는다.
+
+- 02:47 KST, `com.apple.HIToolbox`의 `AppleGlobalTextInputProperties.TextInputGlobalPropertyPerContextInput`이 true 였다.
+  이어 System Settings → Keyboard → Input Sources 의 **Automatically switch to a document’s input source**도 켜짐(`1`)으로 확인했다.
+  2026-09-25 에 껐다는 기록과 달랐다. 언제·누가 바꿨는지, OS update 가 관여했는지는 확인하지 않았다. ✅ 현재 저장값·UI
+- [Apple 설명](https://support.apple.com/en-gb/guide/mac-help/mchl84525d76/mac)에 따르면 이 옵션은 문서를 닫기 전까지
+  그 문서에서 고른 input source 를 다시 사용한다. 주인이 보고한 창별 ABC 복귀와 일치하는 기능이다.
+- 주인이 **끄고 비교하기**를 승인했다. UI 에서 해당 옵션만 해제했고 02:53 KST 이후 저장값 false 를 두 번 확인했다.
+  전환 후 UI 조회 중 sheet·System Settings 가 닫혀 꺼짐 표시 자체는 재확인하지 못했다. 현재 TIS 는 homi 선택·하위 ABC layout 이며,
+  homi PID `85292`와 Caps Lock·Windows 오른쪽 Alt·Emacs 전달 설정은 유지됐다. 제품 코드·설치본은 바꾸지 않았다.
+- 창별 source 자동 복원을 제거한 **비교 시작점**이다. [Telegram 의 첫 key 영문·초성 누락](apps/telegram.md)과
+  [T3 의 menu 항목 누락](apps/t3-code.md)이 해결됐다는 증거는 아직 없다. 특히 이 설정만으로 menu 항목이 사라졌다고 설명하지 않는다.
+- 이후 [Telegram 의 첫 초성 누락이 재발](apps/telegram.md#자동-복원-해제-뒤-재발-2026-10-31)했고, 조사 때 저장값도 false 였다.
+  자동 복원 해제만으로 누락을 해결하지 못했다. 첫 key 영문·T3 menu 누락의 해제 후 경과는 별도 확인이 필요하다.
+
+환경 설정 기록은 확인 시점의 사실이다. 재발 조사에서는 예전의 꺼짐 기록으로 현재 source 전환 가능성을 배제하지 않고 현재값부터 재확인한다.
+
+### system source 전환 UI 와 homi 표시 (2026-10-31)
+
+- `⌃Space`의 source 전환과 homi 내부 한/영 전환은 별도 경로다. 현재 homi 설정은 Caps Lock 이며,
+  `Session`은 Control 을 포함한 일반 key 를 app·system 으로 넘긴다. ✅ 현재 설정·코드
+- [Apple 의 system text cursor 문서](https://developer.apple.com/documentation/appkit/adopting-the-system-text-cursor-in-custom-text-views)는
+  커서 옆에 현재 input source 를 표시하고 언어 선택 UI 를 펼치는 accessory 를 설명한다. ✅ 문서
+  homi 의 `ModeHUD`도 내부 mode 가 바뀌면 `한/A`를 커서 옆에 그린다. 따라서 **표시 위치만으로 어느 전환인지 구별하지 않는다.**
+  [ChatGPT 보고](apps/chatgpt.md#복귀-뒤-source-전환-지연-보고-2026-10-31-미해결)는 사용 key·실제 source·UI 를 대응시켜야 한다.
+- [Apple Developer Forums 의 사용자 재현 보고](https://developer.apple.com/forums/thread/841799)는 macOS **26.5.2**에서
+  Control·Space 를 거의 동시에 뗄 때 source 가 바뀌었다가 되돌아오는 경우를 제시한다. 작성자는 합성 event 와 TIS 관찰을 비교했다.
+  **Apple 의 확인·공식 원인 설명이 아니며, 현재 macOS 27.2·homi 에서 재현한 결과도 아니다.**
+  `⌃Space` 후 선택 유지 실패를 조사할 별도 후보로 두고, menu 누락·focus 문제·Caps Lock 결함 전체와 합치지 않는다.
+
 ### input menu 의 비활성·누락 (2026-10-09, 미해결)
 
 - 주인: homi 가 흐려져 선택되지 않거나 menu bar 의 input menu 에서 사라졌다. 모든 app 에서 이상한 때도,
@@ -51,6 +85,11 @@ sequenceDiagram
 - user·system 두 설치 위치에서도 같은 증상이 있었다. 설치 위치 변경은 해결의 증거가 아니다. ✅ (주인)
 - System Settings 의 등록까지 사라졌는지는 확인하지 않았다. menu 의 가용성 변화와 등록 소실을 같은 현상으로 판단하지 않는다.
   당시 Secure Keyboard Entry 상태·TIS 속성·process 상태의 동시 관찰이 없어 원인은 아직 모른다.
+- 2026-10-30 [T3 Code 의 메시지 입력칸에서 항목 누락이 재발](apps/t3-code.md#input-menu-에서-homi-누락-2026-10-30-미해결)했다.
+  같은 process·controller 표시 ID 의 선택 해제와 회복 log 를 확보했다. TIS·Secure Event Input 조회는 회복 뒤라 원인은 계속 미확정이다.
+- 2026-10-31 [Orca 에서 누락 보고 당시 enabled·process 유지와 Secure Event Input=false 를 확보](apps/orca.md#input-menu-의-homi-누락-보고와-회복-2026-10-31-미해결)했다.
+  주인은 웹에서 ⌘Tab 복귀 직후 없었고, 그 창에서 기다리다가 다시 선택할 수 있었다고 정정했다. 다른 app 을 다시 다녀와 회복했다고 해석하지 않는다.
+  접근성 menu 조회에는 ABC 만 있었지만 화면 전체·동일 입력칸 focus 는 미확인이라 보기 착오와 정상적인 context 제한도 배제하지 않는다.
 
 다음 재발에서는 app 이동·잠금·재설치로 상태를 바꾸기 전에, 시각·app bundle ID 와 `tis list --all`·`tis current`, homi PID·실행 경로·binary 식별,
 HID mapping 을 함께 확보한다. System Settings 에도 사라졌는지와 Secure Keyboard Entry 상태를 확인할 읽기 전용 관찰을 준비한다.
@@ -60,6 +99,11 @@ HID mapping 을 함께 확보한다. System Settings 에도 사라졌는지와 S
   ✅ (macOS 27 SDK `TextInputSources.h` · 2026-10-09)
 - `IsSecureEventInputEnabled()` 는 어느 process 에서든 Secure Event Input 이 켜졌으면 true 다. thread safe 하지 않으므로 main thread 에서 읽는다.
   true 만으로 homi 비활성의 원인을 확정하거나 켠 app 을 알아낸 것은 아니다. ✅ (같은 SDK `CarbonEventsCore.h`)
+- `kTSMDocumentEnabledInputSourcesPropertyTag`는 문서에서 허용할 source 를 전역 enabled 목록의 일부로 제한한다.
+  하나만 허용하면 그 source 를 자동 선택한다. `TSMGetActiveDocument`는 호출한 app 의 context 를 가리키므로 외부 probe 의 값을 대상 app 의 값으로 읽지 않는다.
+  ✅ (macOS 27.2 SDK `TextServices.h` · 2026-10-31). Secure Event Input 과 이 제한의 조작은 [Chromium 코드에서도 별개](apps/engines/chromium.md#입력-context-와-source-제한-2026-10-30)다.
+- `tis watch`와 homi 의 source 알림 log 는 callback 때의 현재 source 를 읽는다. 알림 도착 사이에 여러 전환이 있으면 중간 상태를 놓칠 수 있다.
+  ✅ (`Watcher.report`·`SourceWatcher.sourceChanged` + [Orca 동시 관측](apps/orca.md#input-menu-의-homi-누락-보고와-회복-2026-10-31-미해결)).
 
 이 관찰을 typing 경로에 넣거나 system 상태를 바꾸지 않는다. 관찰 중 `imklaunchagent` 를 종료하지 않는다.
 
@@ -78,6 +122,9 @@ HID mapping 을 함께 확보한다. System Settings 에도 사라졌는지와 S
   이것이 menu bar 의 비활성 증상을 고쳤다는 증거는 아직 없다.
 
 ### client 호출 단계의 관측
+
+controller 표시 ID 는 2026-10-31 12:44 설치본부터 process PID·UUID 와 생성 번호다.
+[이전 hash 방식의 한계와 교정](lessons.md#controller-진단-id-의-수명-구분)을 따른다. 이 ID 는 controller 수명을 구분하며 실제 입력칸의 소유권을 증명하지 않는다.
 
 `SessionDriver.clientTrace` 는 마지막 안전한 경계에서 옮긴 `composing`·`candidates` boolean 과 호출 metadata 만 가진다.
 `perform`·`finish` 의 mutating call 이 반환한 뒤 cache 를 갱신한다. callback 에서 Session 을 직접 읽거나 client 에 더 묻지 않는다.

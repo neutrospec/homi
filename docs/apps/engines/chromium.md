@@ -40,6 +40,39 @@
   `조사(PriType#15)·Chrome 비교 page 의 같은 controller 기록` ✅
 - web page 의 handler 가 `isComposing`·keyCode 229 를 보지 않으면 조합 중 Enter 에 마지막 음절이 두 번 처리된다 — Chromium 구조라 Apple 입력기에서도 난다. `조사` ✅
 
+## 입력 context 와 source 제한 (2026-10-30)
+
+T3 에 설치된 Electron 44.9.3 의 [DEPS](https://github.com/electron/electron/blob/v44.9.3/DEPS)가 가리키는
+Chromium **152.0.7977.167**의 공개 코드를 확인했다. 설치 binary 에서 해당 분기를 실행하는지는 관찰하지 않았다.
+
+- [`RenderWidgetHostViewCocoa.inputContext`](https://github.com/chromium/chromium/blob/152.0.7977.167/content/app_shim_remote_cocoa/render_widget_host_view_cocoa.mm)는
+  편집 불가(`TEXT_INPUT_TYPE_NONE`)·password type·password 이력 flag 에서 nil 을 반환한다.
+  AutoFill 지원을 끄고 native context menu 를 여는 조건에서도 nil 이다. 일반 편집칸에서는 상위 AppKit context 를 돌려준다. ✅ source
+- [`SetTextInputActive`](https://github.com/chromium/chromium/blob/152.0.7977.167/content/browser/renderer_host/render_widget_host_view_mac.mm)는
+  focus·type·password flag 에 따라 password 보호를 켜고 끈다. text input state 변경 때 AppKit 의 context cache 를 갱신하는 경로도 있다. ✅ source
+- [`SetPasswordInputEnabled`](https://github.com/chromium/chromium/blob/152.0.7977.167/ui/base/cocoa/secure_password_input.mm)는
+  Secure Event Input 과 함께 TSM document 의 허용 source 를 ASCII-capable 목록으로 제한하고, 해제 때 그 property 를 제거한다. ✅ source
+  보안 입력 자체와 허용 source 제한은 별도 조작이다. Secure Event Input 의 true/false 하나로 menu 의 상태를 모두 설명하지 않는다.
+
+[T3 의 menu 누락](../t3-code.md#input-menu-에서-homi-누락-2026-10-30-미해결)에 관련될 수 있는 경로지만,
+실패 순간 type·flags·context·TSM property 를 확보하지 못했다. 일반 메시지 입력칸이 password 로 잘못 분류됐다고 단정하지 않는다.
+
+### Orca 설치 version 대조 (2026-10-31)
+
+Orca 1.4.244 의 framework 는 Electron **43.8.1**, 공식 [DEPS](https://github.com/electron/electron/blob/v43.8.1/DEPS)의 Chromium 은
+**150.0.7871.250**이다. 위 T3 조사 version 과 다르므로 다음 경로를 따로 대조했다.
+
+- [`inputContext`](https://github.com/chromium/chromium/blob/150.0.7871.250/content/app_shim_remote_cocoa/render_widget_host_view_cocoa.mm)는
+  type 이 NONE·PASSWORD 이면 nil, 그 밖에는 상위 AppKit context 를 돌려준다. 위 version 의 password 이력·AutoFill 조건을 이 version 에 그대로 적용하지 않는다.
+- [text input state 변경 경로](https://github.com/chromium/chromium/blob/150.0.7871.250/content/browser/renderer_host/render_widget_host_view_mac.mm)는
+  AppKit 에 새 input context 를 cache 시키는 `updateWindows`를 기본 설정에서 100ms 뒤에 호출한다.
+  focus·활성 상태 변경의 `SetTextInputActive`는 이 timer 를 중단한다. 지연 갱신 경로의 존재는 확인했지만,
+  [Orca 의 누락·대기 후 회복](../orca.md#input-menu-의-homi-누락-보고와-회복-2026-10-31-미해결)을 이 100ms timer 탓으로 설명하지 않는다.
+- [password 보호](https://github.com/chromium/chromium/blob/150.0.7871.250/ui/base/cocoa/secure_password_input.mm)도
+  Secure Event Input 과 TSM 의 ASCII-capable source 제한을 별도로 설정·해제한다.
+
+공개 source 의 후보 기전이며, 실행 중 Orca 의 type·context·TSM 제한·timer 상태는 확보하지 못했다.
+
 ## homi 의 우회
 
 - `commitComposition` 에서 homi 가 선택돼 있으면 Session 만 끝내는 기존 우회로 복귀했다.

@@ -5,6 +5,7 @@
 | bundle ID | `com.stablyai.orca` |
 | 엔진 | Chromium (Electron) → [engines/chromium.md](engines/chromium.md) |
 | 확인한 version | 한자: 1.4.210 · 2026-09-25 · macOS 27.0. Caps Lock: 1.4.239 · 2026-10-29 · macOS 27.2 |
+| 최근 조사 환경 | 설치 bundle 1.4.244 · Electron 43.8.1 · macOS 27.2 · 2026-10-31 |
 | homi 규칙 | — |
 
 ## 특징
@@ -15,6 +16,51 @@
 ## homi 의 우회
 
 - Chromium 규칙 (`7e4c1fd`).
+
+## input menu 의 homi 누락 보고와 회복 (2026-10-31, 미해결)
+
+**주인이 정정해 확정한 순서**: 웹 browser 에서 ⌘Tab 으로 Orca 에 돌아오자 homi 가 보이지 않아 보고했다.
+그 창에서 기다리다가 다시 선택할 수 있었다. **회복하려고 다른 app 을 다녀온 것이 아니다.**
+주인은 menu 를 잘못 보았을 가능성도 배제하지 말라고 했다. 입력칸의 실제 focus 와 menu 표시 조건을 함께 조사한다.
+
+| 관측 | 보고 직후 08:48–08:50 KST | 회복 보고 뒤 08:51:52–53 KST |
+|---|---|---|
+| frontmost app | Orca (`com.stablyai.orca`) | Orca |
+| 현재 TIS source | ABC | homi 한국어 mode |
+| homi parent·mode | 모두 enabled | 모두 enabled |
+| Secure Event Input | false (08:48:45) | false |
+| process | homi `85292` · Orca `5860` · TextInputMenuAgent `10398` | 모두 같은 PID·시작 시각 |
+
+문서별 source 자동 복원 저장값도 false 였다. 설치본 CDHash 는 `39e0a7603bf12ded5c6f648ee98e323780144eed`로 유지됐다.
+agent 는 input source 선택·focus 이동·설정 변경·재등록·process 재시작·재설치를 하지 않았다.
+
+**menu 관측과 한계**: TextInputMenuAgent 의 status menu 접근성 조회에는 `ABC, enabled=true` 한 항목만 나왔다.
+주인 보고를 뒷받침하는 별도 관측이지만, screenshot 으로 화면 전체를 검증하거나 그 조회가 모든 표시 항목을 포함한다고 확인한 것은 아니다.
+회복 뒤 같은 조회에는 항목이 없었다. menu 개폐·갱신 상태에 따라 조회 결과도 달라질 수 있으므로 빈 결과를 새 누락으로 세지 않는다.
+Orca 의 focused element 조회는 실패했고, homi 선택이 확인된 08:53:39 에도 같은 AX error `-25204`였다.
+이 error 자체를 실패 당시 focus 상실의 증거로 쓰지 않는다.
+
+**회복 주변 source 전이**: 08:51:09–08:53:09 동안 외부 `tis watch`와 homi log 를 비교했다.
+
+- 08:51:10.425 외부 조회는 homi, 10.448 은 ABC 였다. homi 에도 activate·deactivate 와 selected true → false 가 남았다.
+- 08:51:23 homi log 에는 잠깐 selected=true 뒤 false 가 남았지만, 외부 observer 가 알림을 처리할 때는 모두 ABC 였다.
+  알림은 전환 때의 source ID 를 담은 이력이 아니라, callback 때 현재 source 를 다시 읽은 값이다.
+- 08:51:31.280 이후 외부 조회와 homi log 모두 homi 선택을 확인했고, 이후 snapshot 도 homi 였다. 관찰 구간에 enabled 변경 알림은 없었다.
+
+이 전이는 실제 상태 변화의 증거다. 다만 각 선택의 요청자·focus·menu 조작을 동시 관측하지 않아 자동 회복의 원인이나
+정확한 회복 시작 시각으로 단정하지 않는다. 여러 controller log 에 같은 `aa59b8495d20600`이 나오지만,
+mark 이력이 `3498 → none`으로 바뀌고 최초 event log 도 다시 나온다. 관측 당시 설치본의 `traceID`는 객체 identity 의 hash 이므로
+**같은 표시값만으로 같은 controller 수명이 이어졌다고 판단하지 않는다.**
+
+**판단**: 조사 때 등록과 process 는 살아 있었고 Secure Event Input 은 꺼져 있었다. 등록 소실·process crash 로 설명할 근거는 없다.
+현재 창의 input context·허용 source·menu 갱신을 우선 조사하되, 보기 착오와 focus 에 따른 정상적인 제한도 열어둔다.
+[해당 Chromium version 의 context·갱신 경로](engines/chromium.md#orca-설치-version-대조-2026-10-31)는 후보 기전이며 실제 실행 분기는 미확인이다.
+homi 의 activation 중 layout 지정과 AppKit 의 상호작용까지 원인에서 제외한 것은 아니다. Telegram 의 첫 초성 누락과 같은 원인으로 합치지 않는다.
+
+다음 재발에서는 같은 입력칸의 focus·menu 가 열린 상태의 항목 전체와 source·Secure Event Input 을 함께 확인한다.
+관찰만으로 회복한 이번 사례를 교정 완료로 세거나 source 강제 선택·timer retry 의 근거로 쓰지 않는다.
+관측 요약은 `build/input-availability-20261031-summary.json`, source 전이는 `build/input-availability-transition-20261031.log`,
+회복 주변 lifecycle 은 `build/input-availability-recovered-20261031.log`에 있다. 입력 내용·일반 key code 는 수집하지 않았다.
 
 ## Caps Lock 누락 관측 (2026-10-29)
 
@@ -76,5 +122,6 @@ CDHash `686f2190b15963148e871777aee4a950064266f7`에서 짧은 전환 action 34�
 
 | 날짜 | version | 내용 |
 |---|---|---|
+| 2026-10-31 | 조사 시 bundle 1.4.244 | 웹에서 ⌘Tab 복귀 직후 homi 누락 보고 → 같은 창에서 기다린 뒤 회복. enabled·process 유지, Secure Event Input=false, 접근성 menu 의 ABC 한 항목과 source 왕복을 관측. focus·menu 조회 범위와 원인은 미확정 |
 | 2026-09-25 | 1.4.210 | 확정한 단어의 재변환이 틀어짐 → Apple 방식 한자 안 씀 (`c884edd`) |
 | 2026-10-29 | 1.4.239 | 물리·remap 신호가 도착한 Caps Lock 의 mode 전환 누락 관측. 원인 미확정, app 우회 추가 없음 |

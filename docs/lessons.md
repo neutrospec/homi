@@ -6,6 +6,34 @@
 - 간헐 결함의 증거는 homi 의 기록이다 — 이상하면 주인이 곧바로 input menu 의 "최근 key 기록 저장" 을 누르고(`~/Library/Logs/homi/`), 그 file 로 가린다.
 - 원인에 🔶 가 붙은 것은 대응이 통했지만 원인은 추정이라는 뜻이다.
 
+## 늦은 client ID 가 실제 app 의 mode 기억을 덮는다 (2026-10-31)
+
+- **증상**: client ID 가 없는 첫 key 를 영문 fallback app 의 mode 로 넘긴 뒤 실제 ID 를 알면,
+  그 app 의 한글 기억까지 영문으로 덮었다. 조합·한/영 전환 없는 Control 단축키에서도 같은 반례가 성립했다.
+  [source review](stability-review.md#focus와-source-전환-code-review-2026-10-31)에서 찾은 코드의 결함이며, 실제 Telegram 누락의 원인으로 확인한 것은 아니다.
+- **원인**: `ModeActivation.inputStarted`가 모든 keyDown 전에 시작을 소비하고 fallback app 을 저장했다.
+  이후 `prepare`는 이어 갈 조합·사용자의 mode 변경이 없어도 그 기억을 실제 app 에 복사했다.
+- **증거**: `ActivationTests`에 일반 key·Control 단축키의 regression 두 개를 먼저 추가했고,
+  교정 전 각각 실제 app 의 mode·확정 text·mark 기대가 실패했다. 교정 뒤에는 두 반례와 기존 조합·toggle 보존이 통과했다.
+  실제 app 의 영문 시작 규칙, 전환 뒤 다른 fallback 의 무변화 key, 한자 질의 중 명시적 새 시작·같은 입력 재활성화도 검사했다.
+- **대응**: Session 판단 뒤 조합·후보가 있거나 mode 를 바꾼 입력에만 fallback 이전을 허용한다.
+  판단 전의 activation 세대를 잡고 client 반영 전에 확인하여, 질의 중 새로 생긴 시작을 옛 결과가 소비하지 않게 했다.
+  mode 의 SOT 는 계속 `ModeMemory`다. 이미 입력한 첫 key 를 재전송하거나 source·layout 을 강제 변경하지 않는다.
+- **검증·설치**: `swift build`, Debug·Release 각각 **213개 test 통과**. 12:44:29 KST 에 기존 자체 인증서로 서명·검증·설치했다.
+  CDHash `c4fb95bcde22750f1260a0832f71676a287fdcbd`, 새 process PID `27571`과 modifier observer 시작을 확인했다.
+  도구가 probe 에 보낸 합성 key 는 client 에 도착했지만 homi event 경로를 확인하지 못해 통과로 세지 않았다.
+  주인은 실제 keyboard 로 `한글 → Backspace → ㄹ` 조합·편집과, 다른 app 을 거쳐 ⌘Tab 복귀 뒤 `가` 입력을 확인했고
+  **모두 정상이며 `한글가`가 남는다**고 답했다. 도구로는 probe 의 `한`·`글` insert 호출을 별도로 확인했다.
+- **제한**: 첫 key 에 실제 ID 가 없을 때 그 key 자체를 어느 app 의 mode 로 해석할지는 여전히 fallback 에 의존한다.
+  Telegram 첫 key·menu 누락·source UI 지연의 해결을 뜻하지 않는다. 현재 ChatGPT 의 Chromium 판별·commit 정책과 activation layout 호출은 바꾸지 않았다.
+
+### controller 진단 ID 의 수명 구분
+
+같이 보완한 진단 ID 는 `ObjectIdentifier.hashValue` 대신 **process PID·UUID + 생성 번호**다.
+controller 가 사라진 뒤 주소가 재사용돼도 이전 수명의 ID 와 같아지지 않는다. 번호는 Atomic 으로 발급하고 생성 때 한 번 저장한다.
+새 process 에서 `/1` Safari, `/2`·`/3` Telegram 의 실제 event·activation 기록을 확인했다.
+입력 내용 수집은 늘리지 않았다. 과거 동일 hash 의 log 를 하나의 controller 로 합치지 않는다는 제한은 계속 적용한다.
+
 ## 2026-10-09 재검토에서 적용할 교훈
 
 - 주인 결정: 기본 조합·편집·homi 내부 한/영·focus 이동을 우선한다. 드문 source 왕복의 교정이 일상 입력을 악화시키면 철회한다.
@@ -294,7 +322,6 @@
 - **IntelliJ 에서 선택 영역을 한자로 바꾸면 글자가 사라진다** — IdeaVim 은 mouse 선택을 Visual mode 로 받고, 조합을 시작하며 선택이 지워지면 Visual 을 나온다.
   Insert 로 돌아가지 않으면 고른 한자는 Normal mode 명령으로 읽혀 버려진다 (source: IdeaVim `IdeaSelectionControl` — 주인 관측과 맞다 🔶). 조합 중인 글자는 된다.
 - **Word 에서 선택만 있을 때 ⌥↩ 가 무시된다** — homi 기록에 그 key 가 없다. marked text 가 없으면 Word 가 key 를 먼저 가져가는 듯하다 🔶.
-- **Telegram 에서 첫 초성이 사라진다**(`아` → `ㅏ`) — Apple 입력기에서만 났다. homi 로는 재현되지 않았다.
 
 ## 개발 도구에서
 

@@ -26,6 +26,7 @@ homi 를 바꿀 때(특히 `Sources/InputSession/AppRules.swift`) 그 app 의 �
 | [Obsidian](obsidian.md) | `md.obsidian` | Chromium | 1.13.7 | ESC → 영문 |
 | [Chrome](chrome.md) | `com.google.Chrome` | Chromium | 154.0.8037.98 | — |
 | [Orca](orca.md) | `com.stablyai.orca` | Chromium | 1.4.210 | — |
+| [ChatGPT](chatgpt.md) | 현재 설치본 `com.openai.codex` | Codex Framework · 입력 구현 미검증 | 26.1027.30824 | 전용 우회 없음·helper 이름 판별 검토 |
 | [Wave](wave.md) | `dev.commandline.waveterm` | Chromium + xterm.js | 0.14.5 | ESC → 영문, 한자는 조합 중인 글자만 |
 | [iTerm2](iterm2.md) | `com.googlecode.iterm2` | 자체 | 3.6.10 | ESC → 영문, 다시 보내기, 한자는 조합 중인 글자만 |
 | [Ghostty](ghostty.md) | `com.mitchellh.ghostty` | 자체 | 1.3.1 | ESC·Ctrl-B·Ctrl-A → 영문, 다시 보내기, 한자는 조합 중인 글자만 |

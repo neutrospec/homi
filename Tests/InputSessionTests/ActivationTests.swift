@@ -18,6 +18,7 @@ private final class ActivationHost {
     var marked = ""
     var onMark: (() -> Void)?
     var onInsert: (() -> Void)?
+    var selectedText: () -> String? = { nil }
 
     init(clientApp: String? = startingApp, fallback: String = fallbackApp) {
         self.clientApp = clientApp
@@ -64,16 +65,23 @@ private final class ActivationHost {
 
     func type(_ letters: String) {
         for letter in letters {
-            withInputEvent {
-                let app = resolve()
-                let mode = activation.prepare(app: app, trusted: knownApp != nil, profile: profile(app), memory: &memory)
-                activation.inputStarted(app: app, trusted: knownApp != nil)
-                driver.perform({ $0.handle(key(letter), mode: mode, profile: profile(app)) }, apply: {
-                    memory.remember($0.mode, for: app)
-                    apply($0.actions)
-                    if !$0.handled { text.append(letter) }
-                })
-            }
+            send(key(letter), passedText: String(letter))
+        }
+    }
+
+    @discardableResult
+    func send(_ event: KeyEvent, passedText: String = "") -> Outcome {
+        withInputEvent {
+            let app = resolve()
+            let mode = activation.prepare(app: app, trusted: knownApp != nil, profile: profile(app), memory: &memory)
+            let input = activation.beginInput(app: app, trusted: knownApp != nil)
+            return driver.perform({ $0.handle(event, mode: mode, profile: profile(app), selectedText: selectedText) }, apply: {
+                activation.inputHandled(input, modeChanged: $0.mode != mode,
+                    composing: !driver.composing.isEmpty || driver.hasCandidates)
+                memory.remember($0.mode, for: app)
+                apply($0.actions)
+                if !$0.handled { text += passedText }
+            })
         }
     }
 
@@ -81,8 +89,10 @@ private final class ActivationHost {
         withInputEvent {
             let app = resolve()
             let mode = activation.prepare(app: app, trusted: knownApp != nil, profile: profile(app), memory: &memory)
-            activation.inputStarted(app: app, trusted: knownApp != nil)
+            let input = activation.beginInput(app: app, trusted: knownApp != nil)
             driver.perform({ $0.toggle(from: mode, profile: profile(app)) }, apply: {
+                activation.inputHandled(input, modeChanged: $0.mode != mode,
+                    composing: !driver.composing.isEmpty || driver.hasCandidates)
                 memory.remember($0.mode, for: app)
                 apply($0.actions)
             })
@@ -96,10 +106,11 @@ private final class ActivationHost {
         }
     }
 
-    func withInputEvent(_ body: () -> Void) {
+    @discardableResult
+    func withInputEvent<Result>(_ body: () -> Result) -> Result {
         inputDepth += 1
         defer { inputDepth -= 1 }
-        driver.withEvent(body)
+        return driver.withEvent(body)
     }
 
     func deactivate() { driver.deactivate(apply: apply) }
@@ -259,6 +270,112 @@ func activationWithLateClientAfterToggle() {
     #expect(host.text.isEmpty)
     #expect(host.marked == "하")
     #expect(host.memory.mode(for: startingApp) == .korean)
+}
+
+@Test("activation: ID 없는 영문 key 통과는 실제 app 의 한글 기억을 덮지 않는다")
+func activationLateClientAfterPassedKey() {
+    let actual = "homi.tests.remembered-korean"
+    let host = ActivationHost(clientApp: nil)
+    host.memory.remember(.english, for: fallbackApp)
+    host.memory.remember(.korean, for: actual)
+    host.activate()
+    host.type("a")
+    #expect(host.text == "a")
+    #expect(host.marked.isEmpty)
+    host.clientApp = actual
+    host.type("r")
+    #expect(host.memory.mode(for: actual) == .korean)
+    #expect(host.memory.mode(for: fallbackApp) == .english)
+    #expect(host.text == "a")
+    #expect(host.marked == "ㄱ")
+}
+
+@Test("activation: ID 없는 Control 단축키 통과는 실제 app 의 한글 기억을 덮지 않는다")
+func activationLateClientAfterPassedShortcut() {
+    let actual = "homi.tests.remembered-korean"
+    let host = ActivationHost(clientApp: nil)
+    host.memory.remember(.english, for: fallbackApp)
+    host.memory.remember(.korean, for: actual)
+    host.activate()
+    let outcome = host.send(KeyEvent(keyCode: 0, modifiers: .control))
+    #expect(!outcome.handled)
+    #expect(outcome.actions.isEmpty)
+    #expect(host.driver.composing.isEmpty)
+    host.clientApp = actual
+    host.type("r")
+    #expect(host.memory.mode(for: actual) == .korean)
+    #expect(host.memory.mode(for: fallbackApp) == .english)
+    #expect(host.text.isEmpty)
+    #expect(host.marked == "ㄱ")
+}
+
+@Test("activation: ID 없는 단축키 통과 뒤 실제 app 의 영문 시작 규칙을 적용한다")
+func activationLateClientAfterPassedShortcutUsesStartRule() {
+    let host = ActivationHost(clientApp: nil)
+    host.activate()
+    let outcome = host.send(KeyEvent(keyCode: 0, modifiers: .control))
+    #expect(outcome.actions.isEmpty)
+    #expect(host.activation.needsStart)
+    host.clientApp = startingApp
+    host.type("r")
+    #expect(host.memory.mode(for: startingApp) == .english)
+    #expect(host.memory.mode(for: fallbackApp) == .korean)
+    #expect(host.text == "r")
+    #expect(host.marked.isEmpty)
+}
+
+@Test("activation: 명시적 전환 뒤 다른 fallback 의 통과 key 는 그 선택을 덮지 않는다")
+func activationLateClientKeepsToggleAcrossPassedKey() {
+    let host = ActivationHost(clientApp: nil)
+    host.memory.remember(.english, for: fallbackApp)
+    host.activate()
+    host.toggle()
+    host.fallback = "homi.tests.other-english-fallback"
+    host.send(KeyEvent(keyCode: 0, modifiers: .control))
+    host.clientApp = startingApp
+    host.type("gk")
+    #expect(host.memory.mode(for: startingApp) == .korean)
+    #expect(host.text.isEmpty)
+    #expect(host.marked == "하")
+}
+
+@Test("activation: 늦은 ID 의 한자 질의 중 새 시작은 옛 판단 결과가 소비하지 않는다")
+func activationLateClientAfterNewStartDuringQuery() {
+    let host = ActivationHost(clientApp: nil)
+    host.activate()
+    host.selectedText = {
+        host.commit()
+        host.activate()
+        return "한자"
+    }
+    host.send(optionReturn)
+    #expect(host.activation.needsStart)
+    #expect(!host.driver.hasCandidates)
+    #expect(host.text == "한자")
+    host.clientApp = startingApp
+    host.type("g")
+    #expect(host.memory.mode(for: startingApp) == .english)
+    #expect(host.text == "한자g")
+    #expect(host.marked.isEmpty)
+}
+
+@Test("activation: 늦은 ID 의 한자 질의 중 같은 입력 재활성화는 mode 를 이어 간다")
+func activationLateClientDuringContinuingQuery() {
+    let host = ActivationHost(clientApp: nil)
+    host.activate()
+    host.selectedText = {
+        host.deactivate()
+        host.activate()
+        return "한자"
+    }
+    host.send(optionReturn)
+    #expect(!host.activation.needsStart)
+    #expect(host.driver.hasCandidates)
+    host.clientApp = startingApp
+    host.modifierWithoutAction()
+    #expect(host.memory.mode(for: startingApp) == .korean)
+    #expect(host.driver.hasCandidates)
+    #expect(host.text.isEmpty)
 }
 
 @Test("activation: ID 보정은 처음 fallback 보다 마지막 입력의 mode 를 이어 간다")

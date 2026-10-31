@@ -18,11 +18,17 @@
 | 안건 | 판단 · 중요도 | 문서·교훈에 비춘 다음 행동 |
 |---|---|---|
 | Caps Lock 전환 누락 | **2026-10-29 교정·주인 시험 통과** · 기본 한/영 전환에 직접 영향 | [code review 의 반례](#caps-lock-전환-code-review-2026-10-29)와 실제 동시 비교에서 정상 tap 의 거짓 거부를 확인했다. gesture 교정 뒤 짧은 전환 34회·hold 4회 및 주인의 정상 동작 확인을 얻었다. [fallback·일상 사용의 남은 범위](lessons.md#정상-caps-tap-을-기존-판정이-거부한다-2026-10-29)는 계속 확인한다. |
+| system 의 문서별 input source 복원 | **2026-10-31 켜짐 발견·주인 승인 후 해제, 초성 누락은 재발** | [현재 설정 확인](macos-input.md#문서별-input-source-복원-재확인-2026-10-31). homi 내부 한/영과 ABC ↔ homi 선택을 분리한다. 해제만으로 초성 누락은 해결되지 않았고 Orca 의 menu 누락 보고도 나왔다. 첫 key 영문·T3 menu 누락의 해제 후 경과는 별도로 확인한다. |
 | Telegram 복귀 뒤 첫 key 의 영문 | **2026-10-29 주인 보고, 기본 입력의 우선 조사** | [원장](apps/telegram.md#창-전환-뒤-첫-key-가-영문-2026-10-29-미해결). Caps 를 누르지 않고 다음 key 부터 한글로 회복한다는 조건 때문에 tap 취소와 분리한다. 첫 key 의 IMK 도착·app 식별·mode·client 반영을 가르며, 주입한 activation model 을 실제 원인으로 단정하지 않는다. |
+| Telegram 복귀 뒤 초성 누락 | **2026-10-30·31 주인 보고, 기본 입력의 글자 유실로 우선 조사** | Caps 없이 `당 → ㅏㅇ`, 다음 날 자동 복원 해제 후 ⌘Tab 뒤에도 재발. [합성 조건 비교와 controller 교체 관측](apps/telegram.md#창-전환-뒤-초성-누락-2026-10-30-미해결). 첫 mark 의 표시 누락만으로는 설명되지 않는다. 첫 key 전달·modifier·조합 상태·client 전환을 가르며, 첫 key 영문과 동일 원인으로 단정하지 않는다. |
 | 현재 설치본의 입력칸 이동 | **최우선 확인** · 실제 발생했던 회귀 | 주인의 변경 전 기본 입력 정상 보고는 [후속 기록](lessons.md#2026-10-09-activation-교정callback-관측)에 있다. Chrome 의 개별 경로 확인과 model 통과는 구분한다. |
 | activation 과 mode 초기화의 경계 | **재현 test 후 교정·설치** · 기본 입력에 직접 영향 | 아래 두 counterexample 의 mode 경계를 `ModeActivation` 으로 교정했다. [검증·제한](lessons.md#재활성화가-mode-를-reset-하고-실제-client-의-시작-규칙을-놓친다-2026-10-09)과 [LaunchBar 요구](apps/launchbar.md)를 함께 확인한다. |
+| 늦은 client ID 와 fallback mode 이전 | **2026-10-31 교정·설치·probe 실제 입력 주인 확인** | [교정과 검증 범위](lessons.md#늦은-client-id-가-실제-app-의-mode-기억을-덮는다-2026-10-31). 무변화 key 는 이전하지 않으며 조합·toggle 보존과 새 activation 경계를 test 했다. 실제 Telegram 원인으로 확인한 것은 아니다. |
 | callback 이 확정한 mark 의 세대 | **관측 연결, 정책 교정 보류** · 유실 위험 | [client 호출 단계](macos-input.md#client-호출-단계의-관측)를 기록한다. token 만으로 old/new mark 의 확정 대상을 결정하지 않으며 다음 key 까지 commit 을 미루지 않는다. |
-| 비활성·누락의 상태 관측 | **채택** · 입력 자체를 막는 증상, 원인 미확정 | [비활성 관측](macos-input.md#input-menu-의-비활성누락-2026-10-09-미해결)을 한 번에 확보할 읽기 전용 도구를 준비한다. typing 경로는 건드리지 않는다. |
+| 비활성·누락의 상태 관측 | **채택·2026-10-31 실패 보고 중 snapshot 확보** · 입력 자체를 막는 증상, 원인 미확정 | [Orca 관측](apps/orca.md#input-menu-의-homi-누락-보고와-회복-2026-10-31-미해결): 등록·process 유지, Secure Event Input=false, 같은 창에서 기다린 뒤 회복 보고. menu 전체·focus 와 context 제한을 다음에 대조하며, 보기 착오도 배제하지 않는다. typing 경로는 건드리지 않는다. |
+| ChatGPT 복귀 뒤 source 전환 UI 지연 | **2026-10-31 11:56 전후 주인 보고, 미해결** | [보고 순서·log 범위](apps/chatgpt.md#복귀-뒤-source-전환-지연-보고-2026-10-31-미해결). 같은 `⌃Space`에 무표시 → 이름 popup → 커서 옆 표시. UI 와 실제 source 선택을 분리하고, activation 을 전환 완료로 세지 않는다. 개별 시도의 source·focus 대응이 다음 관측이다. |
+| ChatGPT renderer helper 판별 | **실제 판별 함수의 false 확인·commit 정책은 검증 후보** | [현재 bundle 의 이름 불일치](apps/chatgpt.md#별도-code-review-renderer-helper-이름-판별). 판별식 확대 전에 실제 commit·click·focus 경로를 확인한다. source 전환 UI 지연의 원인으로 채택하지 않는다. |
+| controller 진단 ID | **2026-10-31 교정·새 process 기록 확인** | [수명 구분](lessons.md#controller-진단-id-의-수명-구분). process PID·UUID 와 생성 번호를 쓴다. 과거 동일 hash log 는 한 controller 로 합치지 않는다. |
 | 제품 설치의 안정적인 서명 | **교정 후보 채택** · 기존 입력의 회귀를 예방하는 작은 변경 | [서명 결정](../AGENTS.md#알려진-함정)의 신원을 지키도록 제품 installer 는 인증서가 없으면 교환·process 종료 전에 실패하게 한다. 기존 설치본의 자체 서명은 확인했으며 인증서 부재를 관측한 것은 아니다. |
 | 설치본과 관측의 연결 | **채택** · 검증의 정확성, 낮은 회귀 위험 | 설치 확인·시작 log·사용자 요청 export 에 같은 binary UUID 또는 digest 를 넣는다. key 마다 계산하거나 입력 내용을 더 수집하지 않는다. |
 | Enter·ESC·Tab resend 의 순서와 대상 | **검증 채택, 교정 보류** · 명령 유실·잘못된 대상의 위험, 빈도 미상 | own probe 의 두 창·두 app 으로 순서와 focus 변경을 확인한다. [재전송 교훈](lessons.md#terminal-에서-조합-중-escenter-가-사라진다-2026-09-25-m4--apple-입력기-때부터) 때문에 일괄 제거·자동 drop·다른 post API 로의 교체를 바로 적용하지 않는다. |
@@ -106,6 +112,83 @@ LaunchBar 원장의 기존 정상 확인을 취소하거나 현재 비활성의 
 model 의 callback 의미를 실제 Chromium 의 의미로 가정하지 않고, action 단계·조합 세대·lifecycle 을 입력 내용 없이 대조한다.
 callback 의 적용 범위를 확인하기 전에는 insert 생략 정책을 바꾸지 않는다. 무조건 insert 하면 click 중복을 되살리고,
 다음 event 에서 판단하면 [입력칸 누출 교훈](lessons.md#보류한-chromium-확정이-다음-입력칸에-들어간다-2026-10-09)을 반복한다.
+
+## focus와 source 전환 code review (2026-10-31)
+
+제품 source 기준은 `623adcb`다. 최근 Telegram 첫 key·Orca menu 누락·ChatGPT source 전환 지연 보고에 맞춰
+`handle → app 식별 → mode 준비 → Session → client 반영`, activation·source 종료와 관찰 경로를 검토했다.
+**코드의 반례와 실제 증상의 원인은 다르다.** review 단계에서는 제품을 변경하지 않았다.
+이후 주인 승인으로 1·3번을 교정·설치했다. [후속 검증과 제한](lessons.md#늦은-client-id-가-실제-app-의-mode-기억을-덮는다-2026-10-31)을 따르며, 아래 반례는 교정 전 기준이다.
+
+### 1. 조합·전환 없는 첫 key 도 다른 app 의 mode 를 복사한다 — 교정·설치
+
+검토 당시 [HomiInputController.handle](../Sources/homi/HomiInputController.swift)는 모든 keyDown 에서 결과를 알기 전에
+`ModeActivation.inputStarted`를 호출했다. client ID 가 비면 fallback app 을 저장하고, 뒤늦게 실제 ID 를 알게 된
+[ModeActivation.prepare](../Sources/InputSession/ModeActivation.swift)는 fallback 의 현재 mode 를 실제 app 의 기억에 복사했다.
+
+반례: 실제 app 은 한글로 기억하고 fallback app 은 영문인 상태에서, 첫 key 의 client ID 가 없다고 가정한다.
+일반 key 나 Control 단축키를 **처리하지 않고 그대로 넘겨도** 입력 시작을 소비한다. 조합은 비어 있고 mode 를 바꾸지도 않았지만,
+다음 event 에 실제 ID 를 알면 그 app 의 한글 기억까지 영문으로 덮는다. controller 의 `prepareMode`는 이 변경을 저장한다.
+이는 앞선 Telegram model 의 늦은 ID 결과를, **이어 갈 조합·전환이 없는 조건**으로 좁혀 확인한 것이다.
+
+제품 `InputSession` module 을 직접 실행한 `build/ActivationReview20261031.swift`에서 두 반례와 세 대조 조건을 확인했다.
+
+| 합성 조건 | 교정 전 결과 |
+|---|---|
+| 실제 ID 없음 → 영문 fallback 으로 일반 key 통과 → 실제 ID 확인 | 실제 app 의 한글 기억이 영문으로 바뀜 |
+| 같은 조건에서 Control 단축키 통과, 조합·mode 변화 없음 | 역시 영문으로 바뀜 |
+| 첫 event 부터 실제 ID 를 앎 | 실제 app 의 한글 기억 유지 |
+| ID 를 모르는 동안 실제 한글 조합을 시작함 | 늦은 ID 확인 뒤에도 조합의 한글 mode 유지 |
+| ID 를 모르는 동안 명시적으로 영문 → 한글 전환 | 늦은 ID 확인 뒤에도 새 mode 유지 |
+
+교정 기준은 **명시적 mode 변경·진행 중 조합의 연속성과, 아무 변화 없이 넘긴 key 를 구분**하는 것이다.
+모든 fallback 이전을 없애면 기존 `ActivationTests`의 조합·toggle 보존 요구가 깨진다.
+후속 수정에서 두 반례를 실패하는 regression test 로 먼저 고정했고 기존 조합·toggle 보존도 확인했다.
+실제 실패 때 ID 가 비고 fallback 이 다른 app 이었다는 증거는 아직 없다. 이 경로만으로는
+Telegram 의 “첫 key 만 영문, 곧바로 한글 복구”나 초성 유실, source 목록 누락 전체를 설명하지 못한다.
+
+### 2. ChatGPT renderer 판별과 commit 정책 — 판별 누락 확인, 정책 변경 전 app 검증
+
+[설치 bundle·실제 판별 함수의 결과](apps/chatgpt.md#별도-code-review-renderer-helper-이름-판별)를 확인했다.
+이 분류는 `commitComposition`에서 client 자체 확정으로 볼지 `insertText`를 보낼지 바꾼다.
+누락은 명확하지만, renderer helper 가 있다는 사실만으로 기존 Chromium 우회가 이 app 에도 맞는다고 정하지 않는다.
+일반 조합 뒤 click·focus 이동의 callback 과 실제 글자 수를 먼저 검증한다. 다른 source 왕복은 그 다음이다.
+
+### 3. controller hash 는 수명을 넘는 진단 ID 가 아니다 — 교정·실행 확인
+
+[HomiInputController.traceID](../Sources/homi/HomiInputController.swift)는 검토 당시 `ObjectIdentifier(self).hashValue`였다.
+객체 해제 뒤 주소 재사용과 hash 충돌을 구별하지 못하므로, 서로 다른 수명의 controller 를 같은 것으로 읽을 수 있다.
+[Orca 회복 log](apps/orca.md#input-menu-의-homi-누락-보고와-회복-2026-10-31-미해결)에도 동일 값 아래 mark 이력의 초기화·최초 event 기록이 다시 나타났다.
+process 내 생성 번호를 각 controller 에 한 번 부여하고 process 식별과 함께 기록하는 변경을 채택한다.
+이는 입력 내용을 더 모으거나 입력 판단을 바꾸는 일이 아니다. 과거 log 만으로 같은 객체의 mode reset·조합 소실을 확정하지 않는다.
+
+### 4. activation의 layout 호출 — 검증 공백, 확인된 장애는 아님
+
+`activateServer`의 재활성화 판정은 `inputDepth > 0 && !session.hasExplicitEnd`다.
+평범한 activation 의 `Client.apply(.layout)`는 `SessionDriver.withEvent` 밖에서 실행한다.
+만일 `overrideKeyboard` 안에서 같은 controller 의 activation 이 중첩되면 `inputDepth == 0`이므로 layout 호출을 다시 허용한다.
+기존 activation model 은 이 IPC 를 실행하지 않고, `ClientTests`의 `overrideKeyboard`도 빈 구현이라 이 경계를 검사하지 않는다.
+
+**해당 중첩이 실제로 일어났다는 log·재현은 없다.** [macSKK #292](https://github.com/mtgto/macSKK/pull/292)도
+activate 의 override 제거 사례이지만 작성자가 원인 미확정·local 미재현이라고 명시했다. 그 변경을 homi 의 해법으로 복사하지 않는다.
+우리 경계의 callback 주입 검사를 먼저 하고, 실제 client 관측에서 호출의 시작·반환·중첩 여부를 대조한다.
+ABC layout 지정은 TIS source 를 ABC 로 선택하는 것과 다르다. 호출을 없애거나 key 처리 안으로 옮기면 문장부호·원격 layout 요구를 훼손할 수 있다.
+
+### 원인에서 배제한 범위와 다음 순서
+
+- 현재 제품 source 에 source disable·재등록·`TISSelectInputSource` 호출은 없다. `Info.plist`의 한국어 mode 는 visible/enabled 이다.
+  menu 누락의 직접 원인을 찾은 것은 아니며, homi 의 IPC 지연이나 app/system 과의 상호작용이 무해하다는 증명도 아니다.
+- 일반 key 의 modifier 는 그 `NSEvent`에서 읽고 observer 는 원본 event 를 반환한다.
+  “⌘Tab release 를 homi 가 못 봐서 이후 일반 key 에 Command 가 계속 붙는다”는 내부 cache 경로는 없다.
+- [insert 중 clientConfirmed](#clientconfirmed-during-insert-의-검증-공백)와 단일 `ActiveInputSession`의 한계는 여전히 남는다.
+  callback 세대와 실제 입력칸 소유권을 확인하지 않은 일괄 commit·무조건 insert 는 과거 유실·누출 교훈과 충돌한다.
+
+1·3번의 교정 후 probe 실제 입력은 주인이 확인했다. 일상 사용과 2번의 실제 commit 검증, 4번의 callback 주입 검사를 이어 간다. 새 사용자 관측만 무기한 기다리는 대신
+소유권·event 순서의 경계를 검사하되, 이 네 작업을 최근 증상 전체의 해결로 약속하지 않는다.
+
+검증: `swift build`와 Debug `swift test` **207개 통과**, 별도 module 검사에서 위 두 반례·세 대조 조건 확인,
+제품 Chromium 판별 함수의 실제 bundle 조회 확인. 기존 suite 의 통과는 새 반례를 검사한다는 뜻이 아니다.
+build·test 결과는 `build/source-review-build-20261031.log`·`build/source-review-tests-20261031.log`에 있다.
 
 ## 기능·표시와 cold path 의 안건
 

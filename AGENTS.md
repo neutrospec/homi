@@ -3,8 +3,8 @@
 **homi** (`com.unocult.inputmethod.homi`) — macOS 한글 입력기. 주인 한 사람이 매일 쓰는 도구이고,
 목표는 **두벌식 한글 입력이 완벽하게 동작하는 것** 하나다. 기능을 늘리는 프로젝트가 아니다 — 잡다한 기능·옵션·변죽은 만들지 않는다.
 
-> **현재 (2026-10-29)**: M0–M4·M6·M7 을 주인이 확인했다. 지금은 M5 — 일상 사용과 app 호환성. [Caps Lock 의 정상 tap 을 기존 판정이 거부하는 경로](docs/lessons.md#정상-caps-tap-을-기존-판정이-거부한다-2026-10-29)를 확인했다.
-> **설치본**: 20:19 의 [Emacs Caps Lock 전달 옵션본](docs/apps/emacs.md#caps-lock-전달-2026-10-29)이다. Debug·Release 207개 test 와 실제 설정 on/off 의 HID mapping 을 확인했다. 전달 동작은 앞선 19:34 설치본에서 Emacs batch 3개 검사와 주인 확인을 마쳤다. 옵션은 기본 꺼짐이며 주인 환경에는 켜 두었다. 일반 Mac 의 13:45 gesture 교정은 짧은 전환 34회·누른 채 대문자 고정 4회와 주인 확인을 마쳤다. 일상 사용·다른 app·fallback 의 한계는 계속 확인한다. 앞선 timestamp 검색 실험은 [전환이 전부 막혀 rollback](docs/lessons.md#event-snapshot-실험본이-caps-lock-전환을-전부-거부한다-2026-10-29-rollback)했다.
+> **현재 (2026-10-31)**: M0–M4·M6·M7 을 주인이 확인했다. 지금은 M5 — 일상 사용과 app 호환성. [focus·source review](docs/stability-review.md#focus와-source-전환-code-review-2026-10-31)에서 mode 기억 이전의 추가 반례를 확인해 교정했다. 최근 첫 key·source 선택 증상의 원인은 아직 미확정이다.
+> **설치본**: 2026-10-31 12:44 의 [mode 기억·controller 진단 ID 교정본](docs/lessons.md#늦은-client-id-가-실제-app-의-mode-기억을-덮는다-2026-10-31)이다. Debug·Release 각각 213개 test 가 통과했고, 주인이 probe 의 실제 조합·Backspace·⌘Tab 복귀 입력을 정상 확인했다. 앞선 [Caps Lock gesture 교정](docs/lessons.md#정상-caps-tap-을-기존-판정이-거부한다-2026-10-29)과 [Emacs 전달 옵션](docs/apps/emacs.md#caps-lock-전달-2026-10-29)의 검증 범위는 각 기록을 따른다.
 > 설치본의 변경·검증 범위는 [activation 기록](docs/lessons.md#2026-10-09-activation-교정callback-관측)과 [Windows Caps Lock 실험](docs/apps/windows-app.md#caps-lock-전달-실험-2026-10-10), 개선 안건은 [안정성 검토](docs/stability-review.md), 남은 작업은 [다음 작업](#다음-작업)에 있다.
 > 이상하면 주인이 곧바로 "최근 key 기록 저장" 을 누른다 → [진행 단계](#진행-단계)
 
@@ -220,7 +220,8 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 
 입력기가 한/영의 유일한 주인이 되려면 system 쪽 전환 경로를 정리한다. **agent 가 임의로 바꾸지 않는다 — 주인에게 확인받는다.**
 
-- ✅ "문서의 입력 소스로 자동 전환" 끄기 (2026-09-25) — 켜 두면 system 이 문서마다 input source 를 되돌려 homi 를 밀어낸다.
+- ✅ "문서의 입력 소스로 자동 전환" 끄기 — 2026-10-31 켜짐을 재확인해 주인 승인 후 해제했다.
+  [현재값과 비교 기준](docs/macos-input.md#문서별-input-source-복원-재확인-2026-10-31). 예전의 꺼짐 기록만으로 현재 설정을 가정하지 않는다.
 - ✅ 손쉬운 사용에서 homi 허가 (2026-09-25) — 조합 중 Enter·ESC 다시 보내기에 필요하다.
 - ✅ Hammerspoon 입력 전환 코드 제거 — 주인이 직접 (2026-09-25).
 - ✅ Apple 한국어 입력기를 입력 소스에서 뺐다 (2026-09-26 확인). `ABC` 는 남긴다 (비밀번호 칸, 비상용).
@@ -265,6 +266,8 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
    notification·검사 진행을 나눈 최소 재현 또는 수동 검증으로 남은 경계를 확인한다. 원인 확인 없이 actor 검사를 우회하지 않는다.
    정상 사용 보고를 모든 경로의 통과로 확대하지 않는다. callback token 만으로 commit 대상을 결정하지 않는다.
 2. [개선 안건](docs/stability-review.md): signing 실패 시 기존 설치본 보존·binary 식별·읽기 전용 진단을 준비한다.
+   [2026-10-31 focus·source review](docs/stability-review.md#focus와-source-전환-code-review-2026-10-31)의 fallback mode 이전·controller 진단 ID 를 교정·설치했다.
+   probe 실제 입력은 주인이 확인했다. ChatGPT commit 정책·activation layout 재진입은 별도 검증 후 판단한다. 최근 증상의 원인 확정은 아니다.
    후보 revision·resend·Caps 종료 등 남은 안건은 영향과 증거에 따라 검증한다. 기본 입력이 다른 source 왕복보다 먼저다.
    [일본어 입력기의 recipe](docs/research/japanese-ime-recipes.md)는 외부 근거이며 실제 homi 검증과 구분한다.
 3. [비활성·누락](docs/macos-input.md#input-menu-의-비활성누락-2026-10-09-미해결): 재발 당시 상태를 먼저 확보한다.
