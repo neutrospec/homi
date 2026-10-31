@@ -51,7 +51,8 @@ macOS **27.2 (26B123)**, `local.hangul.probe` 0, homi **14:41 설치본**에서 
 `hanja.txt`의 `한` 첫 9개 후보는 모두 뜻이 있고, 설치 resource 와 repository 원본의 SHA-256 도 같다
 (`b1004034589f1357daaea3534a6136f6b5ef825afa8779886b20f0b7908bbe3b`). 단어 후보의 빈 뜻으로 설명할 수 없다.
 후보 데이터의 `meaning`을 label 에 넘기는 코드와 panel layout 은 이번 revision 분리에서 바꾸지 않았다. 회귀 여부·원인은 미확정이다.
-다음에는 첫 show·다음 show 의 후보 데이터와 각 label 의 frame·가시성을 대조한다. fake panel test 는 실제 AppKit rendering 을 검증하지 않는다.
+주인 결정(2026-10-31): 문제가 다시 나타날 때 살펴본다. 그때 첫 show·다음 show 의 후보 데이터와 각 label 의 frame·가시성을 대조한다.
+fake panel test 는 실제 AppKit rendering 을 검증하지 않는다.
 
 | 날짜 | 환경 | 내용 |
 |---|---|---|

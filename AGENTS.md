@@ -202,6 +202,7 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
   Swift Testing 의 `#expect(...)` 안에서는 mutating method 를 부를 수 없다 — 결과를 변수에 먼저 받는다.
 - `scripts/install.sh [--register]` — release build → 설치 위치와 같은 volume 에 bundle 조립·서명·검증(`scripts/app.sh`) →
   `~/Library/Input Methods/homi.app` 과 atomic 교환 → 실행 중인 homi 종료. 교환 전 실패하면 기존 app·process 는 그대로 남는다.
+  `homi code signing` 인증서 조회·서명이 실패하면 중단한다. ad-hoc 대체 서명은 개발용 probe 의 `app.sh --allow-ad-hoc`에서만 명시한다.
   다음 입력 때 system 이 새 binary 로 띄운다. `--register` 는 처음 한 번 (TIS 등록 + enable).
 - 개발 도구 (`tools/`, 제품 아님):
   - `swift run caps-probe --seconds 90` — Caps Lock 의 물리 HID·remap 뒤 modifier 와 인접 입력의 시각·counter 를 읽기 전용으로 관찰한다.
@@ -273,7 +274,7 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
    주인이 일반 probe 의 긴 입력을 확인했고 실제 insert·mark 의 관측 연결도 확인했다. 자동 검사는 probe crash 로 중단됐다.
    notification·검사 진행을 나눈 최소 재현 또는 수동 검증으로 남은 경계를 확인한다. 원인 확인 없이 actor 검사를 우회하지 않는다.
    정상 사용 보고를 모든 경로의 통과로 확대하지 않는다. callback token 만으로 commit 대상을 결정하지 않는다.
-2. [개선 안건](docs/stability-review.md): signing 실패 시 기존 설치본 보존·binary 식별·읽기 전용 진단을 준비한다.
+2. [개선 안건](docs/stability-review.md): signing 실패 시 기존 설치본 보존은 교정·검증했다(Debug·Release 각각 251개 test). binary 식별·읽기 전용 진단을 준비한다.
    [구조 개선 네 항목](docs/stability-review.md#구조-개선-계획-2026-10-31)은 모두 설치·주인 확인을 마쳤다. 일상 사용을 지켜보고, 새 후보 뜻 표시 누락과 남은 안건은 별도 검증한다.
    [2026-10-31 focus·source review](docs/stability-review.md#focus와-source-전환-code-review-2026-10-31)의 fallback mode 이전·controller 진단 ID 를 교정·설치했다.
    probe 실제 입력은 주인이 확인했다. ChatGPT commit 정책·activation layout 재진입은 별도 검증 후 판단한다. 최근 증상의 원인 확정은 아니다.

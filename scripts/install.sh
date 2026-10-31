@@ -22,7 +22,7 @@ trap 'rm -rf "$stage"' EXIT
 scripts/app.sh "$bin/homi" Sources/homi/Bundle/Info.plist "$stage/homi.app" Sources/homi/Bundle/Resources
 codesign --verify --strict "$stage/homi.app"
 "$bin/replace-app" "$stage/homi.app" "$dest"
-# 교환·검증에 실패했을 때는 실행 중인 입력기를 종료하지 않는다.
+# 인증서 조회·서명·검증·교환 중 하나라도 실패하면 실행 중인 입력기를 종료하지 않는다.
 pkill -x homi || true
 echo "installed: $dest"
 

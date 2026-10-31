@@ -29,7 +29,7 @@
 | ChatGPT 복귀 뒤 source 전환 UI 지연 | **2026-10-31 11:56 전후 주인 보고, 미해결** | [보고 순서·log 범위](apps/chatgpt.md#복귀-뒤-source-전환-지연-보고-2026-10-31-미해결). 같은 `⌃Space`에 무표시 → 이름 popup → 커서 옆 표시. UI 와 실제 source 선택을 분리하고, activation 을 전환 완료로 세지 않는다. 개별 시도의 source·focus 대응이 다음 관측이다. |
 | ChatGPT renderer helper 판별 | **실제 판별 함수의 false 확인·commit 정책은 검증 후보** | [현재 bundle 의 이름 불일치](apps/chatgpt.md#별도-code-review-renderer-helper-이름-판별). 판별식 확대 전에 실제 commit·click·focus 경로를 확인한다. source 전환 UI 지연의 원인으로 채택하지 않는다. |
 | controller 진단 ID | **2026-10-31 교정·새 process 기록 확인** | [수명 구분](lessons.md#controller-진단-id-의-수명-구분). process PID·UUID 와 생성 번호를 쓴다. 과거 동일 hash log 는 한 controller 로 합치지 않는다. |
-| 제품 설치의 안정적인 서명 | **교정 후보 채택** · 기존 입력의 회귀를 예방하는 작은 변경 | [서명 결정](../AGENTS.md#알려진-함정)의 신원을 지키도록 제품 installer 는 인증서가 없으면 교환·process 종료 전에 실패하게 한다. 기존 설치본의 자체 서명은 확인했으며 인증서 부재를 관측한 것은 아니다. |
+| 제품 설치의 안정적인 서명 | **2026-10-31 chore 교정·검증 완료** | [서명 실패 보호](lessons.md#인증서가-없으면-제품-설치가-ad-hoc-서명으로-계속된다-2026-10-31). 인증서 조회·서명·검증 실패를 주입해 교환·process 종료가 없음을 확인했고 실제 인증서의 임시 bundle 검증도 통과했다. 현재 입력기는 재설치하지 않았다. |
 | 설치본과 관측의 연결 | **채택** · 검증의 정확성, 낮은 회귀 위험 | 설치 확인·시작 log·사용자 요청 export 에 같은 binary UUID 또는 digest 를 넣는다. key 마다 계산하거나 입력 내용을 더 수집하지 않는다. |
 | Enter·ESC·Tab resend 의 순서와 대상 | **검증 채택, 교정 보류** · 명령 유실·잘못된 대상의 위험, 빈도 미상 | own probe 의 두 창·두 app 으로 순서와 focus 변경을 확인한다. [재전송 교훈](lessons.md#terminal-에서-조합-중-escenter-가-사라진다-2026-09-25-m4--apple-입력기-때부터) 때문에 일괄 제거·자동 drop·다른 post API 로의 교체를 바로 적용하지 않는다. |
 | 종료 뒤 Caps Lock remap | **검증 채택, 교정 보류** · 기본 key 에 영향, macOS 27 실관측 없음 | [mapping 수명](macos-input.md#homi-process-와-hid-mapping-의-수명)을 근거로 일반 종료·설치 종료와 crash 뒤 상태를 구분한다. snapshot 에 mapping 을 포함한다. guardian daemon 은 추가하지 않는다. |
@@ -297,7 +297,7 @@ build·test 결과는 `build/source-review-build-20261031.log`·`build/source-re
 | 안건 | 판단 | 검토 결과 · 다음 검증 |
 |---|---|---|
 | 보이지 않는 한자 후보 | **반례 교정·설치·주인 확인** | [4번 구현·검증](#4번-입력-revision과-후보-ui-revision-분리)을 따른다. event 횟수와 후보 변경을 분리하고 owner·busy·active 조건은 유지한다. 실제 간헐 증상의 원인 확정은 아니다. |
-| 첫 후보 목록의 뜻 표시 누락 | **관측 채택·교정 보류** | [probe 보고](apps/engines/appkit.md#후보-뜻의-첫-표시-누락-보고-2026-10-31-미해결). 같은 한 글자의 다음 목록에는 뜻이 보였다. 첫 쪽 사전 값은 비어 있지 않다. 첫 show 와 다음 show 의 데이터·label 가시성을 대조하고, 후보 revision 교정과 구분한다. |
+| 첫 후보 목록의 뜻 표시 누락 | **주인 결정: 재발 때 재검토** | [probe 보고](apps/engines/appkit.md#후보-뜻의-첫-표시-누락-보고-2026-10-31-미해결). 같은 한 글자의 다음 목록에는 뜻이 보였다. 첫 쪽 사전 값은 비어 있지 않다. 재발하면 첫 show 와 다음 show 의 데이터·label 가시성을 대조한다. |
 | caret 질의의 부작용 | **관측 채택, 교정 보류** | [Chromium 원장](apps/engines/chromium.md)의 firstRect 실패는 click 확정과 다른 경로다. homi 의 attributes 질의와 그 callback 이 실제로 연결되는지 먼저 확인한다. 표시를 위해 입력을 위험하게 하지 않는다. client 질의를 event 밖으로 옮기면 교착 교훈을 깨므로 기각한다. |
 | Chromium 최초 판별 | **cache 실패 교정·판별과 정책 분리** | [3번 구현·검증](#3번-renderer-판별과-commit-정책-분리)을 따른다. 미확인을 부재로 고정하지 않고 첫 callback 의 기존 판단을 검사했다. 실제 간헐 증상의 원인으로 확인한 것은 아니다. cold 조회의 단순 async 이동은 여전히 보류한다. |
 | ModeHUD·indicator 의 stale Task | **indicator 는 activation 교정에 포함, ModeHUD 는 후순위** | indicator 는 owner·app·현재 mode·pass-through 를 확인한다. ModeHUD 의 Task guard 는 별도 안건이며 실제 실패는 미관측이다. 표시 때문에 mode·source 를 다시 바꾸지 않는다. |
@@ -344,7 +344,7 @@ client 반영 단계·질의 횟수를 검사하는 bridge test, 현재 상태�
    주인의 기본 입력 정상 보고를 개별 Chrome·native 경로의 통과로 확대하지 않는다. 실패하면 새 우회보다 기본 경로를 먼저 복구한다.
 2. activation 교정본의 native text·LaunchBar·Chromium 경로를 확인한다. client 확인의 action 단계는 관측하고 적용 대상을 확인한 뒤 정책을 결정한다.
    후보 revision 은 한자 경로를 따로 교정·검증한다.
-3. 제품 signing 실패 시 기존 설치본 보존, binary 식별, 비활성 snapshot 은 typing 을 바꾸지 않는 작업으로 준비한다.
+3. 제품 signing 실패 때 기존 설치본 보존은 [교정·검증을 마쳤다](lessons.md#인증서가-없으면-제품-설치가-ad-hoc-서명으로-계속된다-2026-10-31). binary 식별·비활성 snapshot 은 typing 을 바꾸지 않는 작업으로 준비한다.
    비활성 재발을 기다리는 동안 다른 검토를 멈출 필요는 없다.
 4. resend·Caps 종료·caret 질의·cold 판별은 영향과 실제 증거에 따라 조사한다. Chrome source 왕복은 위 기본 경로를 해치지 않는 교정 근거가 있을 때 다시 시작한다.
 

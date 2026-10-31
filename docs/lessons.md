@@ -6,6 +6,19 @@
 - 간헐 결함의 증거는 homi 의 기록이다 — 이상하면 주인이 곧바로 input menu 의 "최근 key 기록 저장" 을 누르고(`~/Library/Logs/homi/`), 그 file 로 가린다.
 - 원인에 🔶 가 붙은 것은 대응이 통했지만 원인은 추정이라는 뜻이다.
 
+## 인증서가 없으면 제품 설치가 ad-hoc 서명으로 계속된다 (2026-10-31)
+
+- **증상·원인**: `app.sh`가 인증서 부재·조회 실패를 ad-hoc 서명으로 대체했다. 이 서명도 검증을 통과하면 installer 는 기존 자체 서명본을 교환하고 process 를 종료했다.
+  실제 사용 환경의 인증서 소실을 관측한 것은 아니다.
+- **증거**: 실제 설치 script 의 대상 경로를 임시 fixture 로 옮기고 외부 명령을 대체한 `SigningTests`에서 인증서 부재·조회 실패·다른 이름의 세 조건 모두
+  기존 bundle 교환·종료 요청까지 진행했다. 교정 전 실패, 교정 후 통과했다(`build/signing-policy-{before,after}-20261031.log`).
+- **대응**: bundle 조립 전에 정확한 이름의 유효 signing identity 를 요구한다. 조회 실패·부재면 실패하고, 서명·검증 실패도 교환·process 종료 전에 멈춘다.
+  `probe.sh` 같은 개발 도구에서만 `app.sh --allow-ad-hoc`을 명시한다. 제품 installer 는 이 대체 서명을 허용하지 않는다.
+- **검증**: 새 검사 4개(총 7조건)로 실패 때 기존 bundle·process 보존, 정상 때 서명 → 검증 → 교환 → 종료, 개발 도구의 명시적 대체 서명을 확인했다.
+  test 는 실제 인증서·입력기를 건드리지 않는다. 실제 인증서로 별도 임시 bundle 의 서명·strict 검증도 통과했고 그 bundle 은 정리했다.
+  `swift build`, Debug·Release 각각 **251개 test**가 통과했다. 근거는 `build/signing-policy-{build,debug-tests,release-tests,bundle}-20261031.log`다.
+  입력기 source·현재 설치본은 바꾸지 않았고 실행 중인 homi 를 재시작하지 않았다.
+
 ## 무변화 event 가 한자 후보 표시를 취소한다 (2026-10-31)
 
 - **증상**: `⌥↩ → Option release → 예약한 show 실행` 순서에서 Session 은 후보 선택 중인데 창은 뜨지 않는 코드의 반례다.

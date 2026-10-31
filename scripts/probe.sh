@@ -5,7 +5,7 @@ set -euo pipefail
 cd "${0:A:h}/.."
 
 swift build --product probe
-scripts/app.sh .build/debug/probe tools/probe/Info.plist build/probe.app
+scripts/app.sh --allow-ad-hoc .build/debug/probe tools/probe/Info.plist build/probe.app
 
 log=${1:-build/probe.log}
 if (( $# > 0 )); then shift; fi
