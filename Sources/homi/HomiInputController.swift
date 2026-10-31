@@ -13,6 +13,7 @@ import Synchronization
 nonisolated final class HomiInputController: IMKInputController, CandidateOwner {
     // Session·사전은 기존처럼 controller 생성 때 준비한다. lazy coordinator 의 첫 key 로 사전 I/O 를 옮기지 않는다.
     private let session = SessionDriver(hanja: hanjaDictionary)
+    var compositionSubmission: CompositionSubmission { session.submission }
     private lazy var coordinator = InputCoordinator(driver: session, modes: StoredModes(),
         profile: { AppRules.profile(for: $0, preferences: preferences.withLock { $0 }) },
         fallbackApp: { MainActor.assumeIsolated { NSWorkspace.shared.frontmostApplication?.bundleIdentifier } ?? "unknown" },
@@ -84,18 +85,19 @@ nonisolated final class HomiInputController: IMKInputController, CandidateOwner 
         switch event.type {
         case .keyDown:
             let key = KeyEvent(event)
+            var resend: Resend?
             return coordinator.keyDown(key, client: client, before: {
                 cancelModifiers()
                 record("key \(key)")
             }, canResend: {
-                let allowed = Resend.allowed()
-                if !allowed { record("  resend not allowed — passed") }
-                return allowed
+                resend = Resend.prepare(event, app: coordinator.clientApp)
+                if resend == nil { record("  resend not prepared — passed") }
+                return resend != nil
             }, after: { outcome, modeChanged in
                 if modeChanged { showMode(outcome.mode, near: client) }
                 if outcome.resend {
                     record("  resend")
-                    Resend.post(event)
+                    resend?.send(afterEvent: session.afterEvent)
                 }
                 record(outcome.handled ? "  handled" : "  passed")
             }).handled
@@ -312,42 +314,5 @@ nonisolated enum LegacyActivity {
         .counter([CGEventType.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel].map {
             CGEventSource.counterForEventType(.hidSystemState, eventType: $0)
         })
-    }
-}
-
-/// 먹은 key 를 app 에 다시 보낸다 (`Outcome.resend`) — 손쉬운 사용 권한이 필요하다.
-/// 다시 보낸 key 는 event 대기열의 끝에 붙는다: 그 key 뒤 수 ms 안에 이미 눌린 key 가 있으면 순서가 바뀔 수 있다 (AGENTS.md).
-nonisolated enum Resend {
-    private static let requested = Mutex(false)
-
-    /// 권한이 있는가. 없으면 한 번만 요청한다 — System Settings 의 손쉬운 사용에 homi 가 나타난다.
-    static func allowed() -> Bool {
-        if CGPreflightPostEventAccess() { return true }
-        let first = requested.withLock { asked in
-            defer { asked = true }
-            return !asked
-        }
-        if first {
-            log.info("requesting post-event access")
-            _ = CGRequestPostEventAccess()
-        }
-        return false
-    }
-
-    /// 새 key event 를 만들어 실제 keyboard 와 같은 경로(HID)로 보낸다 — key code 와 수식키만 옮긴다.
-    /// 원래 event 를 복사해 보냈더니 Telegram 에 닿지 않았다 ("틱" 소리, 2026-09-25): 복사본에 원래 event 의 창·시각이 따라간다.
-    /// 원래 key 처리가 끝난 뒤에 보낸다 — app 이 아직 그 key 를 처리하는 도중이다.
-    static func post(_ event: NSEvent) {
-        let keyCode = CGKeyCode(event.keyCode)
-        let flags = event.cgEvent?.flags ?? []
-        DispatchQueue.main.async {
-            let source = CGEventSource(stateID: .hidSystemState)
-            for down in [true, false] {
-                guard let key = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: down) else { continue }
-                key.flags = flags
-                key.post(tap: .cghidEventTap)
-            }
-            record("  resent kc=\(keyCode)")
-        }
     }
 }

@@ -32,6 +32,10 @@
 
 ## 확인하는 법
 
+2026-10-31 15:23 homi 교정본은 [resend 를 원래 process 로 전달](../macos-input.md#key-다시-보내기)한다.
+설치된 Ghostty 는 **1.4.0**, macOS **27.2**다. 주인은 Telegram 과 terminal 쪽 모두 정상이라고 답했다.
+질문이 Ghostty/iTerm2 를 함께 다뤘으므로 개별 terminal 의 통과로 확대하지 않는다. 범위는 [공통 기록](../macos-input.md#key-다시-보내기)을 따른다.
+
 - vim 에서 조합 중 ESC 한 번 → Normal + 영문. tmux 에서 Ctrl-B → 영문.
 - Caps Lock·오른쪽 ⌘ 전환 때 글자가 새지 않는다.
 - 조합 중 전환의 화면 문제가 아직 있는가.

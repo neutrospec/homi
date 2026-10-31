@@ -69,8 +69,13 @@ private final class ActivationHost: InputClient {
     func textBefore(_ count: Int) -> (text: String, end: Int)? { nil }
 
     func apply(_ actions: [Action]) {
+        driver.submission.withActions(actions) { applySubmitted(actions) }
+    }
+
+    private func applySubmitted(_ actions: [Action]) {
         #expect(!modes.accessing)
         for action in actions {
+            driver.submission.willApply(action)
             switch action {
             case .mark(let value):
                 marked = value
@@ -189,12 +194,16 @@ func activationDuringSelectionQuery() {
     #expect(host.memory.mode(for: startingApp) == .korean)
 }
 
-@Test("activation: 명시적 commit 은 재활성화가 취소하지 않고 다음 시작은 영문이다")
-func activationAfterExplicitCommit() {
+@Test("activation: 현재 mark 의 명시적 종료는 재활성화가 취소하지 않고 다음 시작은 영문이다", arguments: [false, true])
+func activationAfterExplicitCommit(clientConfirmed: Bool) {
     let host = ActivationHost()
     host.toggle()
     host.onMark = {
-        host.commit()
+        if clientConfirmed {
+            host.driver.end(.alreadyCommittedByClient, apply: host.apply)
+            host.text += host.marked
+            host.marked = ""
+        } else { host.commit() }
         host.activate()
         #expect(host.memory.mode(for: startingApp) == .korean)
     }
@@ -202,6 +211,22 @@ func activationAfterExplicitCommit() {
     #expect(host.text == "ㅎk")
     #expect(host.marked.isEmpty)
     #expect(host.memory.mode(for: startingApp) == .english)
+}
+
+@Test("activation: 이전 mark 의 확인 뒤 재활성화돼도 뒤따를 새 조합의 mode 는 보존한다")
+func activationAfterEarlierMarkConfirmation() {
+    let host = ActivationHost()
+    host.toggle()
+    host.type("gks")
+    host.onInsert = {
+        host.driver.end(.alreadyCommittedByClient, apply: host.apply)
+        host.activate()
+    }
+    host.type("rmf")
+    host.commit()
+    #expect(host.text == "한글")
+    #expect(host.marked.isEmpty)
+    #expect(host.memory.mode(for: startingApp) == .korean)
 }
 
 @Test("activation: 외부 commit 의 insert flush 는 실제 key event 의 continuation 이 아니다")

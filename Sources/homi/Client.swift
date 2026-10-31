@@ -35,21 +35,29 @@ nonisolated struct Client: InputClient {
     weak var owner: HomiInputController?
     private let traceOverride: ClientTrace?
     private let candidatesOverride: CandidatePresentation?
+    private let submissionOverride: CompositionSubmission?
 
     init(proxy: any IMKTextInput & NSObjectProtocol, owner: HomiInputController? = nil, trace: ClientTrace? = nil,
-         candidates: CandidatePresentation? = nil) {
+         candidates: CandidatePresentation? = nil, submission: CompositionSubmission? = nil) {
         self.proxy = proxy
         self.owner = owner
         self.traceOverride = trace
         self.candidatesOverride = candidates
+        self.submissionOverride = submission
     }
 
     private var trace: ClientTrace? { traceOverride ?? owner?.clientTrace }
+    private var submission: CompositionSubmission? { submissionOverride ?? owner?.compositionSubmission }
     private var candidatePresentation: CandidatePresentation? { candidatesOverride ?? owner.map { CandidatePresentation(owner: $0) } }
 
     private static let nowhere = NSRange(location: NSNotFound, length: 0)
 
     func apply(_ actions: [Action]) {
+        if let submission { submission.withActions(actions) { applyTraced(actions) } }
+        else { applyTraced(actions) }
+    }
+
+    private func applyTraced(_ actions: [Action]) {
         if let trace {
             let batch = trace.plan(actions, state: trace.snapshot.cachedState)
             trace.withBatch(batch) { apply(actions, batch: batch) }
@@ -61,6 +69,7 @@ nonisolated struct Client: InputClient {
     private func apply(_ actions: [Action], batch: ClientTrace.Batch?) {
         for (index, action) in actions.enumerated() {
             let planned = batch?.call(at: index)
+            submission?.willApply(action)
             switch action {
             case .mark(let text):
                 record("  mark \"\(text)\"")

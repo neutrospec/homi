@@ -34,6 +34,14 @@ macOS 의 text 엔진이다. `NSTextInputClient` 의 기준 구현이라 다른 
 
 ## 기록
 
+### 세 경계 교정본의 probe 확인 (2026-10-31)
+
+macOS **27.2 (26B123)**, `local.hangul.probe` 0, homi **15:23 설치본**에서 주인이 실제 keyboard 로
+`한글` 조합·Backspace·`ㄹ` 복원, `한`의 ⌥Enter 후보 열기·↓·Enter 선택, 조합 중 다른 app 왕복을 정상 확인했다.
+최종 `한글 漢 한글`은 AX 로도 읽었다. probe controller 는 새 process `70357-C287E948-A404-4D4F-9EE9-9A667EBD83DC/3`이다.
+근거: 주인 보고, probe AX, `build/remaining-boundaries-runtime-20261031.log`.
+이 시험은 AppKit 의 기본 경로를 확인한다. insert 중 client 자체 확정 callback 이나 busy 중 후보 Task 의 실제 발생을 재현한 것은 아니다.
+
 ### probe 의 후보 UI 검증 (2026-10-31)
 
 macOS **27.2 (26B123)**, `local.hangul.probe` 0, homi **14:41 설치본**에서 실제 keyboard 로 확인했다.

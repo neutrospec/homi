@@ -6,6 +6,51 @@
 - 간헐 결함의 증거는 homi 의 기록이다 — 이상하면 주인이 곧바로 input menu 의 "최근 key 기록 저장" 을 누르고(`~/Library/Logs/homi/`), 그 file 로 가린다.
 - 원인에 🔶 가 붙은 것은 대응이 통했지만 원인은 추정이라는 뜻이다.
 
+## 이전 mark 의 확인이 다음 조합을 지운다 (2026-10-31)
+
+- **증상·원인**: `insert("한") → mark("ㄱ")`의 insert 도중 `alreadyCommittedByClient`가 들어오면,
+  event 끝에서 최종 Session 을 비우면서 insert 를 생략했다. client 에는 `ㄱ` mark 가 남고 Session 은 비어 다음 조합이 끊겼다.
+  callback 의 확인 범위를 event 끝의 상태 전체로 넓힌 코드의 반례이며, 실제 app 에서 이 순서를 포착한 것은 아니다.
+- **증거**: `ReentrancyTests`의 위 반례와 이후 commit·deactivate·source 종료 세 조건이 수정 전 실패했다.
+  수정 후 제품 `Client`·coordinator 를 연결한 insert/mark callback 대조군까지 통과했다. 기존 Chromium click 중복 방지와
+  같은 proxy 의 입력칸 이동 regression 도 유지한다. 근거: `build/remaining-boundaries-{before,integration}-20261031.log`.
+  이어 같은 insert callback 에 재활성화까지 주입하자 `startsInEnglish`가 다음 key 를 영문으로 바꾸는 반례도 확인했다
+  (`build/confirmation-activation-before-20261031.log`). 새 mark 가 예정된 같은 입력은 mode 도 이어 가도록 보완했다.
+- **대응**: `CompositionSubmission`은 각 mark 를 실제로 보내기 직전에 세대를 올린다. client 확인은 callback 때까지 보낸 mark 에 한정한다.
+  그 뒤 새 mark 를 보냈다면 새 조합을 이어 가고, 별도 commit·deactivate 가 있다면 새 조합은 정상 확정한다.
+  남은 mark 계획과 실제 전송을 구분하므로 이전 mark 의 확인만으로 새 입력 시작을 선언하지 않는다. 현재 mark 의 실제 종료·재활성화는 기존 시작 규칙을 유지한다.
+  다음 key 까지 확정을 미루거나 `markedRange`를 다시 묻지 않는다.
+- **제한**: 전송 세대는 renderer 의 확정 증거가 아니다. `CommitPolicy`가 callback 을 client 확정으로 판단하는 기존 조건은 유지한다.
+  이 교정은 그 판단을 미래의 mark 까지 적용하지 않게 한다. Chrome source 왕복·첫 key 누락·input menu 문제의 해결을 주장하지 않는다.
+
+## busy 상태가 후보 show·hide 를 영구히 버린다 (2026-10-31)
+
+- **증상·원인**: 이전 event 에서 예약한 UI 가 다음 event 의 client IPC 중 실행되면 busy guard 가 작업을 버렸다.
+  후보 선택은 진행 중인데 창이 없거나, 선택이 끝났는데 창이 남는 코드의 반례다.
+- **증거**: `CandidatePresentationTests`에서 일반 event·Session mutation 도중의 show 와 busy 도중 hide 가 수정 전 실패했다.
+  수정 후 event 종료 시 표시·닫기, 기다리는 동안 종료·선택 변경·owner 변경, 추가 client 질의가 없음을 확인했다.
+- **대응**: busy 동안 Session 을 읽지 않고 현재 event 의 `afterEvent`에 작업을 연결한다. 종료 후 revision·owner·active 를 다시 검사한다.
+  timer·계속 도는 Task 재시도·비동기 client 질의를 추가하지 않는다. 주인이 보류한 후보 뜻 표시 문제와는 별개다.
+
+## resend 가 준비되지 않은 key 를 먹고 목적지를 잃는다 (2026-10-31)
+
+- **증상·원인**: 기존 resend 는 권한만 확인하고 원래 key 를 먹었다. 이후 main queue 에서 down/up 을 각각 만들었으므로
+  생성 실패 때 key 를 잃거나 한쪽만 보낼 수 있었다. 전역 HID 경로의 목적지는 그 사이 바뀐 focus 를 따랐다.
+  또한 client 반영이 끝나기 전에 queue 에 작업을 넣었다. 실제 잘못된 전송·생성 실패를 관측한 것은 아니다.
+- **대응**: client bundle ID 와 현재 app 을 대조하고 목적지 process 및 새 down/up 을 먼저 준비한다.
+  준비 실패면 기존 coordinator 가 원래 key 를 넘긴다. 성공한 요청은 동기 입력 경계의 flush 뒤 예약해 원래 process 로 한 번 보낸다.
+  원래 app 이 종료되면 다른 app 으로 보내지 않는다. 새 event 를 쓰는 기존 Telegram 호환 조건은 유지한다.
+- **증거·제한**: `ResendTests`는 권한·대상·생성 실패 7조건, flush 뒤 예약, focus 변경에도 원래 PID 유지, down/up 순서·수식키 보존,
+  중복 예약 방지·종료된 app 처리까지 제품 코드와 fake transport 로 확인한다. 실제 전달은 이 test 의 증거 범위 밖이다.
+  OS 에 이미 대기 중인 다음 key 와의 순서, 같은 app 안의 창·입력칸은 여전히 보장하지 못한다. [현재 전달 경로](macos-input.md#key-다시-보내기)를 따른다.
+
+처음 세 교정은 Debug·Release 각각 259개 test 뒤 **15:23:02 KST** 설치했다(CDHash `0837e041fda90c78086c87a600a0a825aaae0a09`).
+주인이 probe 의 기본 조합·Backspace·후보 선택·app 왕복 뒤 `한글 漢 한글`을 정상 확인했고 AX 로도 같은 결과를 읽었다.
+재전송 확인에는 주인이 Telegram 과 terminal 쪽 모두 정상이라고 답했다. Ghostty/iTerm2 개별 구분·Tab·빠른 다음 key 의 순서는 미확인이다.
+이어 1번의 재활성화 경계를 보완해 `swift build`, Debug·Release 각각 **260개 test**를 통과하고 **15:32:16 KST** 재설치했다.
+최종 CDHash `96033f5236d336e7b518ae7c30da2be2f3fce07d`, 자체 서명 `homi code signing`이다.
+최종본의 [Chrome 입력칸 이동](apps/chrome.md#세-경계-교정본의-입력칸-이동-2026-10-31)도 주인이 정상 보고했고 AX·내용 없는 DOM event 순서를 확인했다.
+
 ## 인증서가 없으면 제품 설치가 ad-hoc 서명으로 계속된다 (2026-10-31)
 
 - **증상·원인**: `app.sh`가 인증서 부재·조회 실패를 ad-hoc 서명으로 대체했다. 이 서명도 검증을 통과하면 installer 는 기존 자체 서명본을 교환하고 process 를 종료했다.
@@ -32,7 +77,7 @@
   show·hide 는 후보 세대를 검사한다. 같은 글자로 재시작해도 옛 show 는 버리고, 닫기 역시 새 후보를 건드리지 않는다.
   `CandidatePresentation`으로 제품 표시 경계를 분리해 실행 순서를 test 에서 직접 고를 수 있게 했다.
 - **제한**: owner·busy·active 검사와 caret 질의의 동기 위치는 유지한다. UI 를 띄우려고 client 를 다시 묻거나 입력 상태를 바꾸지 않는다.
-  busy 상태에서 실행된 UI 작업을 재시도하는 정책이나 누락된 lifecycle 을 추정하는 보정은 추가하지 않았다.
+  이 단계에서는 busy 중 실행된 작업을 버리는 경로를 유지했다. 같은 날 후속 [busy 교정](#busy-상태가-후보-showhide-를-영구히-버린다-2026-10-31)에서 보완했다.
 
 ## renderer 조회 실패가 영구적인 부재 판정이 된다 (2026-10-31)
 

@@ -163,7 +163,7 @@ func coordinatorClientIdentityReentry() {
         fallbackApp: { "fallback" })
     let proxy = TextProxy()
     proxy.appID = nil
-    let client = Client(proxy: proxy, trace: coordinator.driver.clientTrace)
+    let client = Client(proxy: proxy, trace: coordinator.driver.clientTrace, submission: coordinator.driver.submission)
     coordinator.keyDown(KeyEvent(keyCode: 5), client: client) // ㅎ
     proxy.appID = "homi.tests"
     var queried = false
@@ -190,7 +190,7 @@ func coordinatorClientInsertReentry() {
     let coordinator = InputCoordinator(modes: modes, profile: { _ in AppProfile(startsInEnglish: true) },
         fallbackApp: { "fallback" })
     let proxy = TextProxy()
-    let client = Client(proxy: proxy, trace: coordinator.driver.clientTrace)
+    let client = Client(proxy: proxy, trace: coordinator.driver.clientTrace, submission: coordinator.driver.submission)
     coordinator.modifiersChanged(client: client, action: { _, _ in .toggle })
     for code: UInt16 in [5, 40, 1] { coordinator.keyDown(KeyEvent(keyCode: code), client: client) } // 한
     var reentered = false
@@ -208,5 +208,38 @@ func coordinatorClientInsertReentry() {
     #expect(proxy.insertedRange == NSRange(location: NSNotFound, length: 0))
     #expect(proxy.markedReplacement?.location == NSNotFound)
     #expect(modes.memory.mode(for: "homi.tests") == .korean)
+    #expect(proxy.queryCount == 0)
+}
+
+@Test("coordinator·Client: 확정 callback 은 그때까지 보낸 mark 에만 적용한다", arguments: ["insert", "insertActivate", "mark"])
+func coordinatorClientConfirmationScope(callback: String) {
+    let coordinator = InputCoordinator(modes: ClientTestModes(), profile: { _ in AppProfile(startsInEnglish: true) }, fallbackApp: { "fallback" })
+    let proxy = TextProxy()
+    let driver = coordinator.driver
+    let client = Client(proxy: proxy, trace: driver.clientTrace, submission: driver.submission)
+    coordinator.modifiersChanged(client: client, action: { _, _ in .toggle })
+    for code: UInt16 in [5, 40, 1] { coordinator.keyDown(KeyEvent(keyCode: code), client: client) }
+    let confirmed = {
+        driver.end(.alreadyCommittedByClient, apply: client.apply)
+        if callback == "insertActivate" {
+            let activation = coordinator.activate()
+            #expect(activation.resuming)
+        }
+        if callback == "mark" {
+            proxy.text += proxy.marked
+            proxy.marked = ""
+        }
+    }
+    if callback != "mark" { proxy.onInsert = confirmed }
+    else { proxy.onMark = confirmed }
+    coordinator.keyDown(KeyEvent(keyCode: 15), client: client)
+    #expect(driver.composing == (callback != "mark" ? "ㄱ" : ""))
+    #expect(proxy.marked == driver.composing)
+    if callback != "mark" {
+        for code: UInt16 in [46, 3] { coordinator.keyDown(KeyEvent(keyCode: code), client: client) }
+    }
+    driver.end(.commitToClient, apply: client.apply)
+    #expect(proxy.text == (callback != "mark" ? "한글" : "한ㄱ"))
+    #expect(proxy.marked.isEmpty)
     #expect(proxy.queryCount == 0)
 }

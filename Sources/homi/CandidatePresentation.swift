@@ -34,29 +34,38 @@ nonisolated struct CandidatePresentation {
 
     func show(_ candidates: [Candidate], selected: Int, below line: NSRect) {
         guard let owner else { return }
-        let controller = Unchecked(owner)
         let revision = owner.candidateRevision
-        let panel = panel, isActive = isActive, enqueue = enqueue
-        owner.afterEvent {
-            enqueue {
-                let owner = controller.value
-                guard !owner.isHandlingEvent, owner.candidateRevision == revision,
-                    owner.hasCandidates, isActive(owner) else { return }
-                panel().show(candidates, selected: selected, below: line, owner: owner)
-            }
+        let panel = panel, isActive = isActive
+        whenIdle { owner in
+            guard owner.candidateRevision == revision, owner.hasCandidates, isActive(owner) else { return }
+            panel().show(candidates, selected: selected, below: line, owner: owner)
         }
     }
 
     func hide() {
         guard let owner else { return }
-        let controller = Unchecked(owner)
         let revision = owner.candidateRevision
-        let panel = panel, enqueue = enqueue
+        let panel = panel
+        whenIdle { owner in
+            guard owner.candidateRevision == revision, !owner.hasCandidates else { return }
+            panel().hide(owner: owner)
+        }
+    }
+
+    /// IPC 의 nested run loop 에서 Task 가 실행되면 현재 event 의 종료에 다시 연결한다.
+    /// busy 동안 Session 을 읽거나 Task 를 반복 생성하지 않는다. 종료 뒤 revision·owner 를 다시 검사한다.
+    private func whenIdle(_ update: @escaping @MainActor @Sendable (any CandidateOwner) -> Void) {
+        guard let owner else { return }
+        let presentation = Unchecked(self)
+        let controller = Unchecked(owner) // 예약된 hide 가 끝날 때까지 원래 owner 를 보존한다.
         owner.afterEvent {
             enqueue {
                 let owner = controller.value
-                guard !owner.isHandlingEvent, owner.candidateRevision == revision, !owner.hasCandidates else { return }
-                panel().hide(owner: owner)
+                if owner.isHandlingEvent {
+                    presentation.value.whenIdle(update)
+                } else {
+                    update(owner)
+                }
             }
         }
     }

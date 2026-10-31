@@ -73,7 +73,8 @@ private final class CandidateHost {
         display.active = owner
         let presentation = CandidatePresentation(owner: owner, panel: { display },
             isActive: { display.active === $0 }, enqueue: queue.enqueue)
-        client = Client(proxy: proxy, trace: owner.driver.clientTrace, candidates: presentation)
+        client = Client(proxy: proxy, trace: owner.driver.clientTrace, candidates: presentation,
+            submission: owner.driver.submission)
         coordinator = InputCoordinator(driver: owner.driver, modes: modes,
             profile: { _ in AppProfile() }, fallbackApp: { "homi.tests" })
     }
@@ -215,8 +216,8 @@ func candidateDisplayKeepsActiveOwner() {
     #expect(first.display.hidden == 0)
 }
 
-@Test("후보 표시: event·Session mutation 중에 실행된 UI 는 client·panel 을 건드리지 않는다", arguments: [false, true])
-func candidateDisplayRejectsBusyOwner(mutating: Bool) {
+@Test("후보 표시: event·Session mutation 중에는 기다리고 event 가 끝나면 표시한다", arguments: [false, true])
+func candidateDisplayWaitsForBusyOwner(mutating: Bool) {
     let host = CandidateHost()
     host.open()
     if mutating {
@@ -227,7 +228,46 @@ func candidateDisplayRejectsBusyOwner(mutating: Bool) {
     } else { host.driver.withEvent { host.queue.run() } }
     #expect(host.display.shown == 0)
     #expect(host.driver.hasCandidates)
+    #expect(host.queue.work.count == 1)
+    host.drainWithoutInputChanges()
+    #expect(host.display.shown == 1)
     #expect(host.proxy.queryCount == 1)
+}
+
+@Test("후보 표시: 기다리는 동안 종료·새 선택·다른 owner 가 생기면 다시 검사한다",
+    arguments: ["end", "selection", "owner"])
+func deferredCandidateDisplayRechecksState(change: String) {
+    let host = CandidateHost()
+    host.open()
+    host.driver.withEvent {
+        host.queue.run()
+        #expect(host.queue.work.isEmpty) // event 안에서 Task 를 계속 만들지 않는다.
+        #expect(host.display.shown == 0)
+        switch change {
+        case "end": host.driver.end(.commitToClient, apply: host.client.apply)
+        case "selection": host.send(KeyEvent(keyCode: KeyCode.down))
+        default: host.display.active = nil
+        }
+    }
+    host.drainWithoutInputChanges()
+    #expect(host.display.shown == (change == "selection" ? 1 : 0))
+    if change == "selection" { #expect(host.display.selected == 1) }
+}
+
+@Test("후보 표시: busy 중의 hide 도 event 끝까지 보존한다")
+func candidateHideWaitsForBusyOwner() {
+    let host = CandidateHost()
+    host.open()
+    host.queue.run()
+    host.driver.end(.commitToClient, apply: host.client.apply)
+    host.driver.withEvent {
+        host.queue.run()
+        #expect(host.display.hidden == 0)
+        #expect(host.queue.work.isEmpty)
+    }
+    host.drainWithoutInputChanges()
+    #expect(host.display.hidden == 1)
+    #expect(host.display.displayedOwner == nil)
 }
 
 @Test("후보 표시: 보이는 창을 종료하고 modifier 가 와도 hide 는 실행한다")

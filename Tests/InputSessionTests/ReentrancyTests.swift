@@ -13,7 +13,12 @@ private final class Host {
     var onMark: (() -> Void)?
 
     func apply(_ actions: [Action]) {
+        driver.submission.withActions(actions) { applySubmitted(actions) }
+    }
+
+    private func applySubmitted(_ actions: [Action]) {
         for action in actions {
+            driver.submission.willApply(action)
             switch action {
             case .insert(let value):
                 text += value
@@ -52,7 +57,12 @@ private final class SharedClient {
     var focus = 0
 
     func apply(_ actions: [Action]) {
+        driver.submission.withActions(actions) { applySubmitted(actions) }
+    }
+
+    private func applySubmitted(_ actions: [Action]) {
         for action in actions {
+            driver.submission.willApply(action)
             switch action {
             case .insert(let value):
                 fields[focus].text += value
@@ -144,6 +154,39 @@ func clientConfirmationDuringMark() {
     }
     host.type("s")
     #expect(host.text == "한")
+    #expect(host.marked.isEmpty)
+    #expect(host.driver.composing.isEmpty)
+}
+
+@Test("insert 중 이전 mark 의 확정은 뒤이어 보낸 새 조합을 끝내지 않는다")
+func clientConfirmationDuringInsertKeepsNextComposition() {
+    let host = Host()
+    host.type("gks")
+    host.onInsert = { host.clientConfirmed() }
+    host.type("r")
+    #expect(host.text == "한")
+    #expect(host.marked == "ㄱ")
+    #expect(host.driver.composing == "ㄱ")
+    host.type("mf")
+    host.commit()
+    #expect(host.text == "한글")
+    #expect(host.marked.isEmpty)
+}
+
+@Test("이전 mark 의 확정은 새 조합의 실제 종료를 막지 않는다", arguments: ["commit", "deactivate", "source"])
+func earlierClientConfirmationDoesNotSuppressLaterEnd(ending: String) {
+    let host = Host()
+    host.type("gks")
+    host.onInsert = { host.clientConfirmed() }
+    host.onMark = {
+        switch ending {
+        case "commit": host.commit()
+        case "deactivate": host.deactivate()
+        default: host.sourceChanged(selected: false)
+        }
+    }
+    host.type("r")
+    #expect(host.text == "한ㄱ")
     #expect(host.marked.isEmpty)
     #expect(host.driver.composing.isEmpty)
 }

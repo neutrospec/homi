@@ -10,6 +10,16 @@
 
 ## 특징
 
+### resend 목적지 교정 확인 (2026-10-31)
+
+설치된 Telegram **13.1.0**·macOS **27.2**에서 15:23 homi 교정본의 조합 중 Enter 확인을 요청했다.
+주인은 저장한 메시지의 Enter 한 번 전송과 terminal 확인 요청에 정상이라고 답했고, Telegram 과 terminal 양쪽임을 추가 확인했다.
+도구가 메시지 내용이나 전송 결과를 읽은 것은 아니다. 15:32 최종본도 같은 resend 구현이다.
+전달 경로를 전역 HID 에서 원래 app 의 process 로 지정하도록 바꿨다. 새 down/up 준비 실패 때는 원래 key 를 넘긴다.
+[공통 변경·한계](../macos-input.md#key-다시-보내기)를 따른다. 빠른 다음 key·focus 변경 순간의 전달은 별도 미확인이다.
+
+### 기존 확인
+
 - **조합 중 Enter 는 전송이 아니라 줄바꿈이 된다** (Apple 입력기 때부터). Telegram 은 marked text 가 없고 수식키도 없을 때만 Enter 로 보낸다.
   조합 중이면 key 를 입력기에 넘기고, 입력기가 확정한 뒤 줄바꿈이 된다 — 일본어·중국어의 "Enter = 변환 확정" 관례다.
   `12.9 · 2026-09-25 · source(ChatInputTextView.keyDown, a404806) + 주인` ✅

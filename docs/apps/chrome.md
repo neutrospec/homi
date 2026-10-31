@@ -21,6 +21,16 @@
 
 - Chromium 규칙 (`7e4c1fd`).
 
+## 세 경계 교정본의 입력칸 이동 (2026-10-31)
+
+Chrome **155.0.8059.85**·macOS **27.2**·homi **15:32 설치본**에서 주인이 실제 keyboard 로 입력칸 이동을 정상 확인했다.
+AX 의 최종값은 input=`한`, textarea=`글`, rich text=`가`, plaintext-only=`가`였다.
+페이지의 내용 없는 event 표에서는 input → textarea → rich text → plaintext-only 의 focus·조합 이동을 확인했다.
+요청한 세 칸의 순서와 실제 관측 순서를 구분한다. 관측한 값에는 앞 칸의 글자가 따라오거나 중복되는 현상이 없었다.
+같은 시간대 Chrome controller `63652-074ABE18-7749-4589-A889-8EC2690C9F68/3`의 callback 은
+`helperRenderer`, `source selected: yes`, `inside event: false`였다(`build/remaining-boundaries-final-runtime-20261031.log`).
+이것은 기존 click 확정 경로의 정상 확인이다. 새 regression 의 insert 중 callback 이 실제로 발생했다는 증거나 source 왕복의 해결은 아니다.
+
 ## 판별·정책 분리 검증 (2026-10-31)
 
 설치 bundle **155.0.8059.85 (8059.85)**를 제품 판별 코드로 읽어 `helperRenderer`를 확인했다.

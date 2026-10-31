@@ -50,7 +50,7 @@ homi 의 기존 순수 Session·Action 과 ClientTests 를 유지하며 다음 �
 - 반복 commit, `commit → deactivate`, insert 중 callback, mark 중 callback 을 분리한다. pending 종료가 사라지거나 새 mark 를 부당하게 비우지 않는지 본다.
 - typing 결과와 key 의 consumed/pass 여부를 함께 검사한다. 한자 UI 가 없는데 숫자·Enter 만 후보로 처리되는 상태도 실패로 센다.
 
-이는 [clientConfirmed 검증 공백](../stability-review.md#clientconfirmed-during-insert-의-검증-공백)의 test recipe 다.
+이는 [insert 중 client 확인 범위](../stability-review.md#insert-중-client-확인의-적용-범위)의 test recipe 다.
 model 에서 callback 을 old mark 의 확인이라고 지정했다고 실제 Chromium 에서 그 의미가 증명되는 것은 아니다.
 실앱에서는 입력 내용 없이 insert·mark 의 시작/반환, local 조합 세대·마지막 반영 세대·callback 순서를 관찰해야 한다.
 같은 proxy 의 여러 DOM field 를 fake 로 나누어도 실제 입력칸 소유권을 알아낸 증거로 세지 않는다.

@@ -359,9 +359,15 @@ Quartz 의 session event tap 은 별도 thread 에서 원본을 반환하고, IM
 - 다시 보내려면 **손쉬운 사용** 허가가 있어야 한다(`CGPreflightPostEventAccess`). macOS 27 에서는 개인정보 보호 및 보안의 **Device & Data Access** 아래에 있다 (주인).
   `x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility` 가 그 화면을 연다. homi 가 목록에 없으면 "+" 로 `~/Library/Input Methods/homi.app` 을 넣는다.
 - 허가는 서명 신원(bundle ID + 인증서)에 붙는다 — 자체 서명 인증서로 서명하니 다시 build·설치해도 유지됐다. ✅
-- 현재 resend 는 원래 client·controller 없이 다음 main queue 에서 전역 HID 경로로 보낸다. ✅ (`Resend.post` 코드 · 2026-10-09 검토)
-  대기 사이의 focus 변경과 이미 대기 중인 다음 key 의 순서까지 원래대로 보장한 것은 아니다. 실제 잘못된 대상 전달은 미관측이다.
-  순서·대상 검증과 교정의 타협은 [개선 검토](stability-review.md)에 둔다.
+- 2026-10-31 15:23 교정본은 현재 app 과 실제 client bundle ID 를 대조해 원래 process 를 잡고 down/up 을 미리 만든다.
+  준비 실패면 key 를 넘기며, client 반영·종료 flush 뒤 main queue 에 예약해 `CGEvent.postToPid`로 보낸다.
+  기존의 새 event·권한 확인은 유지한다. 주인은 Telegram 의 조합 중 Enter, 사용하는 Ghostty/iTerm2 의 Enter·ESC 확인 요청에 양쪽 모두 정상이라고 답했다.
+  개별 terminal 구분·Tab·빠른 다음 key·focus 변경 순간은 미확인이다. 15:32 최종본도 같은 resend 구현이다.
+  [교훈과 test 범위](lessons.md#resend-가-준비되지-않은-key-를-먹고-목적지를-잃는다-2026-10-31).
+- Apple 의 [CGEvent API](https://developer.apple.com/documentation/coregraphics/cgevent)와 macOS 27.2 SDK `CGEvent.h`는
+  process 를 지정하는 전달 경로를 제공한다. 다음 실제 key 보다 먼저 처리되거나 같은 process 의 입력칸을 고정한다는 보장은 없다.
+  [tapPostEvent](https://developer.apple.com/documentation/coregraphics/cgevent/tappostevent(_:))의 순서 보장은 event tap callback 의 proxy 를 쓰는 경우이며 IMK callback 에 그대로 적용할 수 없다.
+  OS queue 의 다음 key 순서·같은 app 안의 입력칸은 미해결이다. 그 보장을 위해 전체 keyboard 를 가로채거나 blocking 하지 않는다.
 
 ## 모드 표시
 

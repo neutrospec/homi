@@ -24,14 +24,14 @@
 | 현재 설치본의 입력칸 이동 | **최우선 확인** · 실제 발생했던 회귀 | 주인의 변경 전 기본 입력 정상 보고는 [후속 기록](lessons.md#2026-10-09-activation-교정callback-관측)에 있다. Chrome 의 개별 경로 확인과 model 통과는 구분한다. |
 | activation 과 mode 초기화의 경계 | **재현 test 후 교정·설치** · 기본 입력에 직접 영향 | 아래 두 counterexample 의 mode 경계를 `ModeActivation` 으로 교정했다. [검증·제한](lessons.md#재활성화가-mode-를-reset-하고-실제-client-의-시작-규칙을-놓친다-2026-10-09)과 [LaunchBar 요구](apps/launchbar.md)를 함께 확인한다. |
 | 늦은 client ID 와 fallback mode 이전 | **2026-10-31 교정·설치·probe 실제 입력 주인 확인** | [교정과 검증 범위](lessons.md#늦은-client-id-가-실제-app-의-mode-기억을-덮는다-2026-10-31). 무변화 key 는 이전하지 않으며 조합·toggle 보존과 새 activation 경계를 test 했다. 실제 Telegram 원인으로 확인한 것은 아니다. |
-| callback 이 확정한 mark 의 세대 | **관측 연결, 정책 교정 보류** · 유실 위험 | [client 호출 단계](macos-input.md#client-호출-단계의-관측)를 기록한다. token 만으로 old/new mark 의 확정 대상을 결정하지 않으며 다음 key 까지 commit 을 미루지 않는다. |
+| callback 이 확정한 mark 의 세대 | **2026-10-31 적용 범위 교정·설치·주인 확인** · 유실 위험 | [교훈](lessons.md#이전-mark-의-확인이-다음-조합을-지운다-2026-10-31). client 확정의 기존 판단은 유지하되 아직 보내지 않았던 mark 까지 확인한 것으로 처리하지 않는다. 다음 key 까지 commit 을 미루지 않는다. |
 | 비활성·누락의 상태 관측 | **채택·2026-10-31 실패 보고 중 snapshot 확보** · 입력 자체를 막는 증상, 원인 미확정 | [Orca 관측](apps/orca.md#input-menu-의-homi-누락-보고와-회복-2026-10-31-미해결): 등록·process 유지, Secure Event Input=false, 같은 창에서 기다린 뒤 회복 보고. menu 전체·focus 와 context 제한을 다음에 대조하며, 보기 착오도 배제하지 않는다. typing 경로는 건드리지 않는다. |
 | ChatGPT 복귀 뒤 source 전환 UI 지연 | **2026-10-31 11:56 전후 주인 보고, 미해결** | [보고 순서·log 범위](apps/chatgpt.md#복귀-뒤-source-전환-지연-보고-2026-10-31-미해결). 같은 `⌃Space`에 무표시 → 이름 popup → 커서 옆 표시. UI 와 실제 source 선택을 분리하고, activation 을 전환 완료로 세지 않는다. 개별 시도의 source·focus 대응이 다음 관측이다. |
 | ChatGPT renderer helper 판별 | **실제 판별 함수의 false 확인·commit 정책은 검증 후보** | [현재 bundle 의 이름 불일치](apps/chatgpt.md#별도-code-review-renderer-helper-이름-판별). 판별식 확대 전에 실제 commit·click·focus 경로를 확인한다. source 전환 UI 지연의 원인으로 채택하지 않는다. |
 | controller 진단 ID | **2026-10-31 교정·새 process 기록 확인** | [수명 구분](lessons.md#controller-진단-id-의-수명-구분). process PID·UUID 와 생성 번호를 쓴다. 과거 동일 hash log 는 한 controller 로 합치지 않는다. |
 | 제품 설치의 안정적인 서명 | **2026-10-31 chore 교정·검증 완료** | [서명 실패 보호](lessons.md#인증서가-없으면-제품-설치가-ad-hoc-서명으로-계속된다-2026-10-31). 인증서 조회·서명·검증 실패를 주입해 교환·process 종료가 없음을 확인했고 실제 인증서의 임시 bundle 검증도 통과했다. 현재 입력기는 재설치하지 않았다. |
 | 설치본과 관측의 연결 | **채택** · 검증의 정확성, 낮은 회귀 위험 | 설치 확인·시작 log·사용자 요청 export 에 같은 binary UUID 또는 digest 를 넣는다. key 마다 계산하거나 입력 내용을 더 수집하지 않는다. |
-| Enter·ESC·Tab resend 의 순서와 대상 | **검증 채택, 교정 보류** · 명령 유실·잘못된 대상의 위험, 빈도 미상 | own probe 의 두 창·두 app 으로 순서와 focus 변경을 확인한다. [재전송 교훈](lessons.md#terminal-에서-조합-중-escenter-가-사라진다-2026-09-25-m4--apple-입력기-때부터) 때문에 일괄 제거·자동 drop·다른 post API 로의 교체를 바로 적용하지 않는다. |
+| Enter·ESC·Tab resend 의 순서와 대상 | **2026-10-31 준비·목적지 교정·설치·주인 확인** · 명령 유실·잘못된 대상의 위험, 빈도 미상 | [준비 실패·목적지 교정](lessons.md#resend-가-준비되지-않은-key-를-먹고-목적지를-잃는다-2026-10-31). 새 event 의 process 지정 전달은 Telegram·terminal 에서 주인이 정상 보고했다. OS queue 의 다음 key 순서·같은 app 안의 입력칸은 미해결이다. |
 | 종료 뒤 Caps Lock remap | **검증 채택, 교정 보류** · 기본 key 에 영향, macOS 27 실관측 없음 | [mapping 수명](macos-input.md#homi-process-와-hid-mapping-의-수명)을 근거로 일반 종료·설치 종료와 crash 뒤 상태를 구분한다. snapshot 에 mapping 을 포함한다. guardian daemon 은 추가하지 않는다. |
 | Windows App 의 한/영 key 전달 | **2026-10-10 Caps Lock → 오른쪽 Alt 는 주인 확인, LANG1 은 전환 실패** · 기본값 꺼짐 | [원장](apps/windows-app.md#목적지-선택-2026-10-10)의 목적지 선택과 검증 범위를 따른다. [선택한 전환 key 의 일반화](apps/windows-app.md#전환-key-일반화-검토-2026-10-10)는 검증 채택: Shift+Space 의 별도 probe 부터, 오른쪽 ⌘·⌥ 는 단축키 보존까지 확인한다. 원격 Windows 설정·일반 조합 경로·local mode 소유는 바꾸지 않는다. |
 
@@ -102,16 +102,20 @@ LaunchBar 원장의 기존 정상 확인을 취소하거나 현재 비활성의 
 실제 새 시작의 영문 요구와 fallback 의 제한은 [교훈](lessons.md#재활성화가-mode-를-reset-하고-실제-client-의-시작-규칙을-놓친다-2026-10-09)에 있다.
 매 key 영문으로 reset 하거나 모든 activate reset 을 없애는 수정은 각각 정상 한글 전환과 시작 규칙을 깨므로 기각한다.
 
-### `clientConfirmed` during insert 의 검증 공백
+### insert 중 client 확인의 적용 범위
 
-[SessionDriver.clientConfirmed](../Sources/InputSession/SessionDriver.swift)의 `insert:false` 는 event 끝에서 최종 Session 을 비우며 insert 를 생략한다.
-현재 [ReentrancyTests](../Tests/InputSessionTests/ReentrancyTests.swift)는 client 확인이 mark 중에 오는 경우와 deactivate 가 insert 중에 오는 경우를 검사한다.
+초기 model 은 `insert("한") → mark("ㄱ")`의 insert 에서 이전 mark 의 확인 callback 을 주입해
+Session 은 비고 client 에 `ㄱ` mark 만 남는 반례를 확인했다. **이 callback 순서는 실제 app 에서 미관측**이다.
+2026-10-31 주인이 논리적 결함도 교정하도록 요청해, 기존 client 확정 판단의 적용 범위를 그때까지 보낸 mark 에 한정했다.
+아직 보내지 않은 mark 는 확인 대상이 될 수 없다는 계약이며, renderer 의 실제 확정을 관측했다고 주장하지 않는다.
+실패 test·대응·제한은 [교훈](lessons.md#이전-mark-의-확인이-다음-조합을-지운다-2026-10-31)에 둔다.
 
-추가 model 은 `한` 뒤 `ㄱ` 의 `insert("한") → mark("ㄱ")` 중 insert 에서 이전 mark 의 확인 callback 을 주입했다.
-남은 mark 를 반영한 뒤 Session 은 비었지만 client 에 `ㄱ` mark 가 남았다. **이 callback 순서는 실제 app 에서 미관측**이다.
-model 의 callback 의미를 실제 Chromium 의 의미로 가정하지 않고, action 단계·조합 세대·lifecycle 을 입력 내용 없이 대조한다.
-callback 의 적용 범위를 확인하기 전에는 insert 생략 정책을 바꾸지 않는다. 무조건 insert 하면 click 중복을 되살리고,
-다음 event 에서 판단하면 [입력칸 누출 교훈](lessons.md#보류한-chromium-확정이-다음-입력칸에-들어간다-2026-10-09)을 반복한다.
+### 구조 개선 뒤 남은 세 경계 (2026-10-31)
+
+앞선 구조 개선 네 단계와 구분한다. 새 1번은 위 client 확인 범위, 2번은 resend 준비·대상, 3번은 busy 중 후보 UI 유실이다.
+세 항목을 교정해 15:23 에 설치했고 주인이 probe 의 기본 입력·후보·app 왕복을 확인했다.
+1번의 재활성화 경계를 추가 보완해 Debug·Release 각각 260개 test 뒤 15:32 에 재설치했다. 최종본의 Chrome 입력칸 이동도 주인이 정상 확인했고 AX·DOM event 를 대조했다. Telegram·terminal 재전송도 정상 보고했으며 개별 범위는 각 기록을 따른다.
+1번의 다음 key 보류와 2번의 전체 keyboard 가로채기는 추가하지 않았다. 3번은 후보 뜻 표시 누락과 별개다.
 
 ## 구조 개선 계획 (2026-10-31)
 
@@ -282,7 +286,7 @@ ABC layout 지정은 TIS source 를 ABC 로 선택하는 것과 다르다. 호�
   menu 누락의 직접 원인을 찾은 것은 아니며, homi 의 IPC 지연이나 app/system 과의 상호작용이 무해하다는 증명도 아니다.
 - 일반 key 의 modifier 는 그 `NSEvent`에서 읽고 observer 는 원본 event 를 반환한다.
   “⌘Tab release 를 homi 가 못 봐서 이후 일반 key 에 Command 가 계속 붙는다”는 내부 cache 경로는 없다.
-- [insert 중 clientConfirmed](#clientconfirmed-during-insert-의-검증-공백)와 단일 `ActiveInputSession`의 한계는 여전히 남는다.
+- [insert 중 client 확인 범위](#insert-중-client-확인의-적용-범위)는 2026-10-31 후속 교정했다. 실제 callback 의미·순서와 단일 `ActiveInputSession`의 한계는 별도다.
   callback 세대와 실제 입력칸 소유권을 확인하지 않은 일괄 commit·무조건 insert 는 과거 유실·누출 교훈과 충돌한다.
 
 1·3번의 교정 후 probe 실제 입력은 주인이 확인했다. 일상 사용과 2번의 실제 commit 검증, 4번의 callback 주입 검사를 이어 간다. 새 사용자 관측만 무기한 기다리는 대신

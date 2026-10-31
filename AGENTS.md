@@ -4,7 +4,7 @@
 목표는 **두벌식 한글 입력이 완벽하게 동작하는 것** 하나다. 기능을 늘리는 프로젝트가 아니다 — 잡다한 기능·옵션·변죽은 만들지 않는다.
 
 > **현재 (2026-10-31)**: M0–M4·M6·M7 을 주인이 확인했다. 지금은 M5 — 일상 사용과 app 호환성. [focus·source review](docs/stability-review.md#focus와-source-전환-code-review-2026-10-31)에서 mode 기억 이전의 추가 반례를 확인해 교정했다. 최근 첫 key·source 선택 증상의 원인은 아직 미확정이다.
-> **설치본**: 2026-10-31 14:41 의 [입력·후보 UI revision 분리본](docs/stability-review.md#4번-입력-revision과-후보-ui-revision-분리)이다. Debug·Release 각각 247개 test 가 통과했고 주인이 probe 의 기본 입력·후보 선택·app 왕복을 정상 확인했다. [첫 후보 목록의 뜻 누락](docs/apps/engines/appkit.md#후보-뜻의-첫-표시-누락-보고-2026-10-31-미해결)은 별도 미해결이다. 앞선 [renderer 판별·commit 정책 분리](docs/stability-review.md#3번-renderer-판별과-commit-정책-분리)·[app 식별 근거·종료 방침 교정](docs/stability-review.md#2번-app-식별-근거와-조합-종료-방침)·[mode 기억·controller ID 교정](docs/lessons.md#늦은-client-id-가-실제-app-의-mode-기억을-덮는다-2026-10-31)·[Caps Lock gesture 교정](docs/lessons.md#정상-caps-tap-을-기존-판정이-거부한다-2026-10-29)·[Emacs 전달 옵션](docs/apps/emacs.md#caps-lock-전달-2026-10-29)의 검증 범위는 각 기록을 따른다.
+> **설치본**: 2026-10-31 15:32 의 [남은 세 경계 교정본](docs/stability-review.md#구조-개선-뒤-남은-세-경계-2026-10-31)이다. client 확인의 적용 범위·재활성화, resend 준비와 목적지, busy 중 후보 UI 보존을 교정했다. Debug·Release 각각 260개 test 가 통과했다. 15:23 본의 probe 입력·후보·app 왕복과 최종본의 Chrome 입력칸 이동은 주인이 정상 확인했다. Telegram·terminal 재전송도 정상 보고했으며 개별 범위·한계는 문서를 따른다. [앞선 구조 개선 네 단계](docs/stability-review.md#구조-개선-계획-2026-10-31)의 주인 확인과 구분한다. [후보 뜻 표시 누락](docs/apps/engines/appkit.md#후보-뜻의-첫-표시-누락-보고-2026-10-31-미해결)은 재발 때 조사한다. [Caps Lock](docs/lessons.md#정상-caps-tap-을-기존-판정이-거부한다-2026-10-29)·[Emacs 전달](docs/apps/emacs.md#caps-lock-전달-2026-10-29)의 검증 범위는 각 기록을 따른다.
 > 설치본의 변경·검증 범위는 [activation 기록](docs/lessons.md#2026-10-09-activation-교정callback-관측)과 [Windows Caps Lock 실험](docs/apps/windows-app.md#caps-lock-전달-실험-2026-10-10), 개선 안건은 [안정성 검토](docs/stability-review.md), 남은 작업은 [다음 작업](#다음-작업)에 있다.
 > 이상하면 주인이 곧바로 "최근 key 기록 저장" 을 누른다 → [진행 단계](#진행-단계)
 
@@ -176,7 +176,7 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
    **`imklaunchagent` 는 절대 죽이지 않는다** (실행 중인 app 들이 모든 입력기를 잃는다).
 9. **ad-hoc 서명은 build 마다 신원이 바뀌어** 손쉬운 사용 허가가 풀린다 — login keychain 의 자체 서명 인증서 "homi code signing" 으로 서명한다 (2036 만료).
 10. **app 마다 "입력기가 먹었다" 판정이 다르다.** Ghostty·iTerm2 는 입력기의 YES 를 보지 않고, 조합도 글자도 없이 먹은 key 를 스스로 보낸다 — 전환 key 가 수식키인 이유.
-11. **다시 보낸 key 는 event 대기열의 끝에 붙는다** — 조합 중 Enter·ESC 를 누르고 수 ms 안에 다음 key 를 이미 눌렀다면 순서가 바뀔 수 있다. 일상 사용에서 지켜본다.
+11. **다시 보낸 key 는 원래 event 의 queue 위치를 되찾지 못한다** — 원래 app 의 process 로 보내도 이미 대기 중인 다음 key 와의 순서·같은 app 안의 입력칸까지 보장하지 못한다. 일상 사용에서 지켜본다.
 12. **입력기가 먹는 key 는 marked text 가 있는 채로 와야 한다** — 그래야 app 이 그 key 를 입력기의 것으로 본다 (JBR·Chromium, 10 과 같은 이야기).
     그래서 선택 영역도 ⌥↩ 때 marked text 로 만든다.
 13. **확정한 글자를 되돌리는 재변환(`replacementRange`)은 app 마다 다르게 깨진다** — 결정 5 의 예외가 좁은 이유.
@@ -275,7 +275,7 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
    notification·검사 진행을 나눈 최소 재현 또는 수동 검증으로 남은 경계를 확인한다. 원인 확인 없이 actor 검사를 우회하지 않는다.
    정상 사용 보고를 모든 경로의 통과로 확대하지 않는다. callback token 만으로 commit 대상을 결정하지 않는다.
 2. [개선 안건](docs/stability-review.md): signing 실패 시 기존 설치본 보존은 교정·검증했다(Debug·Release 각각 251개 test). binary 식별·읽기 전용 진단을 준비한다.
-   [구조 개선 네 항목](docs/stability-review.md#구조-개선-계획-2026-10-31)은 모두 설치·주인 확인을 마쳤다. 일상 사용을 지켜보고, 새 후보 뜻 표시 누락과 남은 안건은 별도 검증한다.
+   [구조 개선 네 항목](docs/stability-review.md#구조-개선-계획-2026-10-31)은 모두 설치·주인 확인을 마쳤다. 이어 [남은 세 경계](docs/stability-review.md#구조-개선-뒤-남은-세-경계-2026-10-31)를 교정·설치했고 대표 app 의 실제 입력·resend 를 주인이 정상 확인했다. 후보 뜻 표시 누락은 재발 때 조사한다.
    [2026-10-31 focus·source review](docs/stability-review.md#focus와-source-전환-code-review-2026-10-31)의 fallback mode 이전·controller 진단 ID 를 교정·설치했다.
    probe 실제 입력은 주인이 확인했다. ChatGPT commit 정책·activation layout 재진입은 별도 검증 후 판단한다. 최근 증상의 원인 확정은 아니다.
    후보 뜻 표시·resend·Caps 종료 등 남은 안건은 영향과 증거에 따라 검증한다. 기본 입력이 다른 source 왕복보다 먼저다.

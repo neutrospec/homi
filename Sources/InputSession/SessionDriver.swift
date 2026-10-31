@@ -4,7 +4,8 @@ import HangulCore
 public enum CompositionEnd: Sendable, Equatable {
     /// homi 가 조합을 client 에 확정한다.
     case commitToClient
-    /// client 가 이미 확정했다고 판단한 경로. 조합·후보는 끝내되 같은 글자를 다시 넣지 않는다.
+    /// callback 당시까지 보낸 mark 를 client 가 확정했다고 판단한 경로.
+    /// 그 뒤에 새 mark 를 보냈다면 이 확인으로 새 조합까지 지우지 않는다.
     case alreadyCommittedByClient
 }
 
@@ -14,12 +15,19 @@ public final class SessionDriver {
     private var session: Session
     private var depth = 0
     private var pendingDeactivation: (([Action]) -> Void)?
-    private var pendingCommit: (ending: CompositionEnd, apply: ([Action]) -> Void)?
+    private struct EndRequest {
+        var confirmedRevision: UInt64?
+        var needsCommit = false
+        var apply: ([Action]) -> Void
+    }
+    private var pendingCommit: EndRequest?
     private var presentations: [() -> Void] = []
     private var finishing = false
     private var mutationDepth = 0
     /// 관측 전용 cache. callback 은 Session 대신 이것의 primitive snapshot 을 읽는다.
     public let clientTrace = ClientTrace()
+    /// 적용 범위는 진단용 ClientTrace token 과 독립적이다. client adapter 가 mark 호출 직전에 갱신한다.
+    public let submission = CompositionSubmission()
     /// 입력 경계·종료의 세대. 무변화 event 도 포함하므로 후보 표시의 유효성에 쓰지 않는다.
     public private(set) var inputRevision: UInt64 = 0
 
@@ -29,7 +37,11 @@ public final class SessionDriver {
     public var candidateRevision: UInt64 { session.candidateRevision }
     public var isHandlingEvent: Bool { depth > 0 }
     /// 명시적인 commit 은 activate 가 취소하지 않는다. 종료 flush 도 실제 입력 event 의 continuation 과 구분한다.
-    public var hasExplicitEnd: Bool { pendingCommit != nil || finishing }
+    public var hasExplicitEnd: Bool {
+        if finishing || pendingCommit?.needsCommit == true { return true }
+        // 이전 mark 의 확인만 왔고 새 mark 를 보내려는 중이면 현재 입력의 continuation 이다.
+        return pendingCommit?.confirmedRevision == submission.revision && !submission.hasPendingMark
+    }
     public var isMutatingSession: Bool { mutationDepth > 0 }
 
     @discardableResult
@@ -86,11 +98,16 @@ public final class SessionDriver {
     }
 
     /// 외부 callback 은 반환 전에 끝내고, 재진입한 요청만 같은 event 의 반영 뒤 처리한다.
-    /// 이미 확정한 것으로 처리하는 요청은 뒤의 commit·deactivate 가 재삽입으로 바꾸지 못한다.
+    /// 이미 확정했다는 판단은 그때까지 보낸 mark 에만 적용한다. 이후 mark 의 종료는 별개다.
     public func end(_ ending: CompositionEnd, apply: @escaping ([Action]) -> Void) {
         if depth > 0 {
-            let merged = pendingCommit?.ending == .alreadyCommittedByClient ? .alreadyCommittedByClient : ending
-            pendingCommit = (merged, apply)
+            var request = pendingCommit ?? EndRequest(apply: apply)
+            switch ending {
+            case .commitToClient: request.needsCommit = true
+            case .alreadyCommittedByClient: request.confirmedRevision = submission.revision
+            }
+            request.apply = apply
+            pendingCommit = request
         } else {
             withEvent { finish(ending: ending, apply: apply) }
         }
@@ -98,10 +115,16 @@ public final class SessionDriver {
 
     private func drain() {
         while pendingCommit != nil || pendingDeactivation != nil {
-            let request = pendingCommit ?? pendingDeactivation.map { (ending: .commitToClient, apply: $0) }!
+            let request = pendingCommit ?? EndRequest(needsCommit: true, apply: pendingDeactivation!)
+            let needsCommit = request.needsCommit || pendingDeactivation != nil
             pendingCommit = nil
             pendingDeactivation = nil
-            finish(ending: request.ending, apply: request.apply)
+            if request.confirmedRevision == submission.revision {
+                finish(ending: .alreadyCommittedByClient, apply: request.apply)
+            } else if needsCommit {
+                finish(ending: .commitToClient, apply: request.apply)
+            }
+            // 이전 mark 만 확인했고 뒤에 새 mark 를 보냈다면 새 Session 은 그대로 이어 간다.
         }
     }
 
