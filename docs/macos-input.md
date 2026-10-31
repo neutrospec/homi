@@ -130,6 +130,29 @@ HID mapping 을 함께 확보한다. System Settings 에도 사라졌는지와 S
   다른 source를 거쳐 homi로 돌아온 뒤 알림을 받으면 현재 선택은 true여서 이전 controller의 종료를 복구하지 않는다.
   이 사실만으로 글자 유실을 확정할 수는 없다. client 자체 확정과 별도 종료 여부가 필요하며 [대상 확대의 판단](stability-review.md#유지보류기각하는-제안)을 따른다.
 
+### 실행본과 진단 기록의 연결 (2026-11-01)
+
+설치 경로를 새 bundle로 교환해도 이미 실행 중인 process는 이전 코드를 계속 가진다. 이후 그 경로의 executable을 다시 읽으면
+실행 중인 코드와 다른 파일을 식별할 수 있다. homi는 startup에 `dladdr`로 자기 executable 안의 주소가 속한 loaded image를 찾고,
+`MH_EXECUTE`인 64-bit Mach-O의 `LC_UUID`를 한 번 읽어 보존한다. 설치 SDK의 `dlfcn.h`·`mach-o/loader.h`와
+제품 helper를 직접 compile한 독립 Debug·Release A/B 실행본으로 확인했다. 첫 UUID 조회 전에 A의 경로를 B로 바꿔도
+기존 process는 A, 새 process는 B의 `dwarfdump --uuid` 결과와 일치했다(`build/diagnostic-identity-20261101/product-helper/output.txt`).
+
+시작 log와 주인이 요청한 최근 기록 header는 같은 `BinaryIdentity.current`와 `ControllerTraceID.process` 값을 쓴다.
+installer는 서명·strict 검증한 staging executable의 architecture별 UUID를 조회하고 교환 성공 뒤 출력한다.
+그 출력만으로 새 process가 이미 실행됐다는 뜻은 아니다. loaded UUID와 설치 출력의 해당 slice를 대조해야 한다.
+조회 불가·형식 오류는 `unknown`으로 표시하며 입력기 기동이나 설치·export를 막지 않는다. 코드 서명 실패는 기존처럼 설치를 중단한다.
+
+UUID는 executable slice 식별자이며 bundle 전체·resource·code signature/CDHash·source commit이나 암호학적 동일성의 증거가 아니다.
+loaded pointer 경로는 dyld가 유효한 image를 올렸다는 전제를 둔다. bounded parser의 잘못된 buffer 검사는 임의 포인터의 안전성을 증명하지 않는다.
+key마다 UUID를 계산하거나 disk를 읽지 않으며 입력 내용을 추가 수집하지 않는다.
+기록 파일의 충돌 방지는 [별도 교훈](lessons.md#같은-초에-저장한-진단-기록이-이전-파일을-덮어쓴다-2026-11-01)을 따른다.
+
+2026-11-01 08:08 설치본의 출력은 `491DDEFC-CD9C-307F-9F87-3E2CE248C435`(arm64)이며,
+08:09 시작한 실제 homi process `67210-029131E8-A9DF-4B0C-8B2B-9D219E95207E`의 시작 log와 일치했다.
+근거는 `build/diagnostic-identity-20261101/final-install.log`·`startup-final.log`다. 사용자의 실제 기록 export는 실행하지 않았으며,
+header 연결은 제품 helper에 합성 identity·snapshot을 넣은 test와 `saveRecord`의 호출 연결로 확인했다.
+
 ### client 호출 단계의 관측
 
 controller 표시 ID 는 2026-10-31 12:44 설치본부터 process PID·UUID 와 생성 번호다.

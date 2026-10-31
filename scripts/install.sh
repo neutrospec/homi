@@ -21,10 +21,32 @@ stage=$(mktemp -d "${dest:h}/.homi-install.XXXXXX")
 trap 'rm -rf "$stage"' EXIT
 scripts/app.sh "$bin/homi" Sources/homi/Bundle/Info.plist "$stage/homi.app" Sources/homi/Bundle/Resources
 codesign --verify --strict "$stage/homi.app"
+# UUID 는 서명·검증한 staging executable 의 slice 별 식별자다. 진단 실패는 설치 실패가 아니다.
+uuid_report=""
+uuid_valid=true
+uuid_pattern='^UUID: ([0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}) \(([A-Za-z0-9_]+)\) .+$'
+if uuid_output=$(xcrun dwarfdump --uuid "$stage/homi.app/Contents/MacOS/homi" 2>/dev/null) && [[ -n "$uuid_output" ]]; then
+  for line in "${(@f)uuid_output}"; do
+    if [[ "$line" =~ $uuid_pattern ]]; then
+      uuid_report+="executable UUID (${match[2]}): ${(U)match[1]}"$'\n'
+    else
+      uuid_valid=false
+      break
+    fi
+  done
+else
+  uuid_valid=false
+fi
 "$bin/replace-app" "$stage/homi.app" "$dest"
 # 인증서 조회·서명·검증·교환 중 하나라도 실패하면 실행 중인 입력기를 종료하지 않는다.
 pkill -x homi || true
 echo "installed: $dest"
+if [[ $uuid_valid == true && -n "$uuid_report" ]]; then
+  printf '%s' "$uuid_report"
+else
+  echo "warning: executable UUID unavailable"
+  echo "executable UUID: unknown"
+fi
 
 if [[ ${1:-} == --register ]]; then
   swift build --product tis

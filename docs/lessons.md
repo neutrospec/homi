@@ -6,6 +6,15 @@
 - 간헐 결함의 증거는 homi 의 기록이다 — 이상하면 주인이 곧바로 input menu 의 "최근 key 기록 저장" 을 누르고(`~/Library/Logs/homi/`), 그 file 로 가린다.
 - 원인에 🔶 가 붙은 것은 대응이 통했지만 원인은 추정이라는 뜻이다.
 
+## 같은 초에 저장한 진단 기록이 이전 파일을 덮어쓴다 (2026-11-01)
+
+- **증상·원인**: `saveRecord`의 파일 이름은 초 단위인데 atomic write는 기존 이름을 교체한다. 같은 초에 두 번 저장하면 첫 snapshot을 잃는다. 사용자 기록에서 실제 유실을 발견한 것은 아니다.
+- **증거**: 기존 filename·atomic write를 그대로 추출한 제품 `writeRecord`에 고정 Date·합성 Recorder snapshot 두 개를 넣자 URL이 같고 첫 파일 내용도 바뀌어 regression이 실패했다(`build/diagnostic-identity-20261101/export-before.log`). 실제 recorder와 Logs directory는 사용하지 않았다.
+- **대응**: 같은 directory의 `mkstemp` 파일을 mode `0600`으로 만들고 전체 write·close가 성공한 뒤 `renamex_np(RENAME_EXCL)`로 공개한다. 이름 충돌 `EEXIST`에만 suffix를 바꿔 최대 100개 이름을 시도한다. 그 밖의 오류는 즉시 반환하며 기존 파일을 덮는 fallback은 없다. recorder lock은 snapshot을 얻을 때만 잡는다. header에는 [실행본 UUID와 process 식별값](macos-input.md#실행본과-진단-기록의-연결-2026-11-01)을 넣는다.
+- **검증**: 임시 directory의 합성 기록으로 같은 초 저장·동시 writer 12개·기존 suffix·충돌 상한·빈 기록·한글 UTF-8와 경로·mode `0600`, short write·EINTR·write/close/publish 실패·directory 생성 실패의 보존을 검사했다. close 실패 test는 실제 descriptor를 닫은 뒤 오류를 던진 모델이다. `swift build` 성공, Debug·Release 각각 315개 test(Install 9·InputSession 187·Homi 101·HangulCore 18)에서 기존 key 재진입 known issue 1개 외 예상 밖 실패나 build warning은 없다. 근거는 `build/diagnostic-identity-20261101/final-{build,debug-tests,release-tests}.log`다.
+- **설치**: 2026-11-01 08:08 KST `homi code signing`으로 설치했다(CDHash `054cf996799eccaac8f6cd3c605fcc3d0b72696f`). 새 process와 설치 출력의 executable UUID가 일치한 [실행 확인](macos-input.md#실행본과-진단-기록의-연결-2026-11-01)을 마쳤다. 실제 사용자 recorder를 저장하는 검사는 하지 않았다. 입력 판단·조합·IMK callback 경로는 이번에 바꾸지 않았다.
+- **한계**: exclusive rename을 지원하지 않는 filesystem에서는 오류를 보고한다. 전원 장애의 durability나 crash·cleanup 실패 뒤 임시 파일 부재를 보장하지 않는다. close 오류 후 descriptor 상태를 일반화할 근거가 없어 같은 번호를 다시 닫지 않는다. 입력 동작을 고친 변경은 아니다.
+
 ## 한자 질의 중 중첩 입력이 Session 접근과 겹친다 (2026-11-01)
 
 - **증상·원인**: 선택 한자 질의 중 같은 controller에 일반 key가 중첩된다는 모델에서 Swift exclusivity 충돌로 process가 종료됐다. 기존 코드는 `Session`의 mutating 접근 안에서 client 질의를 호출했다. 실제 macOS가 이 key 순서를 전달하는지는 미확인이다.

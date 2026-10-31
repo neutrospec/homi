@@ -61,6 +61,7 @@ mutation revision으로 비교해도 진행 중인 client 호출의 적용 전�
 근거는 `build/key-reentry-20261101/{build,debug-tests,release-tests,install}.log`.
 [probe의 기본 조합·Backspace·Caps Lock 전환](apps/engines/appkit.md#중첩-key-관측본의-probe-확인-2026-11-01)은 주인이 정상 확인했다.
 이는 관측본의 대표 정상 입력 검사이며, 가정한 재진입의 실재나 반례의 해결을 입증하지 않는다.
+이어서 주인은 이 관측본을 쓰는 동안 현재까지 문제를 느끼지 않았다고 보고했다(2026-11-01). 관측 기간·app별 검증 범위가 확정된 보고는 아니므로 반례나 과거 간헐 증상의 해결로 확대하지 않는다.
 
 **정보 경계**: client가 이미 확정한 세계와 아직 확정하지 않은 세계가 같은 관측값을 내고 추가 구별 정보 없이
 insert 또는 skip만 선택할 수 있다고 가정하면, insert는 전자에서 중복이고 skip은 후자에서 이후 새 mark에 대체되어
@@ -92,7 +93,7 @@ activation layout은 [제품 경계 검사](#4-activation의-layout-호출--제�
 | ChatGPT renderer helper 판별 | **실제 판별 함수의 false 확인·commit 정책은 검증 후보** | [현재 bundle 의 이름 불일치](apps/chatgpt.md#별도-code-review-renderer-helper-이름-판별). 판별식 확대 전에 실제 commit·click·focus 경로를 확인한다. source 전환 UI 지연의 원인으로 채택하지 않는다. |
 | controller 진단 ID | **2026-10-31 교정·새 process 기록 확인** | [수명 구분](lessons.md#controller-진단-id-의-수명-구분). process PID·UUID 와 생성 번호를 쓴다. 과거 동일 hash log 는 한 controller 로 합치지 않는다. |
 | 제품 설치의 안정적인 서명 | **2026-10-31 chore 교정·검증 완료** | [서명 실패 보호](lessons.md#인증서가-없으면-제품-설치가-ad-hoc-서명으로-계속된다-2026-10-31). 인증서 조회·서명·검증 실패를 주입해 교환·process 종료가 없음을 확인했고 실제 인증서의 임시 bundle 검증도 통과했다. 현재 입력기는 재설치하지 않았다. |
-| 설치본과 관측의 연결 | **채택** · 검증의 정확성, 낮은 회귀 위험 | 설치 확인·시작 log·사용자 요청 export 에 같은 binary UUID 또는 digest 를 넣는다. key 마다 계산하거나 입력 내용을 더 수집하지 않는다. |
+| 설치본과 관측의 연결 | **2026-11-01 구현·검증·설치 완료** | [실행 이미지의 UUID](macos-input.md#실행본과-진단-기록의-연결-2026-11-01)를 startup·사용자 요청 export·설치 출력에 연결했다. 실제 새 process와 설치 출력도 일치했다. loaded image를 startup에 한 번 읽으며 key 경로의 file I/O나 추가 입력 수집은 없다. |
 | Enter·ESC·Tab resend 의 순서와 대상 | **2026-10-31 준비·목적지 교정·설치·주인 확인** · 명령 유실·잘못된 대상의 위험, 빈도 미상 | [준비 실패·목적지 교정](lessons.md#resend-가-준비되지-않은-key-를-먹고-목적지를-잃는다-2026-10-31). 새 event 의 process 지정 전달은 Telegram·terminal 에서 주인이 정상 보고했다. OS queue 의 다음 key 순서·같은 app 안의 입력칸은 미해결이다. |
 | 종료 뒤 Caps Lock remap | **검증 채택, 교정 보류** · 기본 key 에 영향, macOS 27 실관측 없음 | [mapping 수명](macos-input.md#homi-process-와-hid-mapping-의-수명)을 근거로 일반 종료·설치 종료와 crash 뒤 상태를 구분한다. snapshot 에 mapping 을 포함한다. guardian daemon 은 추가하지 않는다. |
 | Windows App 의 한/영 key 전달 | **2026-10-10 Caps Lock → 오른쪽 Alt 는 주인 확인, LANG1 은 전환 실패** · 기본값 꺼짐 | [원장](apps/windows-app.md#목적지-선택-2026-10-10)의 목적지 선택과 검증 범위를 따른다. [선택한 전환 key 의 일반화](apps/windows-app.md#전환-key-일반화-검토-2026-10-10)는 검증 채택: Shift+Space 의 별도 probe 부터, 오른쪽 ⌘·⌥ 는 단축키 보존까지 확인한다. 원격 Windows 설정·일반 조합 경로·local mode 소유는 바꾸지 않는다. |
@@ -389,7 +390,7 @@ build·test 결과는 `build/source-review-build-20261031.log`·`build/source-re
 | ModeHUD·indicator 의 stale Task | **indicator 는 activation 교정에 포함, ModeHUD 는 후순위** | indicator 는 owner·app·현재 mode·pass-through 를 확인한다. ModeHUD 의 Task guard 는 별도 안건이며 실제 실패는 미관측이다. 표시 때문에 mode·source 를 다시 바꾸지 않는다. |
 | ModeHUD 의 hide animation | **후순위 관측** | [ModeHUD](../Sources/homi/ModeHUD.swift)는 예약 작업을 취소하지만 이미 시작한 fade 까지 끝내는 보장은 없다. 새 말풍선과 겹친 animation 의 실제 표시부터 확인한다. 조합·client 반영을 고칠 이유는 없다. |
 | `UserDefaults` 저장의 비동기화 | **근거 없는 성능 교정은 보류** | [저장 계약](macos-input.md#mode-저장과-key-처리)을 확인하니 key 경로의 `Memory.save` 만으로 동기 disk stall 이라고 단정할 수 없다. 지연이 관측되면 측정 후 판단하며 mode 의 SOT 는 계속 동기 memory 다. |
-| 진단·resource 의 작은 개선 | **후순위** | [saveRecord](../Sources/homi/Record.swift)의 초 단위 이름은 같은 초의 export 를 덮어쓸 수 있다. 한자 사전의 parse 실패도 `try?` 로 사라진다([Memory](../Sources/homi/Memory.swift)). export 이름의 충돌 방지·내용 없는 오류 사유 표시는 가능하지만 기본 조합보다 먼저 할 일은 아니다. |
+| 진단·resource 의 작은 개선 | **export 충돌 교정·검증·설치 완료, 사전 오류 표시는 후순위** | [같은 초의 기록 덮어쓰기](lessons.md#같은-초에-저장한-진단-기록이-이전-파일을-덮어쓴다-2026-11-01)는 기존 파일을 보존하는 publish로 교정했다. 한자 사전의 parse 실패가 `try?`로 사라지는 문제는 별도 안건이며 이번에는 바꾸지 않는다. |
 
 후보 문제의 model 결과는 `showSuppressed=true, candidatesStillOpen=true` 였다. 보이지 않는 후보가 숫자·Enter 를 후보 선택으로 처리할 수 있다는 점에서
 표시만의 장식 문제와 다르다. 다만 한자 경로의 문제이므로 기본 조합·focus 이동의 검증을 건너뛰고 설치하지 않는다.
@@ -430,7 +431,7 @@ client 반영 단계·질의 횟수를 검사하는 bridge test, 현재 상태�
    주인의 기본 입력 정상 보고를 개별 Chrome·native 경로의 통과로 확대하지 않는다. 실패하면 새 우회보다 기본 경로를 먼저 복구한다.
 2. activation 교정본의 native text·LaunchBar·Chromium 경로를 확인한다. client 확인의 action 단계는 관측하고 적용 대상을 확인한 뒤 정책을 결정한다.
    후보 revision 은 한자 경로를 따로 교정·검증한다.
-3. 제품 signing 실패 때 기존 설치본 보존은 [교정·검증을 마쳤다](lessons.md#인증서가-없으면-제품-설치가-ad-hoc-서명으로-계속된다-2026-10-31). binary 식별·비활성 snapshot 은 typing 을 바꾸지 않는 작업으로 준비한다.
+3. 제품 signing 실패 때 기존 설치본 보존은 [교정·검증을 마쳤다](lessons.md#인증서가-없으면-제품-설치가-ad-hoc-서명으로-계속된다-2026-10-31). [binary 식별](macos-input.md#실행본과-진단-기록의-연결-2026-11-01)과 [export 충돌](lessons.md#같은-초에-저장한-진단-기록이-이전-파일을-덮어쓴다-2026-11-01)도 교정·설치했다. 비활성 snapshot은 typing을 바꾸지 않는 작업으로 준비한다.
    비활성 재발을 기다리는 동안 다른 검토를 멈출 필요는 없다.
 4. resend·Caps 종료·caret 질의·cold 판별은 영향과 실제 증거에 따라 조사한다. Chrome source 왕복은 위 기본 경로를 해치지 않는 교정 근거가 있을 때 다시 시작한다.
 

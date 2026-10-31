@@ -10,6 +10,8 @@ import InputMethodKit
 @main
 enum HomiApp {
     static func main() {
+        let executableUUID = BinaryIdentity.current
+        let processID = ControllerTraceID.process
         // 앱 객체가 먼저 있어야 한다 — 없을 때 만든 menu bar 표시(NSStatusItem)는 조용히 생기지 않는다 (2026-09-25).
         let app = NSApplication.shared
         guard let connection = Bundle.main.infoDictionary?["InputMethodConnectionName"] as? String,
@@ -17,7 +19,7 @@ enum HomiApp {
         else {
             fatalError("cannot create IMKServer — is homi running from its app bundle?")
         }
-        log.info("started")
+        log.info("started, executable UUID: \(executableUUID, privacy: .public), process: \(processID, privacy: .public)")
         ModifierActivityObserver.shared.start()
         let watcher = SourceWatcher()
         withExtendedLifetime((server, watcher)) { app.run() }

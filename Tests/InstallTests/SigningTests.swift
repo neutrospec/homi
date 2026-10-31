@@ -50,11 +50,24 @@ private struct SigningFixture {
           [[ "$HOMI_TEST_FAILURE" != sign ]]
         fi
         """#, executable: true)
+        try write("bin/xcrun", #"""
+        #!/bin/zsh
+        print uuid >> "$HOMI_TEST_ROOT/trace"
+        [[ "$1" == dwarfdump && "$2" == --uuid && "$3" == "$HOMI_TEST_ROOT"/installed/.homi-install.*/homi.app/Contents/MacOS/homi ]] || exit 91
+        case "$HOMI_TEST_UUID" in
+          error) exit 1 ;;
+          empty) exit 0 ;;
+          malformed) print 'not a UUID' ;;
+          mixed) print 'UUID: 01234567-89AB-CDEF-0123-456789ABCDEF (arm64) fixture'; print invalid ;;
+          *) print 'UUID: 01234567-89ab-cdef-0123-456789abcdef (arm64) fixture'; print 'UUID: FEDCBA98-7654-3210-FEDC-BA9876543210 (x86_64) fixture' ;;
+        esac
+        """#, executable: true)
         try write("bin/replace-app", #"""
         #!/bin/zsh
         set -eu
         [[ "$2" == "$HOMI_TEST_ROOT/installed/homi.app" ]] || exit 90
         print replace >> "$HOMI_TEST_ROOT/trace"
+        [[ "$HOMI_TEST_FAILURE" != replace ]] || exit 1
         /bin/rm -rf "$2"
         /bin/mv "$1" "$2"
         """#, executable: true)
@@ -73,7 +86,7 @@ private struct SigningFixture {
     }
 
     func run(_ script: String = "scripts/install.sh", arguments: [String] = [],
-             identity: String = "present", failure: String = "none") throws -> (status: Int32, output: String) {
+             identity: String = "present", failure: String = "none", uuid: String = "valid") throws -> (status: Int32, output: String) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
         process.arguments = [root.appending(path: script).path] + arguments
@@ -83,6 +96,7 @@ private struct SigningFixture {
         environment["HOMI_TEST_ROOT"] = root.path
         environment["HOMI_TEST_IDENTITY"] = identity
         environment["HOMI_TEST_FAILURE"] = failure
+        environment["HOMI_TEST_UUID"] = uuid
         process.environment = environment
         let pipe = Pipe()
         process.standardOutput = pipe
@@ -113,6 +127,7 @@ func installerSigningRequiresIdentity(identity: String) throws {
     defer { fixture.clean() }
     let result = try fixture.run(identity: identity)
     #expect(result.status != 0)
+    #expect(!result.output.contains("executable UUID"))
     try fixture.expectPreserved()
     #expect(try fixture.trace() == ["identity"])
 }
@@ -123,6 +138,7 @@ func installerSigningFailurePreservesInstallation(failure: String) throws {
     defer { fixture.clean() }
     let result = try fixture.run(failure: failure)
     #expect(result.status != 0)
+    #expect(!result.output.contains("executable UUID"))
     try fixture.expectPreserved()
     let calls = try fixture.trace()
     #expect(calls.contains("sign:homi code signing"))
@@ -137,7 +153,9 @@ func installerSigningSucceedsBeforeReplacement() throws {
     #expect(result.status == 0, "\(result.output)")
     #expect(try fixture.read("installed/homi.app/Contents/MacOS/homi") == "new")
     #expect(try fixture.read("process-state") == "stopped")
-    #expect(try fixture.trace() == ["identity", "sign:homi code signing", "verify", "replace", "stop"])
+    #expect(try fixture.trace() == ["identity", "sign:homi code signing", "verify", "uuid", "replace", "stop"])
+    #expect(result.output.contains("executable UUID (arm64): 01234567-89AB-CDEF-0123-456789ABCDEF"))
+    #expect(result.output.contains("executable UUID (x86_64): FEDCBA98-7654-3210-FEDC-BA9876543210"))
 }
 
 @Test("개발 도구: 명시한 경우에만 인증서 없는 ad-hoc bundle 을 만든다")
@@ -150,4 +168,29 @@ func developmentBundleAllowsExplicitAdHoc() throws {
     #expect(try fixture.trace() == ["identity", "sign:-"])
     #expect(try fixture.read("tool.app/Contents/MacOS/homi") == "new")
     try fixture.expectPreserved()
+}
+
+@Test("설치 identity: UUID 조회 실패·빈 답·잘못된 답은 설치를 막지 않는다", arguments: ["error", "empty", "malformed", "mixed"])
+func installerUUIDFailureDoesNotBlockInstall(uuid: String) throws {
+    let fixture = try SigningFixture()
+    defer { fixture.clean() }
+    let result = try fixture.run(uuid: uuid)
+    #expect(result.status == 0, "\(result.output)")
+    #expect(try fixture.trace() == ["identity", "sign:homi code signing", "verify", "uuid", "replace", "stop"])
+    #expect(try fixture.read("installed/homi.app/Contents/MacOS/homi") == "new")
+    #expect(result.output.contains("warning: executable UUID unavailable"))
+    #expect(result.output.contains("executable UUID: unknown"))
+    #expect(!result.output.contains("executable UUID (arm64)"))
+}
+
+@Test("설치 identity: 교환 실패 시 조회한 UUID 를 성공 결과로 출력하지 않는다")
+func installerUUIDNotPrintedWhenReplacementFails() throws {
+    let fixture = try SigningFixture()
+    defer { fixture.clean() }
+    let result = try fixture.run(failure: "replace")
+    #expect(result.status != 0)
+    #expect(!result.output.contains("executable UUID"))
+    #expect(try fixture.read("installed/homi.app/Contents/MacOS/homi") == "old")
+    #expect(try fixture.read("process-state") == "running")
+    #expect(try fixture.trace() == ["identity", "sign:homi code signing", "verify", "uuid", "replace"])
 }
