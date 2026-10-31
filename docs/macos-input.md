@@ -125,6 +125,10 @@ HID mapping 을 함께 확보한다. System Settings 에도 사라졌는지와 S
   homi 도 source 알림에서 bound client 의 조합을 정리한다. ✅ (callback 누락을 주입한 regression)
   대상은 마지막으로 활성화되거나 event 를 받은 weak controller 하나다. 모든 종료 순서와 실제 app 을 검증한 것은 아니다.
   이것이 menu bar 의 비활성 증상을 고쳤다는 증거는 아직 없다.
+  2026-11-01 정적 검토: `SourceWatcher`는 현재 TIS 선택을 먼저 읽고 remap·표시 등을 갱신한 뒤, 그때의 최신 owner에게 전달한다.
+  그 사이 재진입으로 owner가 바뀔 수 있다고 가정하면 조회 시점과 대상이 어긋나지만, 실제 발생은 미확인이다.
+  다른 source를 거쳐 homi로 돌아온 뒤 알림을 받으면 현재 선택은 true여서 이전 controller의 종료를 복구하지 않는다.
+  이 사실만으로 글자 유실을 확정할 수는 없다. client 자체 확정과 별도 종료 여부가 필요하며 [대상 확대의 판단](stability-review.md#유지보류기각하는-제안)을 따른다.
 
 ### client 호출 단계의 관측
 

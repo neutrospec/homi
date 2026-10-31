@@ -28,6 +28,8 @@ nonisolated final class TextProxy: NSObject, IMKTextInput {
     var appID: String? = "homi.tests"
     var onBundleQuery: (() -> Void)?
     var onCaretQuery: (() -> Void)?
+    var onOverrideKeyboard: ((String?) -> Void)?
+    var keyboardOverrides: [String?] = []
 
     func insertText(_ string: Any?, replacementRange: NSRange) {
         insertedRange = replacementRange
@@ -83,7 +85,10 @@ nonisolated final class TextProxy: NSObject, IMKTextInput {
         onAttributesQuery?()
         return attributeAnswer
     }
-    func overrideKeyboard(withKeyboardNamed keyboard: String?) {}
+    func overrideKeyboard(withKeyboardNamed keyboard: String?) {
+        keyboardOverrides.append(keyboard)
+        onOverrideKeyboard?(keyboard)
+    }
     func selectMode(_ mode: String?) {}
     func supportsUnicode() -> Bool { true }
     func bundleIdentifier() -> String? {

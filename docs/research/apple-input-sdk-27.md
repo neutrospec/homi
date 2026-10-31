@@ -11,6 +11,7 @@ source `9f30c23`, macOS 27.2 (`26B123`), Xcode 27.2 (`27B52`)의 공개 자료·
 | 계약 · 근거 | homi 대응과 검증 범위 |
 |---|---|
 | `IMKServer.h:50`, `IMKInputController.h:226–230,333–338`: controller와 client는 session에 연결된다. | bound client로 종료하지만 하나의 client가 여러 입력칸을 가리킬 수 있다. 늦은 callback의 실제 입력칸 소유권과 순서는 보장하지 않는다. [Chromium](../apps/engines/chromium.md) 참조. |
+| `IMKInputSession.h:56–60,183–190` (2026-11-01 보충): client-side session에 layout을 전달하며 매 activation에 `overrideKeyboard`를 호출하도록 권고한다. | 조사한 header에서는 같은 proxy의 중첩 activation을 한 호출로 합쳐도 된다는 보장이나 callback 전후의 layout 적용 시점을 찾지 못했다. [제품 경계 검사와 중복 억제 보류](../stability-review.md#4-activation의-layout-호출--제품-경계-검증정책-유지)를 따른다. |
 | `IMKInputController.h:100–105`: `commitComposition:`은 조합 종료 요청이며 보통 insert 후 session을 끝낸다. | client가 이미 확정했는지는 별도 판단이다. `markedRange` 확인만으로 구분하는 제안은 실제 실패해 폐기했다. [Chrome](../apps/chrome.md), [교훈](../lessons.md) 참조. |
 | `IMKInputController.h:156–162`: keyDown mask만 반환할 때 조합 밖 click의 기본 commit을 설명한다. | homi는 flagsChanged·leftMouseDown도 요청하고 받은 click에서 종료한다. 모든 client가 click을 전달한다는 뜻은 아니다. 일반 focus·click의 실제 결과를 우선 확인한다. |
 | `IMKInputSession.h:63–89`: insert의 현재 selection 지정은 location·length 모두 `NSNotFound`; mark는 현재 위치에 location `NSNotFound`를 명시한다. | 현재 insert의 `{NSNotFound, 0}`은 알려진 호환 타협이다. 계약형 변경은 Chrome 실패를 해결하지 못해 복귀했다. 독립 client와 실제 app 비교 전 일괄 변경하지 않는다. [기록](../macos-input.md) 참조. |

@@ -47,8 +47,9 @@ insert 또는 skip만 선택할 수 있다고 가정하면, insert는 전자에�
 
 **다음 순서**: 일반 action 반영 중 중첩 event의 처리 순서·handled·실제 입력칸 목적지를 먼저 명세하고 반례를 다룬다.
 단순 queue·false·true 반환, stale mark 생략이나 강제 flush는 client 적용 순서와 목적지를 보장하지 못해 무유실 교정으로 채택하지 않는다.
-activation layout 중첩과 두 controller의 SourceWatcher 순서도 복제한 추상 모델로 검토했다. watcher는 notification payload가 아니라
-그때의 TIS 선택을 재조회한다. 두 모델은 제품 경계나 실제 OS 검증이 아니며 runtime 변경은 보류한다.
+activation layout은 [제품 경계 검사](#4-activation의-layout-호출--제품-경계-검증정책-유지)로 넓혔으며 중복 억제 정책은 채택하지 않았다.
+두 controller의 SourceWatcher 순서는 정적 검토와 추상 모델 단계다. watcher는 notification payload가 아니라
+그때의 TIS 선택을 재조회한다. 실제 OS 검증은 아니며 종료 대상 변경은 보류한다.
 재발을 기다리는 것만이 다음 행동은 아니다. 기본 입력 보호와 실제 OS 관측의 경계는 유지한다.
 
 ## 기본 입력을 먼저 보호할 안건
@@ -306,17 +307,37 @@ Telegram 의 “첫 key 만 영문, 곧바로 한글 복구”나 초성 유실,
 process 내 생성 번호를 각 controller 에 한 번 부여하고 process 식별과 함께 기록하는 변경을 채택한다.
 이는 입력 내용을 더 모으거나 입력 판단을 바꾸는 일이 아니다. 과거 log 만으로 같은 객체의 mode reset·조합 소실을 확정하지 않는다.
 
-### 4. activation의 layout 호출 — 검증 공백, 확인된 장애는 아님
+### 4. activation의 layout 호출 — 제품 경계 검증·정책 유지
 
 `activateServer`의 재활성화 판정은 `inputDepth > 0 && !session.hasExplicitEnd`다.
 평범한 activation 의 `Client.apply(.layout)`는 `SessionDriver.withEvent` 밖에서 실행한다.
 만일 `overrideKeyboard` 안에서 같은 controller 의 activation 이 중첩되면 `inputDepth == 0`이므로 layout 호출을 다시 허용한다.
-기존 activation model 은 이 IPC 를 실행하지 않고, `ClientTests`의 `overrideKeyboard`도 빈 구현이라 이 경계를 검사하지 않는다.
+기존 activation model은 이 IPC를 실행하지 않았다. 2026-11-01에는 동작을 유지하는 작은 [InputActivation](../Sources/homi/InputActivation.swift)을 추출해
+제품 controller와 test가 같은 순서를 실행하게 했다. coordinator 준비 → 필요한 client 생성·layout 반영 → 표시의 순서다.
+새 client 질의·cache·queue·재시도는 없다.
+
+[ActivationBoundaryTests](../Tests/HomiTests/ActivationBoundaryTests.swift)는 실제 coordinator·SessionDriver·Client adapter와 fake IMK proxy를 연결한다.
+같은 입력의 재활성화에서 한글 유지, 실제 새 시작에서 영문 시작 규칙, 명시적 종료의 보존, 다른 sender·layout과 `ABC → Hangul → ABC`,
+중첩 key, client 질의 없음과 후속 표시 순서를 검사한다. fake의 layout 적용 전·후에 callback을 주입하면 최종 layout도 달라진다.
+호출 순서 검사와 실제 client의 적용 완료는 구분한다. nil client factory 검사는 실제 IMK sender cast의 runtime 검증이 아니다.
+
+**중복 억제는 채택하지 않는다.** 같은 proxy에 ABC를 적용한 뒤 중첩 Hangul → ABC가 필요해졌을 때,
+진행 중인 `(proxy, layout)` 전체 집합으로 중복을 막으면 마지막 ABC를 버려 Hangul이 남을 수 있다.
+최상단만 비교해도 같은 proxy의 실제 새 activation이 layout을 초기화한 경우를 구분하지 못한다.
+[SDK의 매 activation 호출 권고](research/apple-input-sdk-27.md#sdk-계약과-homi)를 따르며, 전체 activation 생략이나 입력 중으로 취급하는 변경도
+시작 규칙·종료 요청의 의미를 바꿀 수 있어 보류한다. 반복 callback의 상한은 fixture가 둔 것이며 제품이 무한 재귀를 막는다는 뜻이 아니다.
 
 **해당 중첩이 실제로 일어났다는 log·재현은 없다.** [macSKK #292](https://github.com/mtgto/macSKK/pull/292)도
 activate 의 override 제거 사례이지만 작성자가 원인 미확정·local 미재현이라고 명시했다. 그 변경을 homi 의 해법으로 복사하지 않는다.
-우리 경계의 callback 주입 검사를 먼저 하고, 실제 client 관측에서 호출의 시작·반환·중첩 여부를 대조한다.
+제품 경계의 callback 주입 검사에 이어 실제 client 관측에서 호출의 시작·반환·중첩 여부를 대조한다.
 ABC layout 지정은 TIS source 를 ABC 로 선택하는 것과 다르다. 호출을 없애거나 key 처리 안으로 옮기면 문장부호·원격 layout 요구를 훼손할 수 있다.
+
+**검증·설치**: activation 검사 15개를 추가했다. `swift build` 성공, Debug·Release 각각 297개 test 실행
+(Install 7·InputSession 187·Homi 85·HangulCore 18)에서 기존 일반 key 재진입 known issue 1개 외 예상 밖 실패는 없다.
+2026-11-01 07:42:02 KST `homi code signing`으로 설치했다(CDHash `0b1154b95eacedd3cf1f11459984bbbad1785714`, 설치 직후 PID `49754`).
+근거는 `build/activation-boundary-20261101/{build,debug-tests,release-tests,install}.log`.
+[probe의 app 복귀·Caps Lock 전환·문장부호](apps/engines/appkit.md#activation-경계-추출본의-probe-확인-2026-11-01)는 주인이 실제 keyboard로 정상 확인했다.
+실제 nested layout 호출이나 원격 Mac layout 검증, 최근 첫 key·source 선택 증상의 해결을 뜻하지 않는다.
 
 ### 원인에서 배제한 범위와 다음 순서
 
@@ -359,7 +380,7 @@ build·test 결과는 `build/source-review-build-20261031.log`·`build/source-re
 | Chrome homi → ABC → homi 교정 | **후순위 보류**. 주인에게 드문 경로다. [Chrome](apps/chrome.md)에 실패와 실험 기준을 보존한다. 필요할 때 조합을 먼저 끝낸 뒤 바꾸는 운용은 가능한 임시 타협이며 해결 완료는 아니다. |
 | `replacementRange` 의 SDK 계약 교정 | **단독 실험으로 보류**. [range 실험 교훈](lessons.md#imk-현재-selection-의-range-계약이-구현과-다르다-2026-10-09-교정-보류)대로 계약 차이는 남지만 앞선 실험의 인과를 분리하지 못했다. 다른 commit 정책과 함께 바꾸지 않는다. |
 | `composedString` 추가·attributed mark 로 변경 | **원인 교정으로는 보류**. 누락이나 plain String 이 이번 실패를 만들었다는 증거가 없다. 직접 marked text 를 보내는 방식 자체를 결함으로 보지 않는다. |
-| SourceWatcher 대상 확대 | **검증만 채택**. [현재 단일 owner 의 한계](macos-input.md#client-호출은-imk-lifecycle-을-재진입시킬-수-있다)는 인정한다. 두 controller model 을 검증하되, 모든 controller 일괄 commit 은 stale client·새 입력칸 누출 위험 때문에 기각한다. |
+| SourceWatcher 대상 확대 | **검증만 채택**. [현재 단일 owner와 조회 시점의 한계](macos-input.md#client-호출은-imk-lifecycle-을-재진입시킬-수-있다)는 인정한다. 2026-11-01 정적 검토·추상 모델에서 owner 변경 guard도 필요한 종료를 놓칠 수 있음을 확인했다. 실제 재진입·영향과 제품 경계 검증 전 정책 변경은 보류하며, 모든 controller 일괄 commit은 stale client·새 입력칸 누출 위험 때문에 기각한다. |
 | TIS 선택·늦은 markedRange·client identity 로 종료 원인/이전 입력칸 판정 | **기각**. 실제 실패한 근거다. 같은 event 안의 lifecycle 합치기와 다음 key 까지 commit 을 보류하는 것은 구분한다. |
 | timer retry·source 강제 복원·비활성 때 자동 enable/재등록 | **기각**. 입력 순서·등록 상태를 추측으로 바꾸며 원인 증거를 지운다. state snapshot 이 먼저다. |
 | `/Library` 이동·daemon 재시작·guardian 추가 | **현재 대안으로 기각**. 주인의 두 설치 위치 관측과 맞지 않고 기본 입력의 새 위험·복잡도를 만든다. `imklaunchagent` 는 종료하지 않는다. |

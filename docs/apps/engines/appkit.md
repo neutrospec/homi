@@ -34,6 +34,14 @@ macOS 의 text 엔진이다. `NSTextInputClient` 의 기준 구현이라 다른 
 
 ## 기록
 
+### activation 경계 추출본의 probe 확인 (2026-11-01)
+
+macOS 27.2 (`26B123`), `local.hangul.probe` 0, homi 07:42 설치본에서 주인이 실제 keyboard로
+`한` 조합 → ⌘Tab 다른 app 왕복 → `글` → Caps Lock → 영문 `a` → Caps Lock → `가` → 마침표를 수행해 정상 보고했다.
+최종 `한글a가.`는 AX로도 확인했다. 근거는 `build/activation-boundary-20261101/probe.log`다.
+대표 AppKit의 app 복귀·기본 조합·내부 한/영 전환·문장부호 검사이며, fake로 주입한 nested layout 호출의 실제 발생을 확인한 것은 아니다.
+제품 경계 검증과 중복 억제를 보류한 판단은 [안정성 검토](../../stability-review.md#4-activation의-layout-호출--제품-경계-검증정책-유지)를 따른다.
+
 ### 한자 질의 교정본의 probe 확인 (2026-11-01)
 
 macOS 27.2 (`26B123`), `local.hangul.probe` 0, homi 07:23 설치본에서 주인이 실제 keyboard로

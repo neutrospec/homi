@@ -35,16 +35,14 @@ nonisolated final class HomiInputController: IMKInputController, CandidateOwner 
     override func activateServer(_ sender: Any!) {
         observeClient("activate.begin", lifecycle: true)
         defer { observeClient("activate.return", lifecycle: true) }
-        let activation = coordinator.activate()
-        let (app, mode, layout) = (activation.app.bundleID, activation.mode, activation.layout)
-        // homi 가 넘긴 key 는 이 layout 으로 문자가 된다 — 늘 ABC, 원격 화면의 한글 모드만 두벌식 (`AppProfile.keyboardLayout`).
-        // 새 시작의 layout 은 activate 에서만 준비한다. 같은 event 의 재활성화는 기존 layout 도 이어 간다.
-        if !activation.resuming, let proxy = sender as? any IMKTextInput & NSObjectProtocol {
-            Client(proxy: proxy, owner: self).apply([.layout(layout)])
-        }
-        log.info("activate \(app, privacy: .public), controller: \(self.traceID, privacy: .public)")
-        record("activate \(app) \(activation.passThrough ? "pass-through" : "\(mode)") \(activation.resuming ? "layout preserved" : layout)")
-        showIndicator(mode, app: app, passThrough: activation.passThrough)
+        InputActivation.run(coordinator: coordinator, client: {
+            (sender as? any IMKTextInput & NSObjectProtocol).map { Client(proxy: $0, owner: self) }
+        }, didActivate: { activation in
+            let (app, mode, layout) = (activation.app.bundleID, activation.mode, activation.layout)
+            log.info("activate \(app, privacy: .public), controller: \(self.traceID, privacy: .public)")
+            record("activate \(app) \(activation.passThrough ? "pass-through" : "\(mode)") \(activation.resuming ? "layout preserved" : layout)")
+            showIndicator(mode, app: app, passThrough: activation.passThrough)
+        })
     }
 
     override func deactivateServer(_ sender: Any!) {
