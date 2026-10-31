@@ -111,6 +111,8 @@ HID mapping 을 함께 확보한다. System Settings 에도 사라졌는지와 S
 
 ## client 호출은 IMK lifecycle 을 재진입시킬 수 있다
 
+기존의 lifecycle 재진입 관측과 일반 key가 같은 controller로 중첩되는지는 별개다. 후자는 실제 OS에서 미확인이지만 허용한 제품 코드 모델의 [조건부 반례와 가정](stability-review.md#imk-이론-검증-범위-2026-11-01)이 있다.
+
 - client 를 부르는 동안 `commitComposition`·deactivate·activate 가 끼어들 수 있다.
   macOS 27 의 실제 관측은 [PriType #15](https://github.com/ghostface2232/PriType-Swift/pull/15)에 있다.
   homi 에 같은 callback 순서를 주입하자 한자 질의는 Swift exclusive access 충돌로 abort 했고,

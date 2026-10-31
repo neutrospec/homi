@@ -21,6 +21,8 @@ source `9f30c23`, macOS 27.2 (`26B123`), Xcode 27.2 (`27B52`)의 공개 자료·
 
 조사한 IMK header에서 callback의 main thread·Swift actor, 비재진입, lifecycle 순서 보장은 찾지 못했다. 반대 동작의 증거도 아니다. `MainActor.assumeIsolated`와 probe crash는 [기존 검증 범위](../lessons.md#2026-10-09-activation-교정callback-관측)를 따른다.
 
+2026-11-01 보충한 [Cocoa Text Architecture의 Text Input](https://developer.apple.com/library/archive/documentation/TextFonts/Conceptual/CocoaTextArchitecture/TextEditing/TextEditing.html), [Event Architecture](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/EventOverview/EventArchitecture/EventArchitecture.html), [InputMethodKit overview](https://developer.apple.com/documentation/inputmethodkit)는 client의 입력 경로와 일반 event dispatch·session 연결을 설명한다. 조사한 절에서는 client 호출 중 같은 controller에 새 일반 key의 재진입을 금지하는 계약이나 IMK callback의 thread 보장을 찾지 못했다. 문서 전체에 그런 계약이 없다는 증명도 실제 재진입의 증거도 아니다.
+
 ## 재확인 경로
 
 기준 `$F=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks`; `I=InputMethodKit.framework/Versions/A/Headers`, `A=AppKit.framework/Versions/C/Headers`, `H=Carbon.framework/Versions/A/Frameworks/HIToolbox.framework/Versions/A/Headers`. SHA-256:
@@ -38,5 +40,6 @@ source `9f30c23`, macOS 27.2 (`26B123`), Xcode 27.2 (`27B52`)의 공개 자료·
 
 ## 다음 조사
 
+[IMK 이론 검증 범위](../stability-review.md#imk-이론-검증-범위-2026-11-01)의 반례와 환경 가정을 먼저 다룬다.
 이전 SDK를 확보하면 header의 경로·hash를 기록하고 동일 API의 선언과 주석을 diff한다.
 실제 문제가 발생하면 해당 native client의 click 후 조합 또는 후보 표시 위치를 관측해 비교한다.

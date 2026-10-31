@@ -13,6 +13,43 @@
 완전한 입력을 위해 검증 범위를 넓히되, 관측하지 못한 경로를 해결했다고 세지 않는다. 현재 확인한 정상 동작을 보존하고,
 좁은 변경 하나마다 재현 test → 실제 app 확인 → 일상 사용의 관측으로 진행한다. 드문 경로의 제한을 명시하고 보류하는 것도 가능한 판단이다.
 
+## IMK 이론 검증 범위 (2026-11-01)
+
+기준 source `9f30c23`, 문서 기준 `7da1835`. 목표는 증상 재현을 기다리지 않고 입력 경계의 가정과 반례를 밝히는 것이다.
+제품의 [SessionDriver](../Sources/InputSession/SessionDriver.swift)·[Session](../Sources/InputSession/Session.swift)·
+[CompositionSubmission](../Sources/InputSession/CompositionSubmission.swift)을 직접 실행한 별도 모델이며 실제 IMK·OS 검증은 아니다.
+
+**환경 가정**: controller의 동작은 한 thread에서 직렬로 중첩되고, 각 client 호출은 돌아오며 callback은 유한하다.
+client가 이미 확정했다는 분류는 해당 시점에 실제 제출한 mark에 대해 정확하고, mark·insert는 같은 실제 입력칸에 순서대로 적용된다.
+같은 proxy가 같은 입력칸을 뜻한다거나 제출 revision이 실제 확정의 확인이라는 뜻은 아니다.
+내부 **safety**는 이 가정 아래 유실·중복 및 상태 일치를 묻는다. **liveness**는 추가로 필요한 종료 event가 도착하고
+호출·callback이 끝날 때 pending 종료를 비우는지 묻는다. 무한 재진입이나 누락된 종료에 대한 진행은 보장하지 않는다.
+
+**유한 탐색**: `g k s`로 `한`을 만든 뒤 `r` 처리의 `insert(한)`과 `mark(ㄱ)`이 client 모델에 각각 적용된 **직후**,
+activate·deactivate·commit·client 확인·source 종료의 다섯 lifecycle 동작을 길이 0–2로 각각 주입했다.
+두 경계 각각 31가지, 합계 31² = **961가지 모두** 종료 후 표시 `한ㄱ`과 client mark·Session 일치가 통과했다.
+이는 한 controller·한 client·해당 문자열과 두 적용 직후 경계에 한정된다. 적용 도중·다른 key·임의 callback 순서,
+실제 client 확정과 OS 동작, 모든 가능한 입력의 증명은 포함하지 않는다.
+
+**일반 key 재진입 반례**: 위와 달리 `insert(한)` 적용 직후 동일 controller로 새 `k` key가 중첩될 수 있다고 가정하면,
+`한 → r`의 바깥 action은 `insert(한), mark(ㄱ)`이다. 중첩 `k`가 Session을 `가`로 만들고 mark한 다음,
+바깥의 오래된 `mark(ㄱ)`이 적용되어 client mark는 `ㄱ`, Session은 `가`가 된다. 기대 표시는 `한가`다.
+제품 [InputCoordinator](../Sources/InputSession/InputCoordinator.swift)와 [StoredModes](../Sources/homi/Memory.swift)를 연결한
+fake client에서도 같은 결과를 확인했다. 별도 process에서 선택 한자 `selectedText` 질의 중 일반 key를 중첩하면
+Swift exclusivity 위반으로 exit 134였다. 이들은 제품 경로의 **조건부 구조적 반례**이며, 실제 IMK가 이 순서를
+전달하는지 미확인이다. Telegram이나 첫 key 누락의 원인으로 확대하지 않는다.
+
+**정보 경계**: client가 이미 확정한 세계와 아직 확정하지 않은 세계가 같은 관측값을 내고 추가 구별 정보 없이
+insert 또는 skip만 선택할 수 있다고 가정하면, insert는 전자에서 중복이고 skip은 후자에서 이후 새 mark에 대체되어
+유실될 수 있다. skip 즉시 유실된다는 뜻은 아니다. 이 모델은 확인·입력칸 소유권에 관한 가정이 필요함을 보일 뿐
+모든 IMK 설계의 불가능성이나 두 세계의 완전한 동일 trace가 실측되었음을 증명하지 않는다.
+[Chromium 원장](apps/engines/chromium.md)과 [늦은 mark 확인의 실패](lessons.md#보류한-chromium-확정이-다음-입력칸에-들어간다-2026-10-09)를 따른다.
+
+**다음 순서**: 먼저 중첩 event의 처리 순서, 즉시 반환할 handled의 뜻, 실제 입력칸 목적지를 명세하고 위 반례를
+회귀 검증한다. 무조건 drop·false·queue로 바꾸면 key 유실·중복이나 순서 문제가 생길 수 있다.
+그 뒤 activation layout의 중첩과 두 controller·source notification의 순서를 같은 가정 아래 검토한다.
+재발을 기다리는 것만이 다음 행동은 아니다. 기본 입력 보호와 실제 OS 관측의 경계는 유지한다.
+
 ## 기본 입력을 먼저 보호할 안건
 
 | 안건 | 판단 · 중요도 | 문서·교훈에 비춘 다음 행동 |
