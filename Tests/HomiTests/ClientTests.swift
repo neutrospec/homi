@@ -1,5 +1,6 @@
 import AppKit
 import InputMethodKit
+import HangulCore
 import InputSession
 import Testing
 
@@ -16,6 +17,14 @@ nonisolated final class TextProxy: NSObject, IMKTextInput {
     var onInsert: (() -> Void)?
     var onMark: (() -> Void)?
     var onSelectionQuery: (() -> Void)?
+    var onMarkedQuery: (() -> Void)?
+    var onAttributesQuery: (() -> Void)?
+    var onSubstringQuery: (() -> Void)?
+    var selectionAnswer = NSRange(location: NSNotFound, length: NSNotFound)
+    var markedAnswer = NSRange(location: NSNotFound, length: NSNotFound)
+    var attributeAnswer: [Any] = []
+    var substringAnswer: String?
+    var queries: [String] = []
     var appID: String? = "homi.tests"
     var onBundleQuery: (() -> Void)?
     var onCaretQuery: (() -> Void)?
@@ -38,13 +47,24 @@ nonisolated final class TextProxy: NSObject, IMKTextInput {
     }
     func selectedRange() -> NSRange {
         queryCount += 1
+        queries.append("selected")
         let callback = onSelectionQuery
         onSelectionQuery = nil
         callback?()
-        return NSRange(location: NSNotFound, length: NSNotFound)
+        return selectionAnswer
     }
-    func markedRange() -> NSRange { queryCount += 1; return NSRange(location: NSNotFound, length: NSNotFound) }
-    func attributedSubstring(from range: NSRange) -> NSAttributedString? { queryCount += 1; return nil }
+    func markedRange() -> NSRange {
+        queryCount += 1
+        queries.append("marked")
+        onMarkedQuery?()
+        return markedAnswer
+    }
+    func attributedSubstring(from range: NSRange) -> NSAttributedString? {
+        queryCount += 1
+        queries.append("substring")
+        onSubstringQuery?()
+        return substringAnswer.map { NSAttributedString(string: $0) }
+    }
     func length() -> Int { NSNotFound }
     func characterIndex(for point: NSPoint, tracking: IMKLocationToOffsetMappingMode,
                         inMarkedRange: UnsafeMutablePointer<ObjCBool>?) -> Int { NSNotFound }
@@ -57,7 +77,12 @@ nonisolated final class TextProxy: NSObject, IMKTextInput {
         lineHeightRectangle?.pointee = NSRect(x: 10, y: 20, width: 0, height: 18)
         return nil
     }
-    func validAttributesForMarkedText() -> [Any]? { queryCount += 1; return [] }
+    func validAttributesForMarkedText() -> [Any]? {
+        queryCount += 1
+        queries.append("attributes")
+        onAttributesQuery?()
+        return attributeAnswer
+    }
     func overrideKeyboard(withKeyboardNamed keyboard: String?) {}
     func selectMode(_ mode: String?) {}
     func supportsUnicode() -> Bool { true }
@@ -242,4 +267,147 @@ func coordinatorClientConfirmationScope(callback: String) {
     #expect(proxy.text == (callback != "mark" ? "한글" : "한ㄱ"))
     #expect(proxy.marked.isEmpty)
     #expect(proxy.queryCount == 0)
+}
+
+@Test("선택 질의 중 새 입력이 오면 이후 질의와 응답을 버린다", arguments: ["selected", "substring"])
+func selectedQueryCancellation(stage: String) {
+    let proxy = TextProxy()
+    proxy.selectionAnswer = NSRange(location: 4, length: 2)
+    proxy.substringAnswer = "한자"
+    var current = true
+    if stage == "selected" { proxy.onSelectionQuery = { current = false } }
+    else { proxy.onSubstringQuery = { current = false } }
+    let result = Client(proxy: proxy).selectedText(while: { current })
+    #expect(result == nil)
+    #expect(proxy.queries == (stage == "selected" ? ["selected"] : ["selected", "substring"]))
+}
+
+@Test("이전 글자 질의 중 새 입력이 오면 이후 질의와 응답을 버린다", arguments: ["attributes", "marked", "selected", "substring"])
+func precedingQueryCancellation(stage: String) {
+    let proxy = TextProxy()
+    proxy.attributeAnswer = ["NSTextInputReplacementRangeAttributeName", "NSTextAlternatives"]
+    proxy.selectionAnswer = NSRange(location: 5, length: 0)
+    proxy.substringAnswer = "한자"
+    var current = true
+    let cancel = { current = false }
+    switch stage {
+    case "attributes": proxy.onAttributesQuery = cancel
+    case "marked": proxy.onMarkedQuery = cancel
+    case "selected": proxy.onSelectionQuery = cancel
+    default: proxy.onSubstringQuery = cancel
+    }
+    let result = Client(proxy: proxy).textBefore(2, while: { current })
+    let expected = ["attributes", "marked", "selected", "substring"]
+    #expect(result == nil)
+    #expect(proxy.queries == Array(expected.prefix(expected.firstIndex(of: stage)! + 1)))
+}
+
+@Test("문서 질의 정상 경로는 기존 질의 순서와 답을 보존한다")
+func cancellableQueriesNormal() {
+    let proxy = TextProxy()
+    proxy.attributeAnswer = ["NSTextInputReplacementRangeAttributeName", "NSTextAlternatives"]
+    proxy.selectionAnswer = NSRange(location: 5, length: 0)
+    proxy.substringAnswer = "한자"
+    let client = Client(proxy: proxy)
+    let before = client.textBefore(2, while: { true })
+    #expect(before?.text == "한자")
+    #expect(before?.end == 5)
+    #expect(proxy.queries == ["attributes", "marked", "selected", "substring"])
+    proxy.queries = []
+    proxy.selectionAnswer = NSRange(location: 3, length: 2)
+    #expect(client.selectedText(while: { true }) == "한자")
+    #expect(proxy.queries == ["selected", "substring"])
+}
+
+@Test("이미 취소된 문서 질의는 client 를 호출하지 않는다")
+func cancelledQueryDoesNotCallClient() {
+    let proxy = TextProxy()
+    let client = Client(proxy: proxy)
+    #expect(client.selectedText(while: { false }) == nil)
+    #expect(client.textBefore(2, while: { false }) == nil)
+    #expect(proxy.queryCount == 0)
+}
+
+@Test("조합 범위 앞의 질의는 선택을 묻지 않으며 기존 호출도 같은 답을 준다")
+func precedingMarkedQueryNormal() {
+    let proxy = TextProxy()
+    proxy.attributeAnswer = ["NSTextInputReplacementRangeAttributeName", "NSTextAlternatives"]
+    proxy.markedAnswer = NSRange(location: 5, length: 1)
+    proxy.substringAnswer = "한자"
+    let client = Client(proxy: proxy)
+    let result = client.textBefore(2)
+    #expect(result?.text == "한자")
+    #expect(result?.end == 5)
+    #expect(proxy.queries == ["attributes", "marked", "substring"])
+}
+
+private let clientBridgeDictionary = try! HanjaDictionary(contentsOf: URL(fileURLWithPath: #filePath)
+    .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    .appending(path: "Sources/homi/Bundle/Resources/hanja.txt"))
+
+/// 실제 coordinator 와 adapter 의 질의에 재진입을 주입한다. 실제 OS 에서 일어났다는 뜻은 아니다.
+private final class HanjaClientBridge {
+    let driver = SessionDriver(hanja: clientBridgeDictionary)
+    let proxy = TextProxy()
+    let coordinator: InputCoordinator
+    let client: Client
+
+    init() {
+        coordinator = InputCoordinator(driver: driver, modes: ClientTestModes(), profile: { _ in AppProfile() },
+                                       fallbackApp: { "homi.tests" })
+        client = Client(proxy: proxy, trace: driver.clientTrace, submission: driver.submission)
+    }
+
+    @discardableResult func key(_ code: UInt16, modifiers: Modifiers = []) -> Outcome {
+        coordinator.keyDown(KeyEvent(keyCode: code, modifiers: modifiers), client: client)
+    }
+}
+
+@Test("coordinator·Client: 선택 범위 질의 중 새 key 는 옛 선택과 후보를 버린다", arguments: [false, true])
+func coordinatorClientSelectedQueryInterrupted(modifier: Bool) {
+    let host = HanjaClientBridge()
+    host.proxy.selectionAnswer = NSRange(location: 2, length: 2)
+    host.proxy.substringAnswer = "한자"
+    var called = false
+    host.proxy.onSelectionQuery = {
+        called = true
+        #expect(!host.driver.isMutatingSession)
+        host.key(5) // ㅎ
+    }
+    if modifier {
+        host.coordinator.modifiersChanged(client: host.client, action: { _, _ in .hanja })
+    } else {
+        let outcome = host.key(KeyCode.returnKey, modifiers: .option)
+        #expect(outcome.handled)
+    }
+    #expect(called)
+    #expect(host.proxy.queries == ["selected"])
+    #expect(host.driver.composing == "ㅎ")
+    #expect(host.proxy.marked == "ㅎ")
+    #expect(!host.driver.hasCandidates)
+}
+
+@Test("coordinator·Client: 이전 글자 질의 중 새 key 는 옛 질의를 중단한다", arguments: ["attributes", "marked"])
+func coordinatorClientPrecedingQueryInterrupted(stage: String) {
+    let host = HanjaClientBridge()
+    for code: UInt16 in [5, 40, 1, 15, 40] { host.key(code) } // 한가
+    #expect(host.proxy.text == "한" && host.proxy.marked == "가")
+    host.proxy.attributeAnswer = ["NSTextInputReplacementRangeAttributeName", "NSTextAlternatives"]
+    host.proxy.markedAnswer = NSRange(location: 1, length: 1)
+    host.proxy.substringAnswer = "한"
+    var called = false
+    let nested = {
+        called = true
+        #expect(!host.driver.isMutatingSession)
+        host.key(1) // 간
+    }
+    if stage == "attributes" { host.proxy.onAttributesQuery = nested }
+    else { host.proxy.onMarkedQuery = nested }
+    let outcome = host.key(KeyCode.returnKey, modifiers: .option)
+    #expect(outcome.handled)
+    #expect(called)
+    #expect(host.proxy.queries == (stage == "attributes" ? ["attributes"] : ["attributes", "marked"]))
+    #expect(host.proxy.text == "한" && host.proxy.marked == "간")
+    #expect(host.driver.composing == "간")
+    #expect(!host.driver.hasCandidates)
 }

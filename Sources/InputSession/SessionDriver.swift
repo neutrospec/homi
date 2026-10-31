@@ -24,6 +24,8 @@ public final class SessionDriver {
     private var presentations: [() -> Void] = []
     private var finishing = false
     private var mutationDepth = 0
+    /// 중첩 Session 전이의 세대. inputRevision 은 바깥 event 에서만 오르므로 쓰지 않는다.
+    private var mutationRevision: UInt64 = 0
     /// 관측 전용 cache. callback 은 Session 대신 이것의 primitive snapshot 을 읽는다.
     public let clientTrace = ClientTrace()
     /// 적용 범위는 진단용 ClientTrace token 과 독립적이다. client adapter 가 mark 호출 직전에 갱신한다.
@@ -50,9 +52,71 @@ public final class SessionDriver {
             mutationDepth += 1
             let result = operation(&session)
             mutationDepth -= 1
+            mutationRevision &+= 1
             updateTraceState()
             apply(result)
             return result
+        }
+    }
+
+    enum Prepared<Result> {
+        case completed(Result)
+        case interrupted
+    }
+
+    private enum PreparedQuery {
+        case selection
+        case preceding(Int)
+    }
+    private enum PreparedAnswer<Value> {
+        case unanswered
+        case answered(Value?)
+    }
+
+    /// Session 값 복사본을 응답 cache 만으로 평가한다. Composer·Session 은 value type 이고 사전은 읽기 전용이다.
+    /// 실제 client 질의는 inout 접근 밖에서 같은 event 경계 안에 둔다. 중첩 전이가 끝나면 이전 제안을 버린다.
+    func performPrepared<Result>(
+        _ operation: (inout Session, () -> String?, (Int) -> (text: String, end: Int)?) -> Result,
+        selectedText: (_ isCurrent: () -> Bool) -> String?,
+        textBefore: (Int, _ isCurrent: () -> Bool) -> (text: String, end: Int)?,
+        isContextCurrent: @escaping () -> Bool = { true }
+    ) -> Prepared<Result> {
+        withEvent {
+            let snapshot = session
+            let revision = mutationRevision
+            var selection: PreparedAnswer<String> = .unanswered
+            var preceding: [Int: PreparedAnswer<(text: String, end: Int)>] = [:]
+            while true {
+                var proposal = snapshot
+                var missing: PreparedQuery?
+                let result = operation(&proposal, {
+                    switch selection {
+                    case .unanswered:
+                        if missing == nil { missing = .selection }
+                        return nil
+                    case .answered(let text): return text
+                    }
+                }, { count in
+                    switch preceding[count] ?? .unanswered {
+                    case .unanswered:
+                        if missing == nil { missing = .preceding(count) }
+                        return nil
+                    case .answered(let text): return text
+                    }
+                })
+                guard mutationRevision == revision && isContextCurrent() else { return .interrupted }
+                guard let missing else {
+                    session = proposal
+                    mutationRevision &+= 1
+                    updateTraceState()
+                    return .completed(result)
+                }
+                switch missing {
+                case .selection: selection = .answered(selectedText { self.mutationRevision == revision && isContextCurrent() })
+                case .preceding(let count): preceding[count] = .answered(textBefore(count) { self.mutationRevision == revision && isContextCurrent() })
+                }
+                guard mutationRevision == revision && isContextCurrent() else { return .interrupted }
+            }
         }
     }
 
@@ -135,6 +199,7 @@ public final class SessionDriver {
         mutationDepth += 1
         let committed = session.commit()
         mutationDepth -= 1
+        mutationRevision &+= 1
         updateTraceState()
         let actions = committed.filter {
             if case .insert = $0 { return ending == .commitToClient }

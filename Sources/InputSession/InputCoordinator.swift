@@ -3,7 +3,22 @@ public protocol InputClient {
     func bundleIdentifier() -> String?
     func selectedText() -> String?
     func textBefore(_ count: Int) -> (text: String, end: Int)?
+    func selectedText(while isCurrent: () -> Bool) -> String?
+    func textBefore(_ count: Int, while isCurrent: () -> Bool) -> (text: String, end: Int)?
     func apply(_ actions: [Action])
+}
+
+public extension InputClient {
+    func selectedText(while isCurrent: () -> Bool) -> String? {
+        guard isCurrent() else { return nil }
+        let result = selectedText()
+        return isCurrent() ? result : nil
+    }
+    func textBefore(_ count: Int, while isCurrent: () -> Bool) -> (text: String, end: Int)? {
+        guard isCurrent() else { return nil }
+        let result = textBefore(count)
+        return isCurrent() ? result : nil
+    }
 }
 
 /// 모든 controller 가 공유하는 app 별 mode. client 를 부르는 동안에는 memory 접근을 잡고 있지 않는다.
@@ -79,10 +94,28 @@ public final class InputCoordinator {
             before()
             let mode = mode(for: app)
             let input = activation.beginInput(app: app)
-            var outcome = driver.perform({
-                $0.handle(key, mode: mode, profile: profile(app.bundleID), selectedText: client.selectedText,
-                    textBefore: client.textBefore)
-            }, apply: { _ in })
+            let appProfile = profile(app.bundleID)
+            var outcome: Outcome
+            if mode == .korean && appProfile.hanjaKey == .optionReturn && key.isHanjaKey {
+                let capturedClientApp = clientApp
+                let prepared = driver.performPrepared({ session, selected, before in
+                    session.handle(key, mode: mode, profile: appProfile, selectedText: selected, textBefore: before)
+                }, selectedText: { client.selectedText(while: $0) },
+                   textBefore: { client.textBefore($0, while: $1) },
+                   isContextCurrent: { self.clientApp == capturedClientApp && self.mode(for: app) == mode })
+                switch prepared {
+                case .completed(let value): outcome = value
+                case .interrupted:
+                    let cancelled = Outcome(handled: true, actions: [], mode: self.mode(for: app))
+                    after(cancelled, false)
+                    return cancelled
+                }
+            } else {
+                outcome = driver.perform({
+                    $0.handle(key, mode: mode, profile: appProfile, selectedText: client.selectedText,
+                        textBefore: client.textBefore)
+                }, apply: { _ in })
+            }
             preserveInputMode(input, outcome: outcome, from: mode)
             if outcome.resend && !canResend() {
                 // 다시 보낼 수 없으면 원래 key 를 넘긴다. 먹은 채 잃지 않는다.
@@ -116,15 +149,16 @@ public final class InputCoordinator {
             case .hanja:
                 let mode = mode(for: app)
                 let input = activation.beginInput(app: app)
-                driver.perform({
-                    $0.hanjaTapped(mode: mode, profile: profile, selectedText: client.selectedText,
-                        textBefore: client.textBefore)
-                }, apply: { outcome in
-                    if let outcome {
-                        preserveInputMode(input, outcome: outcome, from: mode)
-                        client.apply(outcome.actions)
-                    }
-                })
+                let capturedClientApp = clientApp
+                let prepared = driver.performPrepared({ session, selected, before in
+                    session.hanjaTapped(mode: mode, profile: profile, selectedText: selected, textBefore: before)
+                }, selectedText: { client.selectedText(while: $0) },
+                   textBefore: { client.textBefore($0, while: $1) },
+                   isContextCurrent: { self.clientApp == capturedClientApp && self.mode(for: app) == mode })
+                if case .completed(let outcome) = prepared, let outcome {
+                    preserveInputMode(input, outcome: outcome, from: mode)
+                    client.apply(outcome.actions)
+                }
             case .capsLock:
                 capsLock()
             }

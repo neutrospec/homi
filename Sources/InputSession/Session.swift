@@ -47,8 +47,8 @@ public struct Outcome: Sendable, Equatable {
 
 /// 입력칸(client) session 하나의 입력. IMK 를 모른다 — 조합 규칙은 docs/spec.md.
 ///
-/// client 반영은 할 일 목록으로 돌려준다. 한자 질의 callback 은 상태 변경 중 실행하므로,
-/// IMK 에서는 `SessionDriver` 로 질의·상태 변경·반영을 함께 감싸 재진입한 lifecycle 을 처리한다.
+/// client 반영은 할 일 목록으로 돌려준다. IMK 에서는 `SessionDriver` 가 한자 질의를 값 복사본의
+/// 준비 단계와 분리하고 질의·상태 변경·반영을 동기 경계로 감싸 재진입한 lifecycle 을 처리한다.
 /// 조합 중인 글자는 marked text 로만 보이고, 이미 확정한 글자는 다시 쓰지 않는다 (AGENTS.md 결정 5) —
 /// 예외는 ⌥↩ 가 방금 친 단어를 바꿀 때 하나: 교체를 제대로 받는 client 에서, 그 자리 글자를 확인한 뒤에만.
 ///

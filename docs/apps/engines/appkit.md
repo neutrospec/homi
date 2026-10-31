@@ -34,6 +34,13 @@ macOS 의 text 엔진이다. `NSTextInputClient` 의 기준 구현이라 다른 
 
 ## 기록
 
+### 한자 질의 교정본의 probe 확인 (2026-11-01)
+
+macOS 27.2 (`26B123`), `local.hangul.probe` 0, homi 07:23 설치본에서 주인이 실제 keyboard로
+`한글` → Backspace → `ㄹ` 복원 → Space → `한` → ⌥Enter → ↓ → Enter를 수행해 `한글 漢`을 정상 확인했고 AX 값도 같았다.
+별도로 CUA가 시험용 선택 text를 준비한 뒤 주인이 ⌥Enter로 후보를 열고 ESC로 취소, Caps Lock 영문 `a` → Caps Lock `가`를 입력해 `한자a가`를 정상 보고했고 최종 AX 값도 확인했다.
+근거는 `build/imk-theory-review-20261101/prepared-probe.log`. 대표 AppKit의 정상 경로이며 다른 app·일상 사용이나 모델의 중첩 key 순서가 실제 OS에서 발생했음을 입증하지 않는다.
+
 ### 세 경계 교정본의 probe 확인 (2026-10-31)
 
 macOS **27.2 (26B123)**, `local.hangul.probe` 0, homi **15:23 설치본**에서 주인이 실제 keyboard 로

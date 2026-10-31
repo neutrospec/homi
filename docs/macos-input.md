@@ -118,6 +118,7 @@ HID mapping 을 함께 확보한다. System Settings 에도 사라졌는지와 S
   homi 에 같은 callback 순서를 주입하자 한자 질의는 Swift exclusive access 충돌로 abort 했고,
   `insert → mark` 도중 deactivate 는 Session 이 비었는데 client 에 mark 를 다시 남겼다. ✅ (2026-10-09, Debug·Release regression)
 - `SessionDriver` 가 질의·상태 변경·client 반영을 함께 감싸고, 재진입한 종료 요청을 경계 끝에서 처리한다.
+  한자 질의는 원본 Session 접근 밖에서 같은 동기 event 안에 두고, 중첩 전이로 낡아진 결과는 취소한다 ([교훈](lessons.md#한자-질의-중-중첩-입력이-session-접근과-겹친다-2026-11-01)).
   같은 경계 안의 deactivate → activate 는 명시적인 commit 요청이 없을 때만 상쇄한다. 지연된 후보 표시는 controller 와 조합 세대가 맞는지 확인한다.
 - macOS 26 에서 다른 process 의 input source 전환에 deactivate 가 빠진 관측이 있다
   ([Squirrel #1140](https://github.com/rime/squirrel/issues/1140), [대응 #1142](https://github.com/rime/squirrel/pull/1142)).

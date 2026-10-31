@@ -125,36 +125,52 @@ extension Client {
     nonisolated func bundleIdentifier() -> String? { call("bundleIdentifier") { proxy.bundleIdentifier() } }
 
     /// 선택 영역의 글자 — ⌥↩ 로 단어를 한자로 바꿀 때만, key 처리 도중에 묻는다. 없거나 너무 길면 nil.
-    nonisolated func selectedText() -> String? {
+    nonisolated func selectedText() -> String? { selectedText(while: { true }) }
+
+    nonisolated func selectedText(while isCurrent: () -> Bool) -> String? {
+        guard isCurrent() else { return nil }
         let range = call("selectedRange") { proxy.selectedRange() }
-        guard range.location != NSNotFound, range.length > 0, range.length <= 40 else { return nil }
-        return call("selectedSubstring") { proxy.attributedSubstring(from: range)?.string }
+        guard isCurrent(), range.location != NSNotFound, range.length > 0, range.length <= 40 else { return nil }
+        let text = call("selectedSubstring") { proxy.attributedSubstring(from: range)?.string }
+        guard isCurrent() else { return nil }
+        return text
     }
 
-    /// 조합 중인 글자(없으면 커서) 바로 앞 `count` 글자와 그 끝의 문서 위치 — ⌥↩ 가 방금 친 단어를 바꿀 수 있는지 볼 때만,
-    /// key 처리 도중에 묻는다. 확정된 글자의 교체를 제대로 받는 client 가 아니거나, 선택 영역이 있거나, 답이 없으면 nil.
+    /// 조합 중인 글자(없으면 커서) 바로 앞 글자를 key 처리 중에만 묻는다.
+    /// 확정된 글자의 교체를 지원하는 client 이고 선택 영역이 없을 때만 답한다.
     nonisolated func textBefore(_ count: Int) -> (text: String, end: Int)? {
-        guard replacesLikeTextView() else { return nil }
+        textBefore(count, while: { true })
+    }
+
+    nonisolated func textBefore(_ count: Int, while isCurrent: () -> Bool) -> (text: String, end: Int)? {
+        guard replacesLikeTextView(while: isCurrent), isCurrent() else { return nil }
         let marked = call("markedRange") { proxy.markedRange() }
+        guard isCurrent() else { return nil }
         let end: Int
         if marked.location != NSNotFound, marked.length > 0 {
             end = marked.location
         } else {
             let selected = call("selectedRange") { proxy.selectedRange() }
-            guard selected.location != NSNotFound, selected.length == 0 else { return nil }
+            guard isCurrent(), selected.location != NSNotFound, selected.length == 0 else { return nil }
             end = selected.location
         }
-        guard count > 0, end >= count,
-            let text = call("precedingSubstring", { proxy.attributedSubstring(from: NSRange(location: end - count, length: count))?.string })
-        else { return nil }
+        guard count > 0, end >= count, isCurrent() else { return nil }
+        let text = call("precedingSubstring") {
+            proxy.attributedSubstring(from: NSRange(location: end - count, length: count))?.string
+        }
+        guard isCurrent(), let text else { return nil }
         return (text, end)
     }
 
-    /// 확정된 글자를 marked text 로 되돌리는 교체(`replacementRange`)를 제대로 받는 client 인가 — macOS 의 text 엔진(NSTextView)처럼
-    /// 교체 범위와 받아쓰기 대안(`NSTextAlternatives`)까지 받는다고 알릴 때만. Chromium·WebKit 은 앞의 것만 알리고
-    /// (그 위의 JS editor 가 교체를 모른다), JetBrains Runtime·terminal 은 아무것도 알리지 않는다 (docs/macos-input.md).
-    nonisolated func replacesLikeTextView() -> Bool {
-        let attributes = Set((call("validMarkedAttributes") { proxy.validAttributesForMarkedText() } ?? []).compactMap { $0 as? String })
+    /// macOS text 엔진처럼 교체 범위와 받아쓰기 대안을 모두 지원한다고 알리는 client 에서만 재변환한다.
+    /// Chromium·WebKit 은 앞의 것만 알리고, terminal 등은 아무것도 알리지 않는다 (docs/macos-input.md).
+    nonisolated func replacesLikeTextView() -> Bool { replacesLikeTextView(while: { true }) }
+
+    private nonisolated func replacesLikeTextView(while isCurrent: () -> Bool) -> Bool {
+        guard isCurrent() else { return false }
+        let result = call("validMarkedAttributes") { proxy.validAttributesForMarkedText() }
+        guard isCurrent() else { return false }
+        let attributes = Set((result ?? []).compactMap { $0 as? String })
         return attributes.isSuperset(of: ["NSTextInputReplacementRangeAttributeName", "NSTextAlternatives"])
     }
 

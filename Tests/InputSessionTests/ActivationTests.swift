@@ -517,7 +517,7 @@ func coordinatorMouseUsesBoundClient() {
 func coordinatorModifierHanjaReentry() {
     let host = ActivationHost(clientApp: nil)
     host.selection = {
-        #expect(host.driver.isMutatingSession)
+        #expect(!host.driver.isMutatingSession)
         host.deactivate()
         host.activate()
         return "한자"

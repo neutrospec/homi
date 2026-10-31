@@ -29,7 +29,7 @@ client가 이미 확정했다는 분류는 해당 시점에 실제 제출한 mar
 activate·deactivate·commit·client 확인·source 종료의 다섯 lifecycle 동작을 길이 0–2로 각각 주입했다.
 두 경계 각각 31가지, 합계 31² = **961가지 모두** 종료 후 표시 `한ㄱ`과 client mark·Session 일치가 통과했다.
 이는 한 controller·한 client·해당 문자열과 두 적용 직후 경계에 한정된다. 적용 도중·다른 key·임의 callback 순서,
-실제 client 확정과 OS 동작, 모든 가능한 입력의 증명은 포함하지 않는다.
+실제 client 확정과 OS 동작, 모든 가능한 입력의 증명은 포함하지 않는다. 이후 제품 coordinator·실제 `Client` adapter·fake IMK proxy에 영문 시작 여부 두 profile을 연결한 `InterleavingTests`에서도 같은 두 경계 961 × 2 = 1,922 사례가 통과했다.
 
 **일반 key 재진입 반례**: 위와 달리 `insert(한)` 적용 직후 동일 controller로 새 `k` key가 중첩될 수 있다고 가정하면,
 `한 → r`의 바깥 action은 `insert(한), mark(ㄱ)`이다. 중첩 `k`가 Session을 `가`로 만들고 mark한 다음,
@@ -37,7 +37,7 @@ activate·deactivate·commit·client 확인·source 종료의 다섯 lifecycle �
 제품 [InputCoordinator](../Sources/InputSession/InputCoordinator.swift)와 [StoredModes](../Sources/homi/Memory.swift)를 연결한
 fake client에서도 같은 결과를 확인했다. 별도 process에서 선택 한자 `selectedText` 질의 중 일반 key를 중첩하면
 Swift exclusivity 위반으로 exit 134였다. 이들은 제품 경로의 **조건부 구조적 반례**이며, 실제 IMK가 이 순서를
-전달하는지 미확인이다. Telegram이나 첫 key 누락의 원인으로 확대하지 않는다.
+전달하는지 미확인이다. 한자 질의의 충돌은 [별도 교정](lessons.md#한자-질의-중-중첩-입력이-session-접근과-겹친다-2026-11-01)했고, 일반 action 반영 중 중첩은 `InterleavingTests`의 known issue로 남는다. Telegram이나 첫 key 누락의 원인으로 확대하지 않는다.
 
 **정보 경계**: client가 이미 확정한 세계와 아직 확정하지 않은 세계가 같은 관측값을 내고 추가 구별 정보 없이
 insert 또는 skip만 선택할 수 있다고 가정하면, insert는 전자에서 중복이고 skip은 후자에서 이후 새 mark에 대체되어
@@ -45,9 +45,10 @@ insert 또는 skip만 선택할 수 있다고 가정하면, insert는 전자에�
 모든 IMK 설계의 불가능성이나 두 세계의 완전한 동일 trace가 실측되었음을 증명하지 않는다.
 [Chromium 원장](apps/engines/chromium.md)과 [늦은 mark 확인의 실패](lessons.md#보류한-chromium-확정이-다음-입력칸에-들어간다-2026-10-09)를 따른다.
 
-**다음 순서**: 먼저 중첩 event의 처리 순서, 즉시 반환할 handled의 뜻, 실제 입력칸 목적지를 명세하고 위 반례를
-회귀 검증한다. 무조건 drop·false·queue로 바꾸면 key 유실·중복이나 순서 문제가 생길 수 있다.
-그 뒤 activation layout의 중첩과 두 controller·source notification의 순서를 같은 가정 아래 검토한다.
+**다음 순서**: 일반 action 반영 중 중첩 event의 처리 순서·handled·실제 입력칸 목적지를 먼저 명세하고 반례를 다룬다.
+단순 queue·false·true 반환, stale mark 생략이나 강제 flush는 client 적용 순서와 목적지를 보장하지 못해 무유실 교정으로 채택하지 않는다.
+activation layout 중첩과 두 controller의 SourceWatcher 순서도 복제한 추상 모델로 검토했다. watcher는 notification payload가 아니라
+그때의 TIS 선택을 재조회한다. 두 모델은 제품 경계나 실제 OS 검증이 아니며 runtime 변경은 보류한다.
 재발을 기다리는 것만이 다음 행동은 아니다. 기본 입력 보호와 실제 OS 관측의 경계는 유지한다.
 
 ## 기본 입력을 먼저 보호할 안건

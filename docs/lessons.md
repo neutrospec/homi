@@ -6,6 +6,14 @@
 - 간헐 결함의 증거는 homi 의 기록이다 — 이상하면 주인이 곧바로 input menu 의 "최근 key 기록 저장" 을 누르고(`~/Library/Logs/homi/`), 그 file 로 가린다.
 - 원인에 🔶 가 붙은 것은 대응이 통했지만 원인은 추정이라는 뜻이다.
 
+## 한자 질의 중 중첩 입력이 Session 접근과 겹친다 (2026-11-01)
+
+- **증상·원인**: 선택 한자 질의 중 같은 controller에 일반 key가 중첩된다는 모델에서 Swift exclusivity 충돌로 process가 종료됐다. 기존 코드는 `Session`의 mutating 접근 안에서 client 질의를 호출했다. 실제 macOS가 이 key 순서를 전달하는지는 미확인이다.
+- **증거**: 제품 coordinator 경로의 독립 process에서 `selectedText` 중 중첩 key로 exit 134를 확인했다. 같은 독립 query 재현을 현재 제품으로 다시 compile해 guard 없이 실행하니 exit 0, client mark·Session `ㅎ`, 후보 없음이었다 (`build/imk-theory-review-20261101/fixed-query-repro/{stdout,stderr,exit}.txt`; fixture 변경은 `fixture.patch`). 교정 전후 regression은 두 한자 trigger의 정상 결과·질의 횟수, nil·두 질의 경로, 중첩 key·같은 한자 요청·공유 mode 변경을 대조한다. 실제 `Client` adapter와 fake IMK proxy를 연결해 각 IPC 사이 중단도 검사한다.
+- **대응**: `Session` 값 복사본을 순수 응답 cache로 평가하고, 실제 client 질의는 원본 `inout` 밖의 같은 동기 event 안에서 필요한 것만 호출한다. 미응답과 nil을 구분하고 완료된 proposal만 반영한다. 중간 Session 전이 또는 확인 시 client ID·app mode의 현재값 변경이 있으면 이전 요청을 취소하고 ⌥↩는 먹으며 새 상태·mode를 보존한다. `Client`는 IPC마다 유효성을 다시 검사해 불필요한 후속 질의를 중단한다. 기존 pending lifecycle flush는 유지하므로 commit 요청이 있으면 새 글자가 확정될 수도 있다.
+- **검증·설치**: `swift build` 성공, Debug·Release 각각 282개 test 실행(Install 7·InputSession 187·Homi 70·HangulCore 18). 일반 insert 중 중첩 key의 known issue 1개 외 예상 밖 실패는 없다. 2026-11-01 07:23:01 KST `homi code signing`으로 설치했다(CDHash `6d2952cde9fa553bb81cdcc96485271162519c9d`, 설치 직후 PID `58681`). 근거: `build/imk-theory-review-20261101/prepared-{build,debug-tests,release-tests,install}.log`. [native probe의 기본 입력·한자 정상 경로](apps/engines/appkit.md#한자-질의-교정본의-probe-확인-2026-11-01)는 주인이 확인했다. 다른 app·일상 사용은 남는다.
+- **한계**: 같은 controller의 Session 전이는 세대로 검사하지만, 다른 controller의 공유 mode A→B→A는 현재값 비교로 감지하지 못한다. client ID도 실제 DOM 입력칸 소유권을 증명하지 않는다. 일반 action 반영 도중 중첩 key의 별도 반례는 `InterleavingTests`의 known issue로 남고 실제 OS 발생은 미확인이다. Secure Input·source 누락·Telegram 증상의 원인이나 해결로 확대하지 않는다. [이론 검증 범위와 다음 순서](stability-review.md#imk-이론-검증-범위-2026-11-01).
+
 ## 이전 mark 의 확인이 다음 조합을 지운다 (2026-10-31)
 
 - **증상·원인**: `insert("한") → mark("ㄱ")`의 insert 도중 `alreadyCommittedByClient`가 들어오면,
