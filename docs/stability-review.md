@@ -39,6 +39,29 @@ fake client에서도 같은 결과를 확인했다. 별도 process에서 선택 
 Swift exclusivity 위반으로 exit 134였다. 이들은 제품 경로의 **조건부 구조적 반례**이며, 실제 IMK가 이 순서를
 전달하는지 미확인이다. 한자 질의의 충돌은 [별도 교정](lessons.md#한자-질의-중-중첩-입력이-session-접근과-겹친다-2026-11-01)했고, 일반 action 반영 중 중첩은 `InterleavingTests`의 known issue로 남는다. Telegram이나 첫 key 누락의 원인으로 확대하지 않는다.
 
+**교정 후보 대조** (`34d6a64`, 2026-11-01): 제품 coordinator·SessionDriver·Session을 연결한 독립 fixture에서
+`insert(한)`의 적용 직전·직후에 `k`·문장부호·⌘A·Backspace·toggle·commit·focus 이동을 주입했다.
+client adapter·문서 효과·false로 넘긴 key의 app 처리는 fake이며 실제 `Client`나 IMK 실행이 아니다.
+
+| 후보 | 주입한 조건에서 남은 반례 |
+|---|---|
+| 바깥 batch의 오래된 mark 생략 | insert 적용 전 중첩 `k`가 만든 `가`를 나중의 insert가 지운다. 오래된 `ㄱ`만 생략해도 client는 `한`, Session은 `가`다. |
+| 중첩 client action을 FIFO로 보류 | 중첩 `.`이 false로 반환되어 app이 먼저 처리하면, 뒤늦은 `ㄱ` 확정과 순서가 바뀌어 `한.ㄱ`이 된다. |
+| 중첩 key 전에 남은 바깥 action 확정 | 앞선 insert가 아직 적용되지 않았다면 미리 보낸 mark와 중첩 입력이 나중 insert에 덮인다. |
+
+세 변형은 fake adapter의 제한된 후보이며 범용 제품 patch가 아니다. 특히 stale 비교 fixture는 문자열 비교를 써 ABA를 구분하지 못한다.
+mutation revision으로 비교해도 진행 중인 client 호출의 적용 전후나 실제 입력칸 소유권까지 알 수는 없다.
+이 반례는 각 주입 조건 아래의 결론이지 모든 가능한 설계가 불가능하다는 증명은 아니다.
+재실행 source·명령·출력은 `build/key-reentry-20261101/design.md`와 같은 directory의 `*-fixture.swift`·`*-output.txt`에 있다.
+현재 입력 정책은 유지하고, 수정의 환경 가정을 좁히기 위해 [내용 없는 중첩 key 관측](macos-input.md#client-호출-단계의-관측)을 보강한다.
+
+관측 회귀 6개를 추가했다. `swift build` 성공, Debug·Release 각각 303개 test 실행
+(Install 7·InputSession 187·Homi 91·HangulCore 18)에서 기존 일반 key 재진입 known issue 1개 외 예상 밖 실패는 없다.
+2026-11-01 07:53:20 KST `homi code signing`으로 설치했다(CDHash `e6c712672e1c49809714b37771ce83e072a5a837`, 설치 직후 PID `92637`).
+근거는 `build/key-reentry-20261101/{build,debug-tests,release-tests,install}.log`.
+[probe의 기본 조합·Backspace·Caps Lock 전환](apps/engines/appkit.md#중첩-key-관측본의-probe-확인-2026-11-01)은 주인이 정상 확인했다.
+이는 관측본의 대표 정상 입력 검사이며, 가정한 재진입의 실재나 반례의 해결을 입증하지 않는다.
+
 **정보 경계**: client가 이미 확정한 세계와 아직 확정하지 않은 세계가 같은 관측값을 내고 추가 구별 정보 없이
 insert 또는 skip만 선택할 수 있다고 가정하면, insert는 전자에서 중복이고 skip은 후자에서 이후 새 mark에 대체되어
 유실될 수 있다. skip 즉시 유실된다는 뜻은 아니다. 이 모델은 확인·입력칸 소유권에 관한 가정이 필요함을 보일 뿐

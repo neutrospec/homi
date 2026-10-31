@@ -39,6 +39,8 @@ public final class InputCoordinator {
 
     public enum Notice {
         case becameActive
+        /// 같은 controller 의 client 호출 또는 입력 경계가 진행 중인 key callback. 물리 key·입력칸 소유권의 증거는 아니다.
+        case keyEnteredWhileBusy
         case received(app: String)
         case appResolved(app: String, mode: Mode, passThrough: Bool)
         case modePrepared(app: String, mode: Mode, passThrough: Bool)
@@ -53,6 +55,8 @@ public final class InputCoordinator {
         public let resuming: Bool
     }
 
+    /// 관측만을 위한 종류별 첫 callback. 현재 call 4종과 frame 없음까지 수명당 최대 5건이며 입력 판단에는 쓰지 않는다.
+    private var busyKeyKinds: Set<ClientTrace.CallKind?> = []
     private var activation = ModeActivation()
     private let modes: any ModeStore
     private let profile: (String) -> AppProfile
@@ -89,7 +93,11 @@ public final class InputCoordinator {
     @discardableResult
     public func keyDown(_ key: KeyEvent, client: any InputClient, before: () -> Void = {},
         canResend: () -> Bool = { false }, after: (Outcome, Bool) -> Void = { _, _ in }) -> Outcome {
-        withInput(client: client) { app in
+        if inputDepth > 0 || driver.isHandlingEvent || driver.clientTrace.hasActiveCall {
+            let kind = driver.clientTrace.snapshot.frame?.kind
+            if busyKeyKinds.insert(kind).inserted { notice(.keyEnteredWhileBusy) }
+        }
+        return withInput(client: client) { app in
             prepareMode(for: app)
             before()
             let mode = mode(for: app)

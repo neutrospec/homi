@@ -183,6 +183,8 @@ nonisolated final class HomiInputController: IMKInputController, CandidateOwner 
     /// coordinator 의 알림은 관찰·표시에만 쓴다. 입력 판단의 상태는 coordinator 와 shared memory 에 있다.
     private func inputNotice(_ notice: InputCoordinator.Notice) {
         switch notice {
+        case .keyEnteredWhileBusy:
+            observeClient("key.whileBusy", lifecycle: true)
         case .becameActive:
             let controller = Unchecked(self)
             MainActor.assumeIsolated { ActiveInputSession.controller = controller.value }

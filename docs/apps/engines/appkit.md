@@ -34,6 +34,14 @@ macOS 의 text 엔진이다. `NSTextInputClient` 의 기준 구현이라 다른 
 
 ## 기록
 
+### 중첩 key 관측본의 probe 확인 (2026-11-01)
+
+macOS 27.2 (`26B123`), `local.hangul.probe` 0, homi 07:53 설치본에서 주인이 실제 keyboard로
+`한글` → Backspace → `ㄹ` 복원 → Caps Lock → 영문 `a` → Caps Lock → `가`를 입력해 정상 보고했다.
+probe log에는 Enter로 나눈 두 번의 같은 입력 순서가 있고, AX에서도 두 줄의 `한글a가`를 확인했다.
+근거는 `build/key-reentry-20261101/probe.log`. 기본 조합·편집·전환의 대표 검사이며,
+[중첩 관측](../../macos-input.md#client-호출-단계의-관측)의 조건이 실제로 발생하거나 기존 반례가 해결됐다는 뜻은 아니다.
+
 ### activation 경계 추출본의 probe 확인 (2026-11-01)
 
 macOS 27.2 (`26B123`), `local.hangul.probe` 0, homi 07:42 설치본에서 주인이 실제 keyboard로

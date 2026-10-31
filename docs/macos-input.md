@@ -155,6 +155,21 @@ lifecycle `.return` 은 callback 반환이다. 경계 끝의 pending commit 완�
 
 lifecycle snapshot 은 info log 와 memory ring buffer 에, client 호출의 시작·반환은 debug log 에 남긴다.
 새 snapshot 에 글자·key code·문서 위치는 없다. 기록의 추가 비용이 timing 을 바꿀 수 있으므로 관측된 순서를 일반화하지 않는다.
+
+2026-11-01 추가한 `key.whileBusy`는 `InputCoordinator.keyDown` 진입 직전 같은 controller의 input·driver event·client 호출 중
+하나가 진행 중이라는 신호다. 기존 snapshot을 info log와 memory ring buffer에 남기며 client 질의나 Session 직접 조회는 추가하지 않는다.
+호출 종류 `insert`·`mark`·`query`·`layout`·frame 없음마다 최초 1건, controller 수명당 최대 5건만 기록한다.
+종류는 callback 전에 등록해 관측 자체가 재진입해도 반복 기록하지 않는다. 일반 key의 판단·action·handled는 바꾸지 않는다.
+기록에는 시각·controller ID·호출 종류·깊이·cached 상태가 있으며 글자·key code·문서 위치는 없다.
+기록에는 문자열 생성·Logger·recorder의 Mutex 비용이 있다. 제한은 controller 재생성 때 초기화된다.
+이미 기록한 종류의 후속 발생은 생략하므로 기록 부재를 재진입 부재로 해석하지 않는다.
+다른 controller의 중첩, 별개의 물리 key인지, client 적용 전후나 실제 입력칸 소유권도 이 신호로 확정할 수 없다.
+
+`BusyKeyObservationTests`는 실제 coordinator·driver·Client와 fake proxy로 normal/lifecycle 단독 무기록, 종류별 제한,
+notice 재진입·새 controller 독립성과 기존 한글 action·handled 보존을 검사한다.
+Session mutation 중에는 trace의 primitive 조회만 검사하며, 그때 일반 key 처리 전체가 안전하다는 증명이 아니다.
+일반 key의 [조건부 반례와 후보별 한계](stability-review.md#imk-이론-검증-범위-2026-11-01)는 그대로 남는다.
+
 native `probe --check-input-manual` 은 주인이 선택한 homi·실제 `가` 입력으로 준비한 뒤 자기 NSTextView 에서 기본 입력·insert/mark callback·입력칸 이동을 검사한다.
 도구가 source 를 고르거나 system 에 key 를 post 하지 않는다. context injection 은 실제 lifecycle 도착 단계와 log 를 대조해야 한다.
 

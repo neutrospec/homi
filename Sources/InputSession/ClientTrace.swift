@@ -94,6 +94,9 @@ public final class ClientTrace {
         cachedState = state
     }
 
+    /// Session 을 읽지 않고 현재 client 호출 stack 만 확인한다.
+    public var hasActiveCall: Bool { !frames.isEmpty }
+
     public var snapshot: Snapshot {
         Snapshot(
             cachedState: cachedState, eventID: currentEventID,
