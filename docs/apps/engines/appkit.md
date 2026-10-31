@@ -34,6 +34,25 @@ macOS 의 text 엔진이다. `NSTextInputClient` 의 기준 구현이라 다른 
 
 ## 기록
 
+### probe 의 후보 UI 검증 (2026-10-31)
+
+macOS **27.2 (26B123)**, `local.hangul.probe` 0, homi **14:41 설치본**에서 실제 keyboard 로 확인했다.
+주인은 기본 `한글` 조합·Backspace·`ㄹ` 복원, `한`의 ⌥Enter 후보 표시·↓ 선택·Enter 확정이 정상이라고 보고했다.
+후보를 연 채 ⌘Tab 으로 다른 app 에 갔다가 돌아와 이어 입력하는 시험도 정상으로 보고했다(요청한 최종값 `한글 漢 한글`).
+도구가 최종 문자열 전체를 다시 확인한 것은 아니다. 내용 없는 homi trace 에서는 probe controller 의 14:44:23 deactivate 전
+`composing=true,candidates=true`가 종료 뒤 둘 다 false 로 바뀌고, 14:44:25 재활성화되는 것을 확인했다.
+근거: 주인 보고, `build/candidate-revision-runtime-20261031.log`. 자동 Task 순서 test 와 실제 AppKit 입력 검증은 구분한다.
+다른 AppKit app 전체의 통과를 뜻하지 않는다.
+
+### 후보 뜻의 첫 표시 누락 보고 (2026-10-31, 미해결)
+
+같은 시험에서 주인은 **첫 목록에는 첫 후보 뒤의 한글 설명이 없었지만, 두 번째 `한` 목록에는 설명이 있었다**고 보고했다.
+첫 목록도 `한` 한 글자의 후보였음을 추가 확인했다. 누락 화면은 도구로 확보하지 못했다.
+`hanja.txt`의 `한` 첫 9개 후보는 모두 뜻이 있고, 설치 resource 와 repository 원본의 SHA-256 도 같다
+(`b1004034589f1357daaea3534a6136f6b5ef825afa8779886b20f0b7908bbe3b`). 단어 후보의 빈 뜻으로 설명할 수 없다.
+후보 데이터의 `meaning`을 label 에 넘기는 코드와 panel layout 은 이번 revision 분리에서 바꾸지 않았다. 회귀 여부·원인은 미확정이다.
+다음에는 첫 show·다음 show 의 후보 데이터와 각 label 의 frame·가시성을 대조한다. fake panel test 는 실제 AppKit rendering 을 검증하지 않는다.
+
 | 날짜 | 환경 | 내용 |
 |---|---|---|
 | 2026-09-25 | macOS 27.0 | attribute 목록을 확인하고 Apple 방식 한자의 판별 기준으로 삼음 (`c884edd`) |

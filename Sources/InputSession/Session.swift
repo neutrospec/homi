@@ -61,7 +61,14 @@ public struct Session: Sendable {
     /// 커서가 움직일 만한 일(한글 아닌 key, 수식키 조합, click, 입력칸 이동, 전환)이 있으면 비운다.
     private var recent = ""
     /// 한자 후보를 고르는 중이면 그 상태.
-    private var choosing: Choosing?
+    private var choosing: Choosing? {
+        didSet {
+            // 후보를 열거나 갱신하거나 닫은 세대다. 같은 선택의 재표시도 새 요청이며,
+            // 후보가 없는 일반 조합·반복 commit 은 후보 UI 를 바꾸지 않는다.
+            if oldValue != nil || choosing != nil { candidateRevision &+= 1 }
+        }
+    }
+    public private(set) var candidateRevision: UInt64 = 0
 
     /// 한자 후보를 고르는 중 — 무엇을 바꾸는지, 바꿀 단어들(긴 것부터)과 지금 고른 자리.
     /// 바꿀 한글은 늘 marked text 다: 조합 중인 글자, ⌥↩ 때 선택 영역에서 시작한 조합, 또는 marked text 로 되돌린 단어.

@@ -20,12 +20,13 @@ public final class SessionDriver {
     private var mutationDepth = 0
     /// 관측 전용 cache. callback 은 Session 대신 이것의 primitive snapshot 을 읽는다.
     public let clientTrace = ClientTrace()
-    /// 지연된 UI 가 이미 끝난 조합을 다시 보이지 않게 하는 세대.
-    public private(set) var revision: UInt64 = 0
+    /// 입력 경계·종료의 세대. 무변화 event 도 포함하므로 후보 표시의 유효성에 쓰지 않는다.
+    public private(set) var inputRevision: UInt64 = 0
 
     public init(hanja: HanjaDictionary? = nil) { session = Session(hanja: hanja) }
     public var composing: String { session.composing }
     public var hasCandidates: Bool { session.hasCandidates }
+    public var candidateRevision: UInt64 { session.candidateRevision }
     public var isHandlingEvent: Bool { depth > 0 }
     /// 명시적인 commit 은 activate 가 취소하지 않는다. 종료 flush 도 실제 입력 event 의 continuation 과 구분한다.
     public var hasExplicitEnd: Bool { pendingCommit != nil || finishing }
@@ -46,7 +47,7 @@ public final class SessionDriver {
     /// app 판별·수식키·caret 질의도 같은 경계 안에 둔다.
     public func withEvent<Result>(_ body: () -> Result) -> Result {
         clientTrace.withEvent {
-            if depth == 0 { revision &+= 1 }
+            if depth == 0 { inputRevision &+= 1 }
             depth += 1
             defer {
                 depth -= 1
@@ -107,7 +108,7 @@ public final class SessionDriver {
     private func finish(ending: CompositionEnd, apply: ([Action]) -> Void) {
         finishing = true
         defer { finishing = false }
-        revision &+= 1
+        inputRevision &+= 1
         mutationDepth += 1
         let committed = session.commit()
         mutationDepth -= 1

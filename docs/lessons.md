@@ -6,6 +6,21 @@
 - 간헐 결함의 증거는 homi 의 기록이다 — 이상하면 주인이 곧바로 input menu 의 "최근 key 기록 저장" 을 누르고(`~/Library/Logs/homi/`), 그 file 로 가린다.
 - 원인에 🔶 가 붙은 것은 대응이 통했지만 원인은 추정이라는 뜻이다.
 
+## 무변화 event 가 한자 후보 표시를 취소한다 (2026-10-31)
+
+- **증상**: `⌥↩ → Option release → 예약한 show 실행` 순서에서 Session 은 후보 선택 중인데 창은 뜨지 않는 코드의 반례다.
+  숫자·Enter 를 보이지 않는 후보 선택으로 해석할 수 있다. 실제 macOS 의 이 Task 순서나 주인의 간헐 증상과의 인과는 미확인이다.
+- **원인**: 후보 표시 Task 가 모든 외부 event 에서 바뀌는 `SessionDriver.revision`을 검사했다.
+  modifier release·무시한 event·후보를 바꾸지 않는 한자 key 도 유효한 표시를 취소했다.
+- **증거**: 제품 coordinator·Client·표시 guard 를 실행하고 client·owner·mode 저장소·panel·UI queue 환경을 대체했다. 세 무변화 event 의 표시 기대가 모두 실패했고,
+  종료·선택 변경·caret 재진입·owner 변경 대조군은 통과했다(`build/candidate-revision-before-20261031.log`).
+  교정 후 같은 반례와 [확장 검사](stability-review.md#4번-입력-revision과-후보-ui-revision-분리)가 통과했다.
+- **대응**: 입력 경계의 `inputRevision`과 Session 의 후보 열기·갱신·닫기 세대인 `candidateRevision`을 분리했다.
+  show·hide 는 후보 세대를 검사한다. 같은 글자로 재시작해도 옛 show 는 버리고, 닫기 역시 새 후보를 건드리지 않는다.
+  `CandidatePresentation`으로 제품 표시 경계를 분리해 실행 순서를 test 에서 직접 고를 수 있게 했다.
+- **제한**: owner·busy·active 검사와 caret 질의의 동기 위치는 유지한다. UI 를 띄우려고 client 를 다시 묻거나 입력 상태를 바꾸지 않는다.
+  busy 상태에서 실행된 UI 작업을 재시도하는 정책이나 누락된 lifecycle 을 추정하는 보정은 추가하지 않았다.
+
 ## renderer 조회 실패가 영구적인 부재 판정이 된다 (2026-10-31)
 
 - **증상**: 첫 조회에서 app 위치가 없거나 directory 읽기가 실패하면, 다음 callback 에 읽을 수 있어도 기존 renderer 를 찾지 못했다.

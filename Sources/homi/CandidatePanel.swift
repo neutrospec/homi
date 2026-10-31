@@ -6,13 +6,13 @@ import InputSession
 ///
 /// 모양은 커서 옆 말풍선(`ModeHUD`)과 같은 계열이다. focus 를 뺏지 않고 mouse 를 막지 않는다 — 고르기는 key 로만 한다.
 /// 위치(커서 줄)는 key 처리 도중에 client 에게 묻고, 그리는 일은 key 처리가 끝난 뒤에 한다 (결정 4).
-final class CandidatePanel {
+final class CandidatePanel: CandidateDisplaying {
     static let shared = CandidatePanel()
 
     private let panel: NSPanel
     private let background = NSVisualEffectView()
     private let rows = NSStackView()
-    private weak var owner: HomiInputController?
+    private weak var owner: (any CandidateOwner)?
 
     private static let padding: CGFloat = 6
 
@@ -49,7 +49,7 @@ final class CandidatePanel {
         panel.contentView = background
     }
 
-    func show(_ candidates: [Candidate], selected: Int, below line: NSRect, owner: HomiInputController) {
+    func show(_ candidates: [Candidate], selected: Int, below line: NSRect, owner: any CandidateOwner) {
         self.owner = owner
         let size = Session.page
         let start = selected / size * size
@@ -81,7 +81,7 @@ final class CandidatePanel {
         panel.orderFrontRegardless()
     }
 
-    func hide(owner: HomiInputController) {
+    func hide(owner: any CandidateOwner) {
         guard self.owner === owner else { return }
         panel.orderOut(nil)
         self.owner = nil

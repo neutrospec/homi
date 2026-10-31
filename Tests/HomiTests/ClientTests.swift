@@ -6,7 +6,7 @@ import Testing
 @testable import homi
 
 /// 문서 위치를 지정하지 않는 proxy 호출을 검사한다. 실제 app 의 조합 종료 여부는 별도 확인한다.
-private nonisolated final class TextProxy: NSObject, IMKTextInput {
+nonisolated final class TextProxy: NSObject, IMKTextInput {
     var insertedRange: NSRange?
     var markedReplacement: NSRange?
     var markedSelection: NSRange?
@@ -18,6 +18,7 @@ private nonisolated final class TextProxy: NSObject, IMKTextInput {
     var onSelectionQuery: (() -> Void)?
     var appID: String? = "homi.tests"
     var onBundleQuery: (() -> Void)?
+    var onCaretQuery: (() -> Void)?
 
     func insertText(_ string: Any?, replacementRange: NSRange) {
         insertedRange = replacementRange
@@ -48,7 +49,14 @@ private nonisolated final class TextProxy: NSObject, IMKTextInput {
     func characterIndex(for point: NSPoint, tracking: IMKLocationToOffsetMappingMode,
                         inMarkedRange: UnsafeMutablePointer<ObjCBool>?) -> Int { NSNotFound }
     func attributes(forCharacterIndex index: Int,
-                    lineHeightRectangle: UnsafeMutablePointer<NSRect>?) -> [AnyHashable: Any]? { queryCount += 1; return nil }
+                    lineHeightRectangle: UnsafeMutablePointer<NSRect>?) -> [AnyHashable: Any]? {
+        queryCount += 1
+        let callback = onCaretQuery
+        onCaretQuery = nil
+        callback?()
+        lineHeightRectangle?.pointee = NSRect(x: 10, y: 20, width: 0, height: 18)
+        return nil
+    }
     func validAttributesForMarkedText() -> [Any]? { queryCount += 1; return [] }
     func overrideKeyboard(withKeyboardNamed keyboard: String?) {}
     func selectMode(_ mode: String?) {}

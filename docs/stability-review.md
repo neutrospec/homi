@@ -123,7 +123,7 @@ callback 의 적용 범위를 확인하기 전에는 insert 생략 정책을 바
 | 1 | 제품의 입력 순서를 test 에서 직접 실행 | app 식별 → mode 준비 → Session 판단 → client 반영을 `InputCoordinator`로 모은다. test 는 client·환경만 대체한다. ID 질의부터 끝나는 동기 경계와 실제 입력/종료 flush 구분을 보존하고, 설치 후 기본 입력을 확인한다. | 완료 — 설치·주인 확인 |
 | 2 | app 식별 근거와 종료 의도를 type 으로 표현 | 실제 client ID·fallback, client 자체 확정·homi 확정의 뜻을 명확히 한다. `String`·`trusted`·`insert: false`의 조합으로 잘못된 상태를 만들 가능성을 줄인다. 현재 종료 정책은 먼저 test 로 고정하며 callback token 을 입력칸 소유권으로 취급하지 않는다. | 완료 — 설치·주인 확인 |
 | 3 | app 판별과 호환 정책 분리 | Chromium 발견 결과와 commit 정책을 분리하고, 미확인·확인된 부재를 구별한다. cold 판별을 옮길 때 첫 callback 의 행동을 먼저 검사한다. ChatGPT 에 우회를 적용할지는 실제 app 검증 후 따로 결정한다. | 완료 — 설치·주인 확인. cold 조회 이동은 보류 |
-| 4 | 입력 revision 과 UI revision 분리 | 무변화 modifier event 가 필요한 후보 표시를 취소하지 않도록 한다. 실제 후보 변경·확정·focus 종료 뒤에는 오래된 UI 가 뜨지 않는지 검사한다. | 대기 |
+| 4 | 입력 revision 과 UI revision 분리 | 무변화 modifier event 가 필요한 후보 표시를 취소하지 않도록 한다. 실제 후보 변경·확정·focus 종료 뒤에는 오래된 UI 가 뜨지 않는지 검사한다. | 완료 — 설치·주인 확인. 뜻 표시 누락은 별도 미해결 |
 
 ### 1번: 입력 coordinator 추출
 
@@ -196,6 +196,24 @@ typing 경로의 file I/O 제거는 첫 판별을 미리 확보할 근거가 필
 주인이 [Chrome 의 조합 중 입력칸 이동](apps/chrome.md#판별정책-분리-검증-2026-10-31)을 정상 확인했다.
 근거는 `build/renderer-policy-{build,debug-tests,release-tests,install,runtime}-20261031.log`다.
 이 확인을 다른 app·source 왕복이나 간헐 첫 key 문제의 해결로 확대하지 않는다.
+
+### 4번: 입력 revision과 후보 UI revision 분리
+
+`6170865` 기준 [무변화 event 의 후보 표시 취소](lessons.md#무변화-event-가-한자-후보-표시를-취소한다-2026-10-31)를 실패 test 로 고정한 뒤 교정했다.
+Session 은 후보 상태를 할당할 때만 `candidateRevision`을 바꾼다(같은 선택의 재표시 포함). 후보가 없는 일반 조합·반복 commit 은 이 값을 바꾸지 않는다.
+기존 event·종료 세대는 `inputRevision`으로 남기고 UI 판정에는 쓰지 않는다. 후보 표시·닫기를 맡는
+[CandidatePresentation](../Sources/homi/CandidatePresentation.swift)은 owner·busy·active 조건을 유지하며, Task 에서는 client 질의·Session 변경을 하지 않는다.
+caret 위치는 기존처럼 동기 event 안에서 읽고 재진입한 종료의 flush 가 끝난 뒤에만 Task 를 예약한다.
+
+[새 test 10개](../Tests/HomiTests/CandidatePresentationTests.swift)는 제품 coordinator·Session·Client·표시 guard 를 연결하고
+client proxy·owner·mode 저장소·panel·UI queue 환경을 대체한다. 무변화 event, 한자 key·modifier tap, 선택·목록 변경, 취소·확정·모드·focus·source 종료,
+같은 글자로 재시작, 다른 owner, caret 질의 재진입·Session mutation 중 UI 실행을 검사한다.
+보이는 창의 hide 와 일반 조합·Backspace·확정의 후보 UI/위치 질의 0도 확인한다. UI 작업 전후 문서·Session·mode·질의 횟수는 같다.
+`swift build`와 Debug·Release 각각 **247개 test**가 통과했다. 2026-10-31 **14:41:46 KST** 에 자체 서명본을 설치했고
+(CDHash `aad69015f59140ad2e481f1d0b4f6fdbb2f74a20`), 새 PID `49052`의 시작·modifier observer 준비·probe 입력 수신을 확인했다.
+주인이 [probe 의 기본 입력·후보 선택·app 왕복](apps/engines/appkit.md#probe-의-후보-ui-검증-2026-10-31)을 정상 확인했다.
+근거는 `build/candidate-revision-{before,after,build,debug-tests,release-tests,install,runtime}-20261031.log`다.
+[첫 목록의 후보 뜻 누락 보고](apps/engines/appkit.md#후보-뜻의-첫-표시-누락-보고-2026-10-31-미해결)는 별도 미해결이며, 이 통과를 모든 표시·app 호환성의 완성으로 확대하지 않는다.
 
 ## focus와 source 전환 code review (2026-10-31)
 
@@ -278,7 +296,8 @@ build·test 결과는 `build/source-review-build-20261031.log`·`build/source-re
 
 | 안건 | 판단 | 검토 결과 · 다음 검증 |
 |---|---|---|
-| 보이지 않는 한자 후보 | **좁은 교정 후보 채택** | [SessionDriver.withEvent](../Sources/InputSession/SessionDriver.swift)는 무변화 flagsChanged 에도 revision 을 올리고 [Client](../Sources/homi/Client.swift)의 show Task 는 옛 revision 을 버린다. `⌥↩ → Option release → show Task` model 은 후보가 열린 채 show 만 취소됐다. 실제 Task 순서는 미관측이다. 후보 내용·선택·종료에 따른 revision 을 검토하되 owner·busy·active 검사는 유지한다. |
+| 보이지 않는 한자 후보 | **반례 교정·설치·주인 확인** | [4번 구현·검증](#4번-입력-revision과-후보-ui-revision-분리)을 따른다. event 횟수와 후보 변경을 분리하고 owner·busy·active 조건은 유지한다. 실제 간헐 증상의 원인 확정은 아니다. |
+| 첫 후보 목록의 뜻 표시 누락 | **관측 채택·교정 보류** | [probe 보고](apps/engines/appkit.md#후보-뜻의-첫-표시-누락-보고-2026-10-31-미해결). 같은 한 글자의 다음 목록에는 뜻이 보였다. 첫 쪽 사전 값은 비어 있지 않다. 첫 show 와 다음 show 의 데이터·label 가시성을 대조하고, 후보 revision 교정과 구분한다. |
 | caret 질의의 부작용 | **관측 채택, 교정 보류** | [Chromium 원장](apps/engines/chromium.md)의 firstRect 실패는 click 확정과 다른 경로다. homi 의 attributes 질의와 그 callback 이 실제로 연결되는지 먼저 확인한다. 표시를 위해 입력을 위험하게 하지 않는다. client 질의를 event 밖으로 옮기면 교착 교훈을 깨므로 기각한다. |
 | Chromium 최초 판별 | **cache 실패 교정·판별과 정책 분리** | [3번 구현·검증](#3번-renderer-판별과-commit-정책-분리)을 따른다. 미확인을 부재로 고정하지 않고 첫 callback 의 기존 판단을 검사했다. 실제 간헐 증상의 원인으로 확인한 것은 아니다. cold 조회의 단순 async 이동은 여전히 보류한다. |
 | ModeHUD·indicator 의 stale Task | **indicator 는 activation 교정에 포함, ModeHUD 는 후순위** | indicator 는 owner·app·현재 mode·pass-through 를 확인한다. ModeHUD 의 Task guard 는 별도 안건이며 실제 실패는 미관측이다. 표시 때문에 mode·source 를 다시 바꾸지 않는다. |

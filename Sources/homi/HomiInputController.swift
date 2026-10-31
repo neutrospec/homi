@@ -10,7 +10,7 @@ import Synchronization
 /// activate 알림이 늦거나 빠져도 틀리지 않는다.
 /// IMK header 에는 actor 표시가 없어 override 들이 nonisolated 여야 한다. 불리는 곳은 main thread 다.
 @objc(HomiInputController)
-nonisolated final class HomiInputController: IMKInputController {
+nonisolated final class HomiInputController: IMKInputController, CandidateOwner {
     // Session·사전은 기존처럼 controller 생성 때 준비한다. lazy coordinator 의 첫 key 로 사전 I/O 를 옮기지 않는다.
     private let session = SessionDriver(hanja: hanjaDictionary)
     private lazy var coordinator = InputCoordinator(driver: session, modes: StoredModes(),
@@ -254,7 +254,7 @@ nonisolated final class HomiInputController: IMKInputController {
         super.inputControllerWillClose()
     }
 
-    var sessionRevision: UInt64 { session.revision }
+    var candidateRevision: UInt64 { session.candidateRevision }
     var clientTrace: ClientTrace { session.clientTrace }
     /// 상태 cache 와 호출 이력만 읽는다. Session 의 mutating 질의 중에도 그 Session 이나 client 문서를 읽지 않는다.
     func observeClient(_ phase: String, returnedCall: UInt64? = nil, lifecycle: Bool = false) {

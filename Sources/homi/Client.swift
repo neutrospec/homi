@@ -34,14 +34,18 @@ nonisolated struct Client: InputClient {
     let proxy: any IMKTextInput & NSObjectProtocol
     weak var owner: HomiInputController?
     private let traceOverride: ClientTrace?
+    private let candidatesOverride: CandidatePresentation?
 
-    init(proxy: any IMKTextInput & NSObjectProtocol, owner: HomiInputController? = nil, trace: ClientTrace? = nil) {
+    init(proxy: any IMKTextInput & NSObjectProtocol, owner: HomiInputController? = nil, trace: ClientTrace? = nil,
+         candidates: CandidatePresentation? = nil) {
         self.proxy = proxy
         self.owner = owner
         self.traceOverride = trace
+        self.candidatesOverride = candidates
     }
 
     private var trace: ClientTrace? { traceOverride ?? owner?.clientTrace }
+    private var candidatePresentation: CandidatePresentation? { candidatesOverride ?? owner.map { CandidatePresentation(owner: $0) } }
 
     private static let nowhere = NSRange(location: NSNotFound, length: 0)
 
@@ -79,25 +83,10 @@ nonisolated struct Client: InputClient {
             case .showCandidates(let candidates, let selected):
                 record("  candidates \(selected)/\(candidates.count)")
                 let line = caretLine()  // key 처리 도중에 묻는다 — ModeHUD 와 같은 이유
-                let controller = Unchecked(owner)
-                let revision = owner?.sessionRevision
-                owner?.afterEvent {
-                    Task { @MainActor in
-                        guard let owner = controller.value, !owner.isHandlingEvent, owner.sessionRevision == revision,
-                            owner.hasCandidates, ActiveInputSession.controller === owner else { return }
-                        CandidatePanel.shared.show(candidates, selected: selected, below: line, owner: owner)
-                    }
-                }
+                candidatePresentation?.show(candidates, selected: selected, below: line)
             case .hideCandidates:
                 record("  candidates hidden")
-                let controller = Unchecked(owner)
-                owner?.afterEvent {
-                    Task { @MainActor in
-                        guard let owner = controller.value, !owner.isHandlingEvent,
-                            !owner.hasCandidates else { return }
-                        CandidatePanel.shared.hide(owner: owner)
-                    }
-                }
+                candidatePresentation?.hide()
             case .layout(let id):
                 record("  layout \(id)")
                 call("layout", planned: planned, kind: .layout) { proxy.overrideKeyboard(withKeyboardNamed: id) }
