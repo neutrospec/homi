@@ -302,7 +302,7 @@ build·test 결과는 `build/source-review-build-20261031.log`·`build/source-re
 |---|---|---|
 | 보이지 않는 한자 후보 | **반례 교정·설치·주인 확인** | [4번 구현·검증](#4번-입력-revision과-후보-ui-revision-분리)을 따른다. event 횟수와 후보 변경을 분리하고 owner·busy·active 조건은 유지한다. 실제 간헐 증상의 원인 확정은 아니다. |
 | 첫 후보 목록의 뜻 표시 누락 | **주인 결정: 재발 때 재검토** | [probe 보고](apps/engines/appkit.md#후보-뜻의-첫-표시-누락-보고-2026-10-31-미해결). 같은 한 글자의 다음 목록에는 뜻이 보였다. 첫 쪽 사전 값은 비어 있지 않다. 재발하면 첫 show 와 다음 show 의 데이터·label 가시성을 대조한다. |
-| caret 질의의 부작용 | **관측 채택, 교정 보류** | [Chromium 원장](apps/engines/chromium.md)의 firstRect 실패는 click 확정과 다른 경로다. homi 의 attributes 질의와 그 callback 이 실제로 연결되는지 먼저 확인한다. 표시를 위해 입력을 위험하게 하지 않는다. client 질의를 event 밖으로 옮기면 교착 교훈을 깨므로 기각한다. |
+| caret 질의의 부작용 | **관측 채택, 교정 보류** | [Chromium 원장](apps/engines/chromium.md)의 firstRect 실패는 click 확정과 다른 경로다. homi 의 attributes 질의와 그 callback 이 실제로 연결되는지 먼저 확인한다. 표시를 위해 입력을 위험하게 하지 않는다. client 질의를 event 밖으로 옮기면 교착 교훈을 깨므로 기각한다. [27 SDK 계약](research/apple-input-sdk-27.md)상 조합 중 index 0은 inline 시작이며 현재 caret과 같다는 보장은 없다. 잘못된 인자로 단정하지 않고 표시 의도·실제 좌표와 zero rect가 후보 창 위치에 미치는 영향을 확인한다. 추가 질의 없이 실패·zero를 주입해 표시와 선택 가능성을 확인한다. 기본 입력보다 후순위다. |
 | Chromium 최초 판별 | **cache 실패 교정·판별과 정책 분리** | [3번 구현·검증](#3번-renderer-판별과-commit-정책-분리)을 따른다. 미확인을 부재로 고정하지 않고 첫 callback 의 기존 판단을 검사했다. 실제 간헐 증상의 원인으로 확인한 것은 아니다. cold 조회의 단순 async 이동은 여전히 보류한다. |
 | ModeHUD·indicator 의 stale Task | **indicator 는 activation 교정에 포함, ModeHUD 는 후순위** | indicator 는 owner·app·현재 mode·pass-through 를 확인한다. ModeHUD 의 Task guard 는 별도 안건이며 실제 실패는 미관측이다. 표시 때문에 mode·source 를 다시 바꾸지 않는다. |
 | ModeHUD 의 hide animation | **후순위 관측** | [ModeHUD](../Sources/homi/ModeHUD.swift)는 예약 작업을 취소하지만 이미 시작한 fade 까지 끝내는 보장은 없다. 새 말풍선과 겹친 animation 의 실제 표시부터 확인한다. 조합·client 반영을 고칠 이유는 없다. |

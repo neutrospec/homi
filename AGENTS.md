@@ -267,6 +267,8 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 
 ## 다음 작업
 
+2026-11-01 [Apple 입력 API·macOS 27 조사](docs/research/apple-input-sdk-27.md)는 공개 계약과 기존 검증 공백을 정리한다.
+
 일반 Mac 의 Caps Lock 누락은 [gesture 교정과 주인 확인](docs/lessons.md#정상-caps-tap-을-기존-판정이-거부한다-2026-10-29)을 마쳤으며 일상 사용을 지켜본다.
 새 [Emacs 전달](docs/apps/emacs.md#caps-lock-전달-2026-10-29)도 주인이 정상 동작을 확인했다. 긴 누름·다른 app 복귀 같은 경계는 일상 사용에서 지켜본다.
 

@@ -2,6 +2,7 @@
 
 > 구현 전의 조사다. 그 뒤 homi 가 확인하거나 정한 것은 AGENTS.md·docs/macos-input.md·app 원장이 우선한다
 > (예: 주인 환경의 설정, 서명 신원, 전환 key 받는 방법).
+> 2026-11-01 공개 계약 재검토는 [Apple 입력 API·macOS 27](apple-input-sdk-27.md)에 있다.
 
 조사 agent 가 입력기 source·issue, app source(Chromium·Ghostty·iTerm2), 주인의 Mac(macOS 27)을 확인한 결과를 추렸다.
 표기: ✅ 확인 / 🔶 불확실. 약칭: gureum, sq=squirrel, skk=macSKK, vc=vChewing, az=azooKey, fx=fcitx5-macos,
@@ -20,7 +21,7 @@ gt=ghostty, PT=`ghostface2232/PriType-Swift`(`Meapri/PriType-Swift` 의 fork, 20
 - **엉뚱한 client 에 확정하지 않으려면**: gureum 은 controller 마다 composer 를 두고 init 때 묶인 `controller.client()` 로 넣는다. macSKK 도 init 때의 client 를 잡는다.
   vChewing 은 현재 session 이 아니면 deactivate 때 버리고, `deactivateServer` 안에서 `setMarkedText` 를 부르지 않는다(Safari 새 tab 이 멈춤, vc#226).
   Chromium 창 하나의 모든 web 입력칸은 client 하나를 공유한다(PT#15). ✅
-- **`handle` vs `inputText`**: 하나만 구현. `handle` 은 NSEvent(flagsChanged·mouse 포함, `recognizedEvents` 대로). YES = 먹음, NO = AppKit 이 이어서 `insertText:`/`doCommandBySelector:`. ✅
+- **`handle` vs `inputText`**: 하나만 구현. `handle` 은 NSEvent(flagsChanged·mouse 포함, `recognizedEvents` 대로). YES = 처리함, NO = 처리하지 않음. 이후 key 처리는 client 마다 다르다 ([실제 판정](../macos-input.md#app-은-입력기가-key-를-먹었다-를-제각각-판정한다)).
   - 한국어 확정 관례: `insertText(음절)` 후 NO. Apple 과 gureum 모두 (gt PR#14272). ✅
   - iTerm2(기본 설정)·Ghostty 는 text 를 넣지 않은 YES 를 무시한다 — key 가 pty 로 간다 (gureum#96). ✅
 - **`activateServer`·`setValue` 는 최소로**: 거기서 client 를 동기 호출하면 Chrome 과 deadlock(az#317), 느리면 Spotlight 가 멈춤(vc#255). `setValue` 는 focus 가 바뀔 때마다 같은 값으로 다시 온다 — echo 로 무시. ✅
@@ -85,7 +86,7 @@ gt=ghostty, PT=`ghostface2232/PriType-Swift`(`Meapri/PriType-Swift` 의 fork, 20
 2. **Ghostty 는 mode 변경 중의 key 를 버린다** — 내부 상태만 바꾸고 system 보고는 key 처리 뒤 비동기로.
 3. **iTerm2 는 Ctrl 키를 입력기에 안 보여준다** — Ctrl-B/Ctrl-A 규칙은 Ghostty 에서만 된다(주인 규칙도 Ghostty 전용이라 맞다). 한/영 키는 단독 수식키이거나 event tap 이어야 한다.
 4. **엉뚱한 client 로 가는 확정** — 상태는 controller·client 단위, 확정은 두 번 불려도 안전하게.
-5. **Chromium 이 이미 확정한 뒤의 중복** — `commitComposition` 때 client 에 아직 marked text 가 있을 때만 넣는다. 🔶 설계
+5. **Chromium 이 이미 확정한 뒤의 중복** — 당시에는 `commitComposition` 때 marked text 확인을 제안했다. **후속 실험으로 폐기**: 다음 event까지 보류하고 확인한 실험에서 새 입력칸에 글자가 들어갔다. 현재는 [Chromium 원장](../apps/engines/chromium.md)과 [교훈](../lessons.md#보류한-chromium-확정이-다음-입력칸에-들어간다-2026-10-09)을 따른다.
 6. **Enter 는 Apple 과 똑같이** — `insertText`(NSNotFound) 한 번, NO 반환, 빈 `setMarkedText`·취소 없음.
 7. **앱별 기억·강제 영문** — 활성화를 믿지 말고 첫 `handle()` 에서 규칙을 다시 적용, bundle ID 로, 반복 `setValue` 무시.
 8. **`TISSelectInputSource`·`selectInputMode` 로 전환하지 않는다.**

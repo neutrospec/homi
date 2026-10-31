@@ -3,6 +3,8 @@
 > 구현 전의 조사다. 그 뒤 homi 가 확인하거나 정한 것은 AGENTS.md·docs/macos-input.md·app 원장이 우선한다
 > (예: 주인 환경의 설정, 서명 신원, 전환 key 받는 방법).
 
+2026-11-01 공개 계약 재검토는 [Apple 입력 API·macOS 27](apple-input-sdk-27.md)에 있다.
+
 일본어 입력기의 2026-10-09 공개 코드·test 재검토는 [recipe 검토](japanese-ime-recipes.md)에 있다.
 
 조사 agent 가 macOS 입력기 13개의 source·issue 와 주인의 Mac(macOS 27.0 26A428, Swift 6.4)을 직접 확인한 결과를 추렸다.

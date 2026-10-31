@@ -23,10 +23,11 @@ sequenceDiagram
   새 source·새 client 와 처음 주고받을 때마다 `error messaging the mach port for IMKCFRunLoopWakeUpReliable` 이 나왔고, 매번 무해했다. ✅
 - 입력기의 호출(`insertText`·질문)은 app 의 `handleEvent` **안에서** 온다 — app 은 입력기가 답할 때까지 기다린다. 한 key 에 11–33ms (probe 의 log 비용 포함). ✅
 - 예외: input source 가 바뀔 때의 확정은 key 처리 **밖에서** 비동기로 온다. ✅ (아래 Caps Lock)
-- 입력기가 NO(안 먹었다)를 돌려주면 context 가 key 를 그 아래 keyboard layout 으로 문자로 바꿔 `insertText` 한다.
-  Return·Delete 는 `doCommand`(`insertNewline:`·`deleteBackward:`)가 된다. ✅
+- 입력기가 NO(안 먹었다)를 돌려주면 client 가 이어 처리한다. probe 의 native text client 에서는 keyboard layout 으로 만든 문자가 `insertText` 로, Return·Delete 는 `doCommand` 로 갔다. 다른 client 의 처리는 아래 [app 별 판정](#app-은-입력기가-key-를-먹었다-를-제각각-판정한다)을 따른다. ✅
 - `NSTextInputContext` 는 **생성되자마자** client 에게 `validAttributesForMarkedText` 를 묻는다. ✅ (probe crash report — 이 질문을 기록하려다 무한 재귀)
 - TSM(Text Services Manager, HIToolbox)은 daemon 이 아니라 **app process 안의 library** 다 — Caps Lock LED 를 조절하는 TSM 의 log 가 app 의 stderr 에 찍힌다. ✅
+
+macOS 27.2 SDK 의 공개 계약과 homi 대조는 [별도 조사](research/apple-input-sdk-27.md)에 둔다.
 
 ## input source 와 keyboard layout
 
@@ -38,6 +39,7 @@ sequenceDiagram
   homi 는 activate 때 ABC 로 둔다 (Remote Desktop 의 한글 모드만 `2SetHangul`, 아래). 고를 layout 이 입력 소스 목록에 켜져 있을 필요는 없다. ✅
 - `NSEvent.characters` 는 이 layout 이 정한다 — 같은 `kc=5` 가 ABC 에서 `"g"`, 두벌식에서 `"ㅎ"`. 그래서 homi 는 `keyCode`(물리 위치)로 판단한다. ✅ (probe)
 - ASCII 입력 가능(ASCII-capable)한 것은 `ABC` 뿐이다. system 은 "가장 최근의 ASCII-capable source" 를 따로 기억한다 — 그 쓰임새(비밀번호 칸 등)는 🔶.
+- `NSTextInputContext.keyboardInputSources`는 그 context에서 이용 가능한 source이고 TIS의 enabled 전체 목록과 다르다. 선택 여부·enabled·context별 availability는 별개다. ✅ ([SDK 조사](research/apple-input-sdk-27.md))
 - TIS API 는 main thread 에서만 부른다 — 병렬 test 가 여러 thread 에서 `TISCreateInputSourceList` 를 부르자 process 가 abort(signal 6)했다. ✅
 - **등록**: `TISRegisterInputSource` 뒤 parent 에 `TISEnableInputSource` 가 성공(0)을 돌려주고도 parent 는 꺼진 채였고 mode 만 켜졌다
   (조사의 qingjian#209 와 같은 증상). menu 에서 homi 를 고른 뒤에는 parent 도 켜졌다. ✅ / 이유 🔶
@@ -161,6 +163,8 @@ native `probe --check-input-manual` 은 주인이 선택한 homi·실제 `가` �
 이 표의 입력 중에는 commit·deactivate·activate 의 재진입을 관측하지 않았다. 계획·호출 이력의 연결을 확인한 것이며 callback 의 확정 대상은 아직 가르지 못했다.
 주인의 일반 입력 확인과 자동 검사 중단의 범위는 [작업 기록](lessons.md#2026-10-09-activation-교정callback-관측)에 있다.
 
+macOS 27에서 `NSTextView`는 gesture 기반 selection을 쓰며 기존 `mouseDown:` override subclass에는 fallback이 있다. 이는 IMK callback 변경을 뜻하지 않는다. ✅ ([Apple release notes와 검증 범위](research/apple-input-sdk-27.md))
+
 ## Apple 한국어 입력기가 하는 일
 
 ### marked text 없이 확정하고 바꿔치기한다
@@ -226,6 +230,7 @@ probe run 1, 한→영:
   당시 probe 에서 화면에 드러난 문제는 없었다 (2026-09-25).
 - `IMKTextInput.insertText` 의 "현재 selection" 지정은 위치·길이가 **모두** NSNotFound 다.
   `setMarkedText` 는 위치가 NSNotFound 인 것으로 설명한다. ✅ (macOS 27 SDK `IMKInputSession.h`)
+  서로 다른 API 층의 range·sentinel은 섞지 않는다 ([SDK 조사](research/apple-input-sdk-27.md)).
   계약대로 바꾼 실험은 Chrome 전환·입력칸 이동의 실패를 해결하지 못했다. 현재는 기존 `{NSNotFound, 0}` 으로 복귀했다.
   실제 IMK 전달과 SDK 계약의 차이는 [교정 보류 기록](lessons.md#imk-현재-selection-의-range-계약이-구현과-다르다-2026-10-09-교정-보류)에 둔다.
 - **전환 key 는 remap 한 수식키다.** Caps Lock 은 homi 가 선택된 동안 `UserKeyMapping`(공개 API `IOHIDEventSystemClientSetProperty`, 관리자 권한 없이 ✅)으로
@@ -374,6 +379,7 @@ Quartz 의 session event tap 은 별도 thread 에서 원본을 반환하고, IM
 - **menu bar 표시(NSStatusItem)는 앱 객체(`NSApplication.shared`)가 있은 뒤에 만들어야 한다** — 먼저 만들면 오류 없이 아무것도 생기지 않는다. ✅
 - **커서 옆 말풍선**: 위치는 `attributes(forCharacterIndex: 0, lineHeightRectangle:)` 로 묻는다 — 입력기가 후보 창을 띄울 때 쓰는 질의.
   **key 처리 도중에만** 묻는다: 그 밖에서 client 를 부르면 Chrome 과 교착한 사례가 있다 (조사: az#317).
+  SDK에서 index 0은 inline 조합 중에는 그 시작이고 조합이 없을 때 현재 selection이다. 질의 실패의 zero rect는 후보 창 위치에 영향을 줄 수 있으나 실제 발생은 미확인이다.
   key 처리 중에도 질의의 재진입은 가능하므로 위의 동기 경계 안에서 묻는다. 그리기는 key 처리 뒤로 미룬다 (`Task @MainActor`, borderless·nonactivating NSPanel).
 - **대문자 고정 표시는 macOS 에 맡긴다** — homi 가 IOKit 으로 lock 상태를 바꾸면 macOS 가 자기 표시를 띄운다. ✅
   macOS 는 대문자 고정이 켜진 동안 입력을 멈출 때마다 커서 아래에 표시를 띄운다 (Sonoma 부터, homi 와 무관 ✅ 주인).
