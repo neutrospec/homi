@@ -5,46 +5,71 @@ import Testing
 private let startingApp = "homi.tests.english-start"
 private let fallbackApp = "homi.tests.fallback"
 
-/// controller 의 app 판별·mode 기억과 실제 SessionDriver 를 함께 검사한다. 입력은 이 test 에서 만든 것뿐이다.
-private final class ActivationHost {
-    let driver = SessionDriver(hanja: dictionary)
-    var memory: ModeMemory
+private final class ActivationModes: ModeStore {
+    var memory = ModeMemory(modes: [startingApp: .korean, fallbackApp: .korean])
+    var saved: [ModeMemory] = []
+    var accessing = false
+
+    func withMemory<Result: Sendable>(_ operation: (inout ModeMemory) -> Result) -> Result {
+        #expect(!accessing)
+        accessing = true
+        defer { accessing = false }
+        return operation(&memory)
+    }
+
+    func save(_ snapshot: ModeMemory) {
+        #expect(!accessing)
+        saved.append(snapshot)
+    }
+}
+
+/// client 와 환경만 대신한다. app 식별·mode 준비·판단·반영 순서는 제품 coordinator 를 그대로 실행한다.
+private final class ActivationHost: InputClient {
+    let modes: ActivationModes
+    lazy var coordinator = InputCoordinator(driver: SessionDriver(hanja: dictionary), modes: modes,
+        profile: { [unowned self] in appProfile($0) }, fallbackApp: { [unowned self] in fallback })
+    var driver: SessionDriver { coordinator.driver }
+    var memory: ModeMemory {
+        get { modes.memory }
+        set { modes.memory = newValue }
+    }
     var clientApp: String?
     var fallback: String
-    var knownApp: String?
-    var activation = ModeActivation()
-    var inputDepth = 0
+    var knownApp: String? { coordinator.app }
+    var inputDepth: Int { coordinator.inputDepth }
+    var appProfile: (String) -> AppProfile = { AppProfile(startsInEnglish: $0 == startingApp || $0 == fallbackApp) }
     var text = ""
     var marked = ""
+    var onBundleID: (() -> Void)?
     var onMark: (() -> Void)?
     var onInsert: (() -> Void)?
-    var selectedText: () -> String? = { nil }
+    var selection: () -> String? = { nil }
 
-    init(clientApp: String? = startingApp, fallback: String = fallbackApp) {
+    init(clientApp: String? = startingApp, fallback: String = fallbackApp, modes: ActivationModes = ActivationModes()) {
         self.clientApp = clientApp
         self.fallback = fallback
-        memory = ModeMemory(modes: [startingApp: .korean, fallbackApp: .korean])
+        self.modes = modes
     }
 
-    func profile(_ app: String) -> AppProfile {
-        AppProfile(startsInEnglish: app == startingApp || app == fallbackApp)
+    func activate() { _ = coordinator.activate() }
+
+    func bundleIdentifier() -> String? {
+        #expect(!modes.accessing)
+        let callback = onBundleID
+        onBundleID = nil
+        callback?()
+        return clientApp
     }
 
-    func activate() {
-        activation.activate(resumingInput: inputDepth > 0 && !driver.hasExplicitEnd)
-        driver.activate()
-        if inputDepth == 0, !driver.isHandlingEvent, let knownApp {
-            _ = activation.prepare(app: knownApp, trusted: true, profile: profile(knownApp), memory: &memory)
-        }
+    func selectedText() -> String? {
+        #expect(!modes.accessing)
+        return selection()
     }
 
-    func resolve() -> String {
-        if let knownApp { return knownApp }
-        if let clientApp, !clientApp.isEmpty { knownApp = clientApp; return clientApp }
-        return fallback
-    }
+    func textBefore(_ count: Int) -> (text: String, end: Int)? { nil }
 
     func apply(_ actions: [Action]) {
+        #expect(!modes.accessing)
         for action in actions {
             switch action {
             case .mark(let value):
@@ -71,47 +96,20 @@ private final class ActivationHost {
 
     @discardableResult
     func send(_ event: KeyEvent, passedText: String = "") -> Outcome {
-        withInputEvent {
-            let app = resolve()
-            let mode = activation.prepare(app: app, trusted: knownApp != nil, profile: profile(app), memory: &memory)
-            let input = activation.beginInput(app: app, trusted: knownApp != nil)
-            return driver.perform({ $0.handle(event, mode: mode, profile: profile(app), selectedText: selectedText) }, apply: {
-                activation.inputHandled(input, modeChanged: $0.mode != mode,
-                    composing: !driver.composing.isEmpty || driver.hasCandidates)
-                memory.remember($0.mode, for: app)
-                apply($0.actions)
-                if !$0.handled { text += passedText }
-            })
-        }
+        let outcome = coordinator.keyDown(event, client: self)
+        if !outcome.handled { text += passedText }
+        return outcome
     }
 
     func toggle() {
-        withInputEvent {
-            let app = resolve()
-            let mode = activation.prepare(app: app, trusted: knownApp != nil, profile: profile(app), memory: &memory)
-            let input = activation.beginInput(app: app, trusted: knownApp != nil)
-            driver.perform({ $0.toggle(from: mode, profile: profile(app)) }, apply: {
-                activation.inputHandled(input, modeChanged: $0.mode != mode,
-                    composing: !driver.composing.isEmpty || driver.hasCandidates)
-                memory.remember($0.mode, for: app)
-                apply($0.actions)
-            })
-        }
+        coordinator.modifiersChanged(client: self, action: { _, _ in .toggle })
     }
 
     func modifierWithoutAction() {
-        withInputEvent {
-            let app = resolve()
-            _ = activation.prepare(app: app, trusted: knownApp != nil, profile: profile(app), memory: &memory)
-        }
+        coordinator.modifiersChanged(client: self, action: { _, _ in nil })
     }
 
-    @discardableResult
-    func withInputEvent<Result>(_ body: () -> Result) -> Result {
-        inputDepth += 1
-        defer { inputDepth -= 1 }
-        return driver.withEvent(body)
-    }
+    func mouseDown() { coordinator.mouseDown(client: self, boundClient: { self }) }
 
     func deactivate() { driver.deactivate(apply: apply) }
     func commit(insert: Bool = true) { driver.commit(insert: insert, apply: apply) }
@@ -181,15 +179,12 @@ func activationDuringInsert() {
 func activationDuringSelectionQuery() {
     let host = ActivationHost()
     host.toggle()
-    host.withInputEvent {
-        host.driver.perform({
-            $0.handle(optionReturn, mode: host.memory.mode(for: startingApp), selectedText: {
-                host.deactivate()
-                host.activate()
-                return "한자"
-            })
-        }, apply: { host.apply($0.actions) })
+    host.selection = {
+        host.deactivate()
+        host.activate()
+        return "한자"
     }
+    host.send(optionReturn)
     #expect(host.driver.hasCandidates)
     #expect(host.memory.mode(for: startingApp) == .korean)
 }
@@ -315,7 +310,7 @@ func activationLateClientAfterPassedShortcutUsesStartRule() {
     host.activate()
     let outcome = host.send(KeyEvent(keyCode: 0, modifiers: .control))
     #expect(outcome.actions.isEmpty)
-    #expect(host.activation.needsStart)
+    #expect(host.coordinator.needsStart)
     host.clientApp = startingApp
     host.type("r")
     #expect(host.memory.mode(for: startingApp) == .english)
@@ -343,13 +338,13 @@ func activationLateClientKeepsToggleAcrossPassedKey() {
 func activationLateClientAfterNewStartDuringQuery() {
     let host = ActivationHost(clientApp: nil)
     host.activate()
-    host.selectedText = {
+    host.selection = {
         host.commit()
         host.activate()
         return "한자"
     }
     host.send(optionReturn)
-    #expect(host.activation.needsStart)
+    #expect(host.coordinator.needsStart)
     #expect(!host.driver.hasCandidates)
     #expect(host.text == "한자")
     host.clientApp = startingApp
@@ -363,13 +358,13 @@ func activationLateClientAfterNewStartDuringQuery() {
 func activationLateClientDuringContinuingQuery() {
     let host = ActivationHost(clientApp: nil)
     host.activate()
-    host.selectedText = {
+    host.selection = {
         host.deactivate()
         host.activate()
         return "한자"
     }
     host.send(optionReturn)
-    #expect(!host.activation.needsStart)
+    #expect(!host.coordinator.needsStart)
     #expect(host.driver.hasCandidates)
     host.clientApp = startingApp
     host.modifierWithoutAction()
@@ -399,7 +394,7 @@ func activationWithUnknownModifierOnly() {
     let host = ActivationHost(clientApp: nil)
     host.activate()
     host.modifierWithoutAction()
-    #expect(host.activation.needsStart)
+    #expect(host.coordinator.needsStart)
     host.clientApp = startingApp
     host.type("g")
     #expect(host.text == "g")
@@ -410,9 +405,168 @@ func activationWithUnknownModifierOnly() {
 func activationWithMouseBeforeFirstKey() {
     let host = ActivationHost()
     host.activate()
-    host.withInputEvent { host.commit() }
-    #expect(host.activation.needsStart)
+    host.mouseDown()
+    #expect(host.coordinator.needsStart)
     host.type("g")
     #expect(host.text == "g")
     #expect(host.marked.isEmpty)
+}
+
+@Test("coordinator: bundle ID 질의의 재활성화도 같은 입력 경계에서 조합을 이어 간다")
+func coordinatorReentryDuringClientIdentity() {
+    let host = ActivationHost(clientApp: nil)
+    host.type("g")
+    host.clientApp = startingApp
+    host.onBundleID = {
+        #expect(host.inputDepth == 1)
+        #expect(host.driver.isHandlingEvent)
+        host.deactivate()
+        #expect(host.text.isEmpty)
+        #expect(host.driver.composing == "ㅎ")
+        host.activate()
+    }
+    host.type("k")
+    #expect(host.marked == "하")
+    #expect(host.text.isEmpty)
+    #expect(host.memory.mode(for: startingApp) == .korean)
+}
+
+@Test("coordinator: key·modifier 전환의 mode 저장은 client 확정보다 먼저다", arguments: [false, true])
+func coordinatorSavesModeBeforeCommit(modifier: Bool) {
+    let host = ActivationHost()
+    host.appProfile = { _ in AppProfile(toggleKeys: [.shiftSpace]) }
+    host.type("gks")
+    var committed = false
+    host.onInsert = {
+        committed = true
+        #expect(host.memory.mode(for: startingApp) == .english)
+        #expect(host.modes.saved.last?.mode(for: startingApp) == .english)
+        host.deactivate()
+        host.activate()
+    }
+    if modifier { host.toggle() }
+    else { host.send(KeyEvent(keyCode: 49, modifiers: .shift)) }
+    #expect(committed)
+    #expect(host.text == "한")
+    #expect(host.marked.isEmpty)
+    host.type("a")
+    #expect(host.text == "한a")
+}
+
+@Test("coordinator: caret 등 후속 질의의 commit 도 같은 event 의 마지막에 반영한다")
+func coordinatorKeepsAfterCallbackInsideBoundary() {
+    let host = ActivationHost(clientApp: nil)
+    var afterCalled = false
+    host.coordinator.keyDown(key("g"), client: host, after: { _, _ in
+        afterCalled = true
+        host.commit()
+        #expect(host.inputDepth == 1)
+        #expect(host.text.isEmpty)
+        #expect(host.marked == "ㅎ")
+    })
+    #expect(afterCalled)
+    #expect(host.text == "ㅎ")
+    #expect(host.marked.isEmpty)
+    #expect(host.inputDepth == 0)
+}
+
+@Test("coordinator: mouse 확정은 event sender 대신 bound client 로 한 번 보낸다")
+func coordinatorMouseUsesBoundClient() {
+    let host = ActivationHost(clientApp: nil)
+    let other = ActivationHost(clientApp: "homi.tests.other")
+    host.type("gks")
+    host.coordinator.mouseDown(client: other, boundClient: {
+        #expect(host.inputDepth == 1)
+        #expect(host.driver.isHandlingEvent)
+        return host
+    })
+    #expect(host.text == "한")
+    #expect(host.marked.isEmpty)
+    #expect(other.text.isEmpty)
+    #expect(other.marked.isEmpty)
+    host.commit()
+    #expect(host.text == "한")
+}
+
+@Test("coordinator: modifier 한자 질의의 재활성화와 늦은 ID 를 함께 처리한다")
+func coordinatorModifierHanjaReentry() {
+    let host = ActivationHost(clientApp: nil)
+    host.selection = {
+        #expect(host.driver.isMutatingSession)
+        host.deactivate()
+        host.activate()
+        return "한자"
+    }
+    host.coordinator.modifiersChanged(client: host, action: { _, _ in .hanja })
+    #expect(host.driver.hasCandidates)
+    #expect(!host.coordinator.needsStart)
+    host.clientApp = startingApp
+    host.modifierWithoutAction()
+    #expect(host.memory.mode(for: startingApp) == .korean)
+    #expect(host.driver.hasCandidates)
+    #expect(host.text.isEmpty)
+}
+
+@Test("coordinator: resend 권한 유무에 따라 먹거나 넘기며 조합은 먼저 한 번 확정한다", arguments: [false, true])
+func coordinatorResendAfterCommit(allowed: Bool) {
+    let host = ActivationHost()
+    host.appProfile = { _ in AppProfile(resendWhileComposing: [36]) }
+    host.type("gks")
+    var permissionChecks = 0
+    var delivered: Outcome?
+    let outcome = host.coordinator.keyDown(KeyEvent(keyCode: 36), client: host, canResend: {
+        permissionChecks += 1
+        #expect(host.text.isEmpty)
+        return allowed
+    }, after: { outcome, _ in
+        #expect(host.text == "한")
+        #expect(host.marked.isEmpty)
+        delivered = outcome
+    })
+    #expect(permissionChecks == 1)
+    #expect(outcome.handled == allowed)
+    #expect(outcome.resend == allowed)
+    #expect(delivered == outcome)
+    host.commit()
+    #expect(host.text == "한")
+}
+
+@Test("coordinator: controller 둘은 app mode 를 공유하되 조합은 따로 소유한다")
+func coordinatorSharesOnlyModes() {
+    let modes = ActivationModes()
+    let first = ActivationHost(clientApp: "homi.tests.shared", modes: modes)
+    let second = ActivationHost(clientApp: "homi.tests.shared", modes: modes)
+    first.toggle() // 처음 보는 app: 영문 → 한글
+    first.type("g")
+    second.type("r")
+    #expect(first.marked == "ㅎ")
+    #expect(second.marked == "ㄱ")
+    first.toggle()
+    second.type("a")
+    #expect(first.text == "ㅎ")
+    #expect(second.text == "ㄱa")
+    #expect(second.marked.isEmpty)
+}
+
+@Test("coordinator: 생성은 환경을 부르지 않고 activation 은 client 를 질의하지 않는다")
+func coordinatorConstructionAndActivationDoNotQueryClient() {
+    let modes = ActivationModes()
+    var environmentCalls = 0
+    let coordinator = InputCoordinator(modes: modes, profile: { _ in
+        environmentCalls += 1
+        return AppProfile(startsInEnglish: true)
+    }, fallbackApp: {
+        environmentCalls += 1
+        return fallbackApp
+    }, notice: { _ in environmentCalls += 1 })
+    #expect(environmentCalls == 0)
+    let activation = coordinator.activate()
+    #expect(environmentCalls > 0)
+    #expect(activation.app == fallbackApp)
+    #expect(activation.layout == "com.apple.keylayout.ABC")
+    #expect(!activation.resuming)
+    #expect(coordinator.app == nil)
+    #expect(coordinator.needsStart)
+    #expect(modes.memory.mode(for: fallbackApp) == .korean)
+    #expect(modes.saved.isEmpty)
 }

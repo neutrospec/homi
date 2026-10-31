@@ -30,7 +30,7 @@ extension ModifierEvent {
 /// IMK 의 client proxy 에 Session 이 정한 일을 한다.
 /// replacementRange 는 NSNotFound — 문서 위치를 믿지 않는다 (AGENTS.md 결정 5).
 /// 예외는 `markCommitted` 하나: ⌥↩ 가 방금 친 단어를 바꿀 때, 교체를 제대로 받는 client 에서 그 자리 글자를 확인한 뒤에만.
-nonisolated struct Client {
+nonisolated struct Client: InputClient {
     let proxy: any IMKTextInput & NSObjectProtocol
     weak var owner: HomiInputController?
     private let traceOverride: ClientTrace?

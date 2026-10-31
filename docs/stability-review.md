@@ -113,6 +113,38 @@ model 의 callback 의미를 실제 Chromium 의 의미로 가정하지 않고, 
 callback 의 적용 범위를 확인하기 전에는 insert 생략 정책을 바꾸지 않는다. 무조건 insert 하면 click 중복을 되살리고,
 다음 event 에서 판단하면 [입력칸 누출 교훈](lessons.md#보류한-chromium-확정이-다음-입력칸에-들어간다-2026-10-09)을 반복한다.
 
+## 구조 개선 계획 (2026-10-31)
+
+`c461b75` 기준 review 뒤 주인이 네 항목 모두의 개선을 목표로 정했고, **1번부터 차례로 진행**한다.
+일반 조합·Backspace·내부 한/영·focus 이동의 안정성이 우선이다. 구조 추출과 호환 정책 변경을 한 번에 섞지 않는다.
+
+| 순서 | 개선 | 범위·통과 기준 | 상태 |
+|---|---|---|---|
+| 1 | 제품의 입력 순서를 test 에서 직접 실행 | app 식별 → mode 준비 → Session 판단 → client 반영을 `InputCoordinator`로 모은다. test 는 client·환경만 대체한다. ID 질의부터 끝나는 동기 경계와 실제 입력/종료 flush 구분을 보존하고, 설치 후 기본 입력을 확인한다. | 구현·검증 중 |
+| 2 | app 식별 근거와 종료 의도를 type 으로 표현 | 실제 client ID·fallback, client 자체 확정·homi 확정의 뜻을 명확히 한다. `String`·`trusted`·`insert: false`의 조합으로 잘못된 상태를 만들 가능성을 줄인다. 현재 종료 정책은 먼저 test 로 고정하며 callback token 을 입력칸 소유권으로 취급하지 않는다. | 다음 |
+| 3 | app 판별과 호환 정책 분리 | Chromium 발견 결과와 commit 정책을 분리하고, 미확인·확인된 부재를 구별한다. cold 판별을 옮길 때 첫 callback 의 행동을 먼저 검사한다. ChatGPT 에 우회를 적용할지는 실제 app 검증 후 따로 결정한다. | 대기 |
+| 4 | 입력 revision 과 UI revision 분리 | 무변화 modifier event 가 필요한 후보 표시를 취소하지 않도록 한다. 실제 후보 변경·확정·focus 종료 뒤에는 오래된 UI 가 뜨지 않는지 검사한다. | 대기 |
+
+### 1번: 입력 coordinator 추출
+
+[InputCoordinator](../Sources/InputSession/InputCoordinator.swift)가 app cache·시작 intent·실제 입력 depth 를 소유한다.
+`InputClient`는 ID·한자 질의·Action 반영, `ModeStore`는 기존 shared mode memory 와 저장의 경계다.
+memory 접근을 끝낸 뒤에만 client 를 호출하며 별도 mode cache 는 추가하지 않는다.
+`HomiInputController`에는 NSEvent 해석·modifier 관찰·표시·IMK lifecycle 의 기존 종료 정책이 남는다.
+coordinator 생성 중에는 환경 callback 을 호출하지 않으며, Session·사전은 기존처럼 controller 생성 때 준비한다.
+activation 의 layout 호출 위치와 Chromium commit 정책도 이번 추출 범위 밖이다.
+
+[ActivationTests](../Tests/InputSessionTests/ActivationTests.swift)의 app 판별·mode 준비 복제 코드를 제거했다.
+기존 재활성화·늦은 ID 반례는 제품 coordinator 를 통과하고, ID 질의 재진입·mode 저장 순서·후속 질의의 종료 보류·bound client 확정·
+modifier 한자 질의·resend 권한·두 controller 의 mode 공유를 추가로 검사한다.
+[ClientTests](../Tests/HomiTests/ClientTests.swift)는 실제 `Client` adapter 와 fake IMK proxy 를 연결해 ID 질의·insert callback 도 검사한다.
+이는 실제 app 의 callback 의미·조합 완료를 증명하지 않는다. 설치 뒤 검증과 최근 간헐 증상의 원인 확정은 구분한다.
+
+검증: `swift build`와 Debug·Release 각각 **223개 test** 통과(기존 213개 유지, 새 경계 검사 10개).
+2026-10-31 **13:39:26 KST** 에 자체 서명본을 설치했다(CDHash `a856f69785c9cc548667c0455a1dec67e0a9ce9d`).
+새 PID `30602`의 시작과 modifier observer 준비를 확인했다. probe 의 실제 keyboard 검사는 주인 확인을 기다린다.
+근거는 `build/coordinator-{build,debug-tests,release-tests,install,startup}-20261031.log`다.
+
 ## focus와 source 전환 code review (2026-10-31)
 
 제품 source 기준은 `623adcb`다. 최근 Telegram 첫 key·Orca menu 누락·ChatGPT source 전환 지연 보고에 맞춰

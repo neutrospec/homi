@@ -6,6 +6,15 @@ import Synchronization
 /// app 별 한/영 기억 — key 처리 안에서 동기적으로 읽고 쓴다. 바뀔 때마다 UserDefaults 에 남겨 재시작해도 유지한다.
 nonisolated let memory = Mutex(Memory.load())
 
+/// coordinator 도 기존 shared memory 하나를 쓴다. 저장은 memory lock 밖에서 한다.
+nonisolated struct StoredModes: ModeStore {
+    func withMemory<Result: Sendable>(_ operation: (inout ModeMemory) -> Result) -> Result {
+        memory.withLock { operation(&$0) }
+    }
+
+    func save(_ snapshot: ModeMemory) { Memory.save(snapshot) }
+}
+
 nonisolated enum Memory {
     private static let key = "modes"
 

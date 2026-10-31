@@ -16,6 +16,8 @@ private nonisolated final class TextProxy: NSObject, IMKTextInput {
     var onInsert: (() -> Void)?
     var onMark: (() -> Void)?
     var onSelectionQuery: (() -> Void)?
+    var appID: String? = "homi.tests"
+    var onBundleQuery: (() -> Void)?
 
     func insertText(_ string: Any?, replacementRange: NSRange) {
         insertedRange = replacementRange
@@ -51,7 +53,12 @@ private nonisolated final class TextProxy: NSObject, IMKTextInput {
     func overrideKeyboard(withKeyboardNamed keyboard: String?) {}
     func selectMode(_ mode: String?) {}
     func supportsUnicode() -> Bool { true }
-    func bundleIdentifier() -> String? { "homi.tests" }
+    func bundleIdentifier() -> String? {
+        let callback = onBundleQuery
+        onBundleQuery = nil
+        callback?()
+        return appID
+    }
     func windowLevel() -> CGWindowLevel { 0 }
     func supportsProperty(_ property: TSMDocumentPropertyTag) -> Bool { false }
     func uniqueClientIdentifierString() -> String? { "homi.tests.client" }
@@ -133,4 +140,65 @@ func clientQueryDoesNotQueryAgainForTrace() throws {
     #expect(callback.frame?.kind == .query)
     #expect(proxy.queryCount == 1)
     #expect(trace.snapshot.frame == nil)
+}
+
+private nonisolated final class ClientTestModes: ModeStore {
+    var memory = ModeMemory(modes: ["homi.tests": .korean, "fallback": .korean])
+    func withMemory<Result: Sendable>(_ operation: (inout ModeMemory) -> Result) -> Result { operation(&memory) }
+    func save(_ snapshot: ModeMemory) {}
+}
+
+@Test("coordinator·Client: 실제 adapter 의 ID 질의 재진입도 늦은 ID 의 조합을 보존한다")
+func coordinatorClientIdentityReentry() {
+    let modes = ClientTestModes()
+    let coordinator = InputCoordinator(modes: modes, profile: { _ in AppProfile(startsInEnglish: true) },
+        fallbackApp: { "fallback" })
+    let proxy = TextProxy()
+    proxy.appID = nil
+    let client = Client(proxy: proxy, trace: coordinator.driver.clientTrace)
+    coordinator.keyDown(KeyEvent(keyCode: 5), client: client) // ㅎ
+    proxy.appID = "homi.tests"
+    var queried = false
+    proxy.onBundleQuery = {
+        queried = true
+        let snapshot = coordinator.driver.clientTrace.snapshot
+        #expect(snapshot.frame?.kind == .query)
+        #expect(snapshot.eventID != nil)
+        coordinator.driver.deactivate(apply: client.apply)
+        _ = coordinator.activate()
+    }
+    coordinator.keyDown(KeyEvent(keyCode: 40), client: client) // ㅏ
+    #expect(queried)
+    #expect(proxy.text.isEmpty)
+    #expect(proxy.marked == "하")
+    #expect(proxy.markedReplacement?.location == NSNotFound)
+    #expect(modes.memory.mode(for: "homi.tests") == .korean)
+    #expect(proxy.queryCount == 0) // 일반 조합은 문서 위치를 묻지 않는다.
+}
+
+@Test("coordinator·Client: insert callback 뒤 다음 mark 를 같은 mode 와 range 규칙으로 반영한다")
+func coordinatorClientInsertReentry() {
+    let modes = ClientTestModes()
+    let coordinator = InputCoordinator(modes: modes, profile: { _ in AppProfile(startsInEnglish: true) },
+        fallbackApp: { "fallback" })
+    let proxy = TextProxy()
+    let client = Client(proxy: proxy, trace: coordinator.driver.clientTrace)
+    coordinator.modifiersChanged(client: client, action: { _, _ in .toggle })
+    for code: UInt16 in [5, 40, 1] { coordinator.keyDown(KeyEvent(keyCode: code), client: client) } // 한
+    var reentered = false
+    proxy.onInsert = {
+        reentered = true
+        #expect(coordinator.driver.clientTrace.snapshot.frame?.kind == .insert)
+        coordinator.driver.deactivate(apply: client.apply)
+        let activation = coordinator.activate()
+        #expect(activation.resuming)
+    }
+    for code: UInt16 in [15, 40] { coordinator.keyDown(KeyEvent(keyCode: code), client: client) } // 가
+    #expect(reentered)
+    #expect(proxy.text == "한")
+    #expect(proxy.marked == "가")
+    #expect(proxy.insertedRange == NSRange(location: NSNotFound, length: 0))
+    #expect(proxy.markedReplacement?.location == NSNotFound)
+    #expect(modes.memory.mode(for: "homi.tests") == .korean)
+    #expect(proxy.queryCount == 0)
 }
