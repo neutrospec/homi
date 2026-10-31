@@ -5,13 +5,19 @@
 | bundle ID | `com.stablyai.orca` |
 | 엔진 | Chromium (Electron) → [engines/chromium.md](engines/chromium.md) |
 | 확인한 version | 한자: 1.4.210 · 2026-09-25 · macOS 27.0. Caps Lock: 1.4.239 · 2026-10-29 · macOS 27.2 |
-| 최근 조사 환경 | 설치 bundle 1.4.244 · Electron 43.8.1 · macOS 27.2 · 2026-10-31 |
+| 최근 조사 환경 | 입력·source review: 1.4.244 · Electron 43.8.1 · macOS 27.2. renderer 판별: 아래 1.4.245 재확인 · 2026-10-31 |
 | homi 규칙 | — |
 
 ## 특징
 
 - **확정한 단어를 marked text 로 되돌리면 `나는한자漢字`** 가 된다 — VS Code 와 같다. Apple 방식 한자는 쓰지 않는다.
   `1.4.210 · 2026-09-25 · 주인` ✅
+
+## renderer 판별 재확인 (2026-10-31)
+
+구조 개선 3번의 제품 판별 코드를 별도 실행해 설치 bundle **1.4.245**를 읽었고 `helperRenderer`를 확인했다.
+source=true 주입 model 은 기존 Chromium 종료 우회를 선택한다. 실제 IMK 입력 검증이나 앞선 1.4.244 증상의 원인 재판정은 아니다.
+근거: `build/renderer-policy-installed-bundles-20261031.log`.
 
 ## homi 의 우회
 

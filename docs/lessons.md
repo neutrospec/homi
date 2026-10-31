@@ -6,6 +6,19 @@
 - 간헐 결함의 증거는 homi 의 기록이다 — 이상하면 주인이 곧바로 input menu 의 "최근 key 기록 저장" 을 누르고(`~/Library/Logs/homi/`), 그 file 로 가린다.
 - 원인에 🔶 가 붙은 것은 대응이 통했지만 원인은 추정이라는 뜻이다.
 
+## renderer 조회 실패가 영구적인 부재 판정이 된다 (2026-10-31)
+
+- **증상**: 첫 조회에서 app 위치가 없거나 directory 읽기가 실패하면, 다음 callback 에 읽을 수 있어도 기존 renderer 를 찾지 못했다.
+  client 자체 확정 우회를 계속 건너뛰는 코드의 반례다. 실제 menu 누락·첫 key 이상과의 인과는 미확인이다.
+- **원인**: 기존 `Chromium.hosts`가 조회 실패와 확인된 부재를 모두 false 로 만들고 process 동안 cache 했다.
+- **증거**: 기존 판별을 환경 주입 경계로 옮긴 뒤 `rendererUnavailableCanRecover`의 위치 없음·읽기 실패 두 조건에서
+  회복 후 판별·종료 방침 기대가 실패했다(`build/renderer-policy-before-20261031.log`). 교정 후 같은 test 와 다른 경계 검사가 통과했다.
+- **대응**: `RendererDiscovery`는 미확인·확인한 부재·기존 helper·다른 renderer 이름을 구분하고 미확인만 cache 하지 않는다.
+  directory 가 없다는 판단은 부모 목록으로 확인한다. 일부 경로를 못 읽어도 다른 경로에서 찾은 기존 helper 는 유효하다.
+  `CommitPolicy`가 별도로 기존 우회 적용을 결정하므로 새로운 renderer 이름의 발견이 곧바로 입력 동작을 바꾸지 않는다.
+- **제한**: 조회에 계속 실패하면 callback 마다 동기 조회할 수 있다. 첫 조회의 실패 때는 기존처럼 homi 가 확정한다.
+  cold 조회를 비동기로 바꾸는 일과 알려진 source 왕복 실패는 해결하지 않았다. [구조 개선 3번](stability-review.md#3번-renderer-판별과-commit-정책-분리)의 검증 범위를 따른다.
+
 ## 늦은 client ID 가 실제 app 의 mode 기억을 덮는다 (2026-10-31)
 
 - **증상**: client ID 가 없는 첫 key 를 영문 fallback app 의 mode 로 넘긴 뒤 실제 ID 를 알면,

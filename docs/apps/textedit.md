@@ -7,6 +7,12 @@
 | 확인한 version | 1.21 (419) · 2026-09-25 · macOS 27.0 |
 | homi 규칙 | — |
 
+## renderer 부재 확인 (2026-10-31)
+
+설치 bundle **1.21 (419)**를 제품 `RendererDiscovery`로 읽어 `notFound`를 확인했다.
+source=true 주입 model 에서도 TIS 선택을 묻지 않고 homi 확정을 선택한다. 실제 IMK callback 검사는 아니다.
+근거: `build/renderer-policy-installed-bundles-20261031.log`.
+
 ## 특징
 
 - **Apple 방식 한자(방금 친 단어)가 된다** — `나는한자` + ⌥↩ 에 `한자` 에만 밑줄이 생긴다.

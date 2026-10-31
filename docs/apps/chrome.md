@@ -5,6 +5,7 @@
 | bundle ID | `com.google.Chrome` |
 | 엔진 | Chromium → [engines/chromium.md](engines/chromium.md) |
 | 확인한 version | 154.0.8037.98 · 2026-10-09 · macOS 27.0.1 (26A434) |
+| 최근 확인 | 155.0.8059.85 · 2026-10-31 · 아래 판별·입력칸 이동 검증 |
 | homi 규칙 | — |
 
 ## 특징
@@ -19,6 +20,17 @@
 ## homi 의 우회
 
 - Chromium 규칙 (`7e4c1fd`).
+
+## 판별·정책 분리 검증 (2026-10-31)
+
+설치 bundle **155.0.8059.85 (8059.85)**를 제품 판별 코드로 읽어 `helperRenderer`를 확인했다.
+source=true 주입 model 은 기존 Chromium 종료 우회를 선택한다(`build/renderer-policy-installed-bundles-20261031.log`).
+14:29 설치본에서 주인이 실제 keyboard 입력·칸 이동을 정상으로 보고했다. 도구가 본 최종값은 일반 input=`한`,
+textarea=`글`, plaintext-only=`가`, rich text=`가`였다. 페이지 event 순서는 input → textarea → plaintext-only → rich text 이며,
+각 칸의 `compositionend → blur → 다음 칸 focus`를 확인했다(마지막은 blur 까지). 요청한 세 칸의 순서와 실제 관측 순서를 구분한다.
+관측한 최종값에는 중복이나 앞 칸 글자의 유입이 없었다. 근거: `build/renderer-policy-browser-events-20261031.log`와 도구의 AX 조회.
+같은 시험 시간대 homi 의 Chrome commit callback 은 `helperRenderer`, `source selected: yes`였다(`build/renderer-policy-runtime-20261031.log`).
+이는 기본 HTML 입력칸의 focus 이동 확인이며, ABC 왕복·외부 JS editor 검증은 아니다.
 
 ## 확인하는 법
 

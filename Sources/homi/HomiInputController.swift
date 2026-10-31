@@ -62,23 +62,20 @@ nonisolated final class HomiInputController: IMKInputController {
         observeClient("commitComposition.begin", lifecycle: true)
         defer { observeClient("commitComposition.return", lifecycle: true) }
         record("commitComposition \(app ?? "unknown")")
-        // 기존 Chromium 우회로 복귀한다. TIS 는 source 전환 중 아직 homi 일 수 있어 이 구분은 불완전하다.
-        // callback 뒤의 mark 질의로 보완하려던 처리는 새 입력칸에 글자를 넣었다 — Chrome 원장.
-        let sourceSelected = app.flatMap { app -> Bool? in
-            MainActor.assumeIsolated { Chromium.hosts(app) ? SourceWatcher.homiSelected() : nil }
+        let clientApp = coordinator.clientApp
+        let decision = MainActor.assumeIsolated {
+            CommitPolicy.decide(app: clientApp,
+                inspect: { RendererDiscovery.shared.inspect($0.bundleID) }, homiSelected: SourceWatcher.homiSelected)
         }
-        let selected = sourceSelected.map { $0 ? "yes" : "no" } ?? "not Chromium"
+        let selected = decision.sourceSelected.map { $0 ? "yes" : "no" } ?? "not queried"
+        let renderer = decision.renderer.rawValue
         let id = app ?? "unknown"
         let senderType = sender.map { String(describing: type(of: $0)) } ?? "nil"
         let busy = session.isHandlingEvent
         let controllerID = traceID
-        log.info("commit requested from \(id, privacy: .public), controller: \(controllerID, privacy: .public), source selected: \(selected, privacy: .public), sender: \(senderType, privacy: .public), inside event: \(busy)")
-        if sourceSelected == true {
-            let target = client().map { Client(proxy: $0, owner: self) }
-            session.end(.alreadyCommittedByClient) { target?.apply($0) }
-        } else {
-            commit()
-        }
+        log.info("commit requested from \(id, privacy: .public), controller: \(controllerID, privacy: .public), renderer: \(renderer, privacy: .public), source selected: \(selected, privacy: .public), sender: \(senderType, privacy: .public), inside event: \(busy)")
+        let target = client().map { Client(proxy: $0, owner: self) }
+        session.end(decision.ending) { target?.apply($0) }
     }
 
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {

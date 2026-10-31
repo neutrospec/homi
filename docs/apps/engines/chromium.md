@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | app | VS Code, Obsidian, Chrome, Orca, Wave, Claude (이 Mac 에서 판별) |
-| 판별 | app bundle 안의 `… Helper (Renderer).app` — Electron 은 `Contents/Frameworks/` 바로 아래, Chrome 은 `… Framework.framework/Helpers/` (`Sources/homi/Chromium.swift`) |
+| 판별 | `RendererDiscovery`가 `… Helper (Renderer).app`과 다른 renderer 이름·부재·미확인을 구분한다. Electron 은 `Contents/Frameworks/` 바로 아래, Chrome 은 `… Framework.framework/Helpers/` |
 | source | [`render_widget_host_view_cocoa.mm`](https://github.com/chromium/chromium/blob/154.0.8037.98/content/app_shim_remote_cocoa/render_widget_host_view_cocoa.mm) (`154.0.8037.98` · 2026-10-09 에 읽음, 이전 조사는 `main`) |
 
 ## 특징
@@ -75,6 +75,8 @@ Orca 1.4.244 의 framework 는 Electron **43.8.1**, 공식 [DEPS](https://github
 
 ## homi 의 우회
 
+- 2026-10-31 [판별과 정책을 분리](../../stability-review.md#3번-renderer-판별과-commit-정책-분리)했다. `CommitPolicy`는 기존 helper 이름에서만 아래 우회를 적용한다.
+  다른 renderer 이름을 찾았다는 사실만으로 입력 동작을 확대하지 않는다. [ChatGPT 의 판별과 정책](../chatgpt.md#판별정책-분리-2026-10-31)은 별도다.
 - `commitComposition` 에서 homi 가 선택돼 있으면 Session 만 끝내는 기존 우회로 복귀했다.
   **불완전함**: source 전환에도 TIS 가 아직 homi 를 가리킬 수 있어 그 경로는 계속 실패한다.
   callback 뒤 mark 를 확인하는 교정은 새 입력칸에 글자를 넣어 제거했다. 다음 event 로 확정을 넘기지 않는다.

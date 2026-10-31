@@ -122,7 +122,7 @@ callback 의 적용 범위를 확인하기 전에는 insert 생략 정책을 바
 |---|---|---|---|
 | 1 | 제품의 입력 순서를 test 에서 직접 실행 | app 식별 → mode 준비 → Session 판단 → client 반영을 `InputCoordinator`로 모은다. test 는 client·환경만 대체한다. ID 질의부터 끝나는 동기 경계와 실제 입력/종료 flush 구분을 보존하고, 설치 후 기본 입력을 확인한다. | 완료 — 설치·주인 확인 |
 | 2 | app 식별 근거와 종료 의도를 type 으로 표현 | 실제 client ID·fallback, client 자체 확정·homi 확정의 뜻을 명확히 한다. `String`·`trusted`·`insert: false`의 조합으로 잘못된 상태를 만들 가능성을 줄인다. 현재 종료 정책은 먼저 test 로 고정하며 callback token 을 입력칸 소유권으로 취급하지 않는다. | 완료 — 설치·주인 확인 |
-| 3 | app 판별과 호환 정책 분리 | Chromium 발견 결과와 commit 정책을 분리하고, 미확인·확인된 부재를 구별한다. cold 판별을 옮길 때 첫 callback 의 행동을 먼저 검사한다. ChatGPT 에 우회를 적용할지는 실제 app 검증 후 따로 결정한다. | 다음 |
+| 3 | app 판별과 호환 정책 분리 | Chromium 발견 결과와 commit 정책을 분리하고, 미확인·확인된 부재를 구별한다. cold 판별을 옮길 때 첫 callback 의 행동을 먼저 검사한다. ChatGPT 에 우회를 적용할지는 실제 app 검증 후 따로 결정한다. | 완료 — 설치·주인 확인. cold 조회 이동은 보류 |
 | 4 | 입력 revision 과 UI revision 분리 | 무변화 modifier event 가 필요한 후보 표시를 취소하지 않도록 한다. 실제 후보 변경·확정·focus 종료 뒤에는 오래된 UI 가 뜨지 않는지 검사한다. | 대기 |
 
 ### 1번: 입력 coordinator 추출
@@ -170,6 +170,32 @@ modifier 한자 질의·resend 권한·두 controller 의 mode 공유를 추가�
 결과가 **`한글a가`**로 정상임을 확인했다. 도구에서도 probe 의 최종 text 와 한/영 mode 왕복을 관측했다.
 기록은 `build/typed-boundaries-{build,debug-tests,release-tests,install,runtime}-20261031.log`다.
 이 확인을 다른 app 이나 알려진 source 왕복 문제의 해결로 확대하지 않는다.
+
+### 3번: renderer 판별과 commit 정책 분리
+
+`826719c`의 판별·종료 분기를 [RendererDiscovery](../Sources/homi/RendererDiscovery.swift)와
+[CommitPolicy](../Sources/InputSession/CommitPolicy.swift)로 나눴다. 판별은 bundle 의 근거만 돌려주고,
+정책은 기존 `… Helper (Renderer).app`에서만 그 callback 의 TIS 선택을 읽는다. bound client 반영·SessionDriver 의 종료 합치기는 유지한다.
+[조회 실패의 부재 cache 결함](lessons.md#renderer-조회-실패가-영구적인-부재-판정이-된다-2026-10-31)을 실패 test 뒤 교정했다.
+확인된 판별은 기존처럼 process 동안 app 별로 cache 하고, TIS 선택은 cache 하지 않는다.
+
+새 검사 11개는 cold 첫 callback·warm cache 뒤 source 변경, ID 없음, 정상 부재·읽기 실패·부분 실패와 회복,
+기존 helper 우선순위·다른 renderer 이름의 정책 미적용을 다룬다. `build/renderer-policy-{before,after}-20261031.log`가 근거다.
+설치 bundle 을 제품 판별 코드로 읽은 결과는 [Chrome](apps/chrome.md#판별정책-분리-검증-2026-10-31),
+[Orca](apps/orca.md#renderer-판별-재확인-2026-10-31), [ChatGPT](apps/chatgpt.md#판별정책-분리-2026-10-31),
+[TextEdit](apps/textedit.md#renderer-부재-확인-2026-10-31)에 둔다. 별도 실행의 정책 비교는 source=true 를 주입한 model 이며 실제 app callback 검사가 아니다.
+
+**cold 조회 시점은 유지한다.** cache 준비 전에 첫 Chrome callback 이 오면 기본 확정으로 중복할 수 있어 단순 async 이동은 하지 않았다.
+별도 process 의 한 차례 측정은 첫 Chrome 조사 21.382ms, 이후 다른 세 app 의 각 cold 조사 0.609–1.595ms였다.
+NSWorkspace 초기화를 포함할 수 있고 실제 IMK callback 지연·상한을 측정한 것은 아니다.
+`build/RendererPolicyReview20261031.swift`·`build/renderer-policy-installed-bundles-20261031.log`에 실행 근거가 있다.
+typing 경로의 file I/O 제거는 첫 판별을 미리 확보할 근거가 필요하므로 남긴다.
+
+`swift build`와 Debug·Release 각각 **237개 test**가 통과했다. 2026-10-31 **14:29:08 KST** 에 자체 서명본을 설치했고
+(CDHash `f62d321ce294ee5595f66cb282c62eed879ea508`), 새 PID `38121`의 시작·modifier observer 준비를 확인했다.
+주인이 [Chrome 의 조합 중 입력칸 이동](apps/chrome.md#판별정책-분리-검증-2026-10-31)을 정상 확인했다.
+근거는 `build/renderer-policy-{build,debug-tests,release-tests,install,runtime}-20261031.log`다.
+이 확인을 다른 app·source 왕복이나 간헐 첫 key 문제의 해결로 확대하지 않는다.
 
 ## focus와 source 전환 code review (2026-10-31)
 
@@ -254,7 +280,7 @@ build·test 결과는 `build/source-review-build-20261031.log`·`build/source-re
 |---|---|---|
 | 보이지 않는 한자 후보 | **좁은 교정 후보 채택** | [SessionDriver.withEvent](../Sources/InputSession/SessionDriver.swift)는 무변화 flagsChanged 에도 revision 을 올리고 [Client](../Sources/homi/Client.swift)의 show Task 는 옛 revision 을 버린다. `⌥↩ → Option release → show Task` model 은 후보가 열린 채 show 만 취소됐다. 실제 Task 순서는 미관측이다. 후보 내용·선택·종료에 따른 revision 을 검토하되 owner·busy·active 검사는 유지한다. |
 | caret 질의의 부작용 | **관측 채택, 교정 보류** | [Chromium 원장](apps/engines/chromium.md)의 firstRect 실패는 click 확정과 다른 경로다. homi 의 attributes 질의와 그 callback 이 실제로 연결되는지 먼저 확인한다. 표시를 위해 입력을 위험하게 하지 않는다. client 질의를 event 밖으로 옮기면 교착 교훈을 깨므로 기각한다. |
-| Chromium 최초 판별 | **실패 주입·시간 측정 채택** | [Chromium.hosts](../Sources/homi/Chromium.swift)는 commit callback 에서 처음 app bundle 을 동기 조회하고, 조회 실패도 false 로 영구 cache 한다. 첫 blur 의 오분류는 중복 방지를 건너뛸 수 있다. 실제 실패·지연은 미관측이다. URL 없음·directory 오류·Electron/browser 위치를 주입하고, cache miss 비용을 확인한다. 단순 async 전환은 첫 callback 의 판단 공백을 만들므로 보류한다. |
+| Chromium 최초 판별 | **cache 실패 교정·판별과 정책 분리** | [3번 구현·검증](#3번-renderer-판별과-commit-정책-분리)을 따른다. 미확인을 부재로 고정하지 않고 첫 callback 의 기존 판단을 검사했다. 실제 간헐 증상의 원인으로 확인한 것은 아니다. cold 조회의 단순 async 이동은 여전히 보류한다. |
 | ModeHUD·indicator 의 stale Task | **indicator 는 activation 교정에 포함, ModeHUD 는 후순위** | indicator 는 owner·app·현재 mode·pass-through 를 확인한다. ModeHUD 의 Task guard 는 별도 안건이며 실제 실패는 미관측이다. 표시 때문에 mode·source 를 다시 바꾸지 않는다. |
 | ModeHUD 의 hide animation | **후순위 관측** | [ModeHUD](../Sources/homi/ModeHUD.swift)는 예약 작업을 취소하지만 이미 시작한 fade 까지 끝내는 보장은 없다. 새 말풍선과 겹친 animation 의 실제 표시부터 확인한다. 조합·client 반영을 고칠 이유는 없다. |
 | `UserDefaults` 저장의 비동기화 | **근거 없는 성능 교정은 보류** | [저장 계약](macos-input.md#mode-저장과-key-처리)을 확인하니 key 경로의 `Memory.save` 만으로 동기 disk stall 이라고 단정할 수 없다. 지연이 관측되면 측정 후 판단하며 mode 의 SOT 는 계속 동기 memory 다. |

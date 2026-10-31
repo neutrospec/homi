@@ -4,7 +4,7 @@
 목표는 **두벌식 한글 입력이 완벽하게 동작하는 것** 하나다. 기능을 늘리는 프로젝트가 아니다 — 잡다한 기능·옵션·변죽은 만들지 않는다.
 
 > **현재 (2026-10-31)**: M0–M4·M6·M7 을 주인이 확인했다. 지금은 M5 — 일상 사용과 app 호환성. [focus·source review](docs/stability-review.md#focus와-source-전환-code-review-2026-10-31)에서 mode 기억 이전의 추가 반례를 확인해 교정했다. 최근 첫 key·source 선택 증상의 원인은 아직 미확정이다.
-> **설치본**: 2026-10-31 14:06 의 [app 식별 근거·조합 종료 방침 type 교정본](docs/stability-review.md#2번-app-식별-근거와-조합-종료-방침)이다. Debug·Release 각각 226개 test 가 통과했다. 주인이 probe 의 조합 중 app 이동·복귀와 Caps Lock 한/영 전환을 정상 확인했고, 도구에서도 최종 `한글a가`를 확인했다. 앞선 [mode 기억·controller ID 교정](docs/lessons.md#늦은-client-id-가-실제-app-의-mode-기억을-덮는다-2026-10-31)·[Caps Lock gesture 교정](docs/lessons.md#정상-caps-tap-을-기존-판정이-거부한다-2026-10-29)·[Emacs 전달 옵션](docs/apps/emacs.md#caps-lock-전달-2026-10-29)의 검증 범위는 각 기록을 따른다.
+> **설치본**: 2026-10-31 14:29 의 [renderer 판별·commit 정책 분리본](docs/stability-review.md#3번-renderer-판별과-commit-정책-분리)이다. Debug·Release 각각 237개 test 가 통과했다. 주인이 Chrome 입력칸 이동을 정상 확인했고 도구에서도 각 칸의 최종 text·조합 종료 event 를 확인했다. 앞선 [app 식별 근거·종료 방침 교정](docs/stability-review.md#2번-app-식별-근거와-조합-종료-방침)·[mode 기억·controller ID 교정](docs/lessons.md#늦은-client-id-가-실제-app-의-mode-기억을-덮는다-2026-10-31)·[Caps Lock gesture 교정](docs/lessons.md#정상-caps-tap-을-기존-판정이-거부한다-2026-10-29)·[Emacs 전달 옵션](docs/apps/emacs.md#caps-lock-전달-2026-10-29)의 검증 범위는 각 기록을 따른다.
 > 설치본의 변경·검증 범위는 [activation 기록](docs/lessons.md#2026-10-09-activation-교정callback-관측)과 [Windows Caps Lock 실험](docs/apps/windows-app.md#caps-lock-전달-실험-2026-10-10), 개선 안건은 [안정성 검토](docs/stability-review.md), 남은 작업은 [다음 작업](#다음-작업)에 있다.
 > 이상하면 주인이 곧바로 "최근 key 기록 저장" 을 누른다 → [진행 단계](#진행-단계)
 
@@ -140,6 +140,8 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
   같은 제품 coordinator 에 client·mode 저장소·환경을 대체해 연결한다. mode 의 SOT 는 기존 shared memory 하나다.
 - app 과 식별 근거는 `InputApp` 으로 함께 넘기고 실제 client ID 만 cache 한다. 명시적 조합 종료는 `CompositionEnd` 로
   homi 확정·client 자체 확정 처리를 구분한다. 이 type 이 입력칸 소유권이나 실제 client 확정을 증명하지는 않는다.
+- `RendererDiscovery` 는 bundle 의 renderer 근거를 조사·cache 하고, 순수한 `CommitPolicy` 가 기존 조합 종료 우회를 결정한다.
+  미확인은 부재로 cache 하지 않고, 새 renderer 이름의 발견만으로 호환 정책을 확대하지 않는다.
 - `Session` 은 할 일(`Action`) 목록을 돌려준다. `SessionDriver` 는 client 질의·상태 변경·목록 반영을 하나의 동기 경계로 감싼다 —
   질의·`insertText` 도중 들어오는 commit·deactivate 는 목록 반영 뒤에 처리한다. 질의도 재진입하므로 상태 변경 뒤에 반영하는 것만으로는 부족하다.
 - `Info.plist` 는 한국어 mode 하나(`com.unocult.inputmethod.homi.korean`, `smKorean`)만 둔다 — 한/영은 homi 안의 모드라 system 에 알릴 일이 없다 (결정 4).
@@ -270,7 +272,7 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
    notification·검사 진행을 나눈 최소 재현 또는 수동 검증으로 남은 경계를 확인한다. 원인 확인 없이 actor 검사를 우회하지 않는다.
    정상 사용 보고를 모든 경로의 통과로 확대하지 않는다. callback token 만으로 commit 대상을 결정하지 않는다.
 2. [개선 안건](docs/stability-review.md): signing 실패 시 기존 설치본 보존·binary 식별·읽기 전용 진단을 준비한다.
-   [구조 개선 네 항목](docs/stability-review.md#구조-개선-계획-2026-10-31)의 1번 coordinator 추출·2번 app 식별 근거와 종료 방침의 type 표현은 설치·주인 확인을 마쳤다. 다음은 3번 app 판별과 호환 정책의 분리다.
+   [구조 개선 네 항목](docs/stability-review.md#구조-개선-계획-2026-10-31)의 1·2·3번은 설치·주인 확인을 마쳤다. 다음은 4번 입력 revision 과 UI revision 분리다.
    [2026-10-31 focus·source review](docs/stability-review.md#focus와-source-전환-code-review-2026-10-31)의 fallback mode 이전·controller 진단 ID 를 교정·설치했다.
    probe 실제 입력은 주인이 확인했다. ChatGPT commit 정책·activation layout 재진입은 별도 검증 후 판단한다. 최근 증상의 원인 확정은 아니다.
    후보 revision·resend·Caps 종료 등 남은 안건은 영향과 증거에 따라 검증한다. 기본 입력이 다른 source 왕복보다 먼저다.

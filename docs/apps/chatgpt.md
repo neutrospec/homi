@@ -50,3 +50,10 @@ activation·한글 mode 준비 log 만으로 source 전환의 성공이나 입�
 이 분기는 `commitComposition`의 Chromium 정책을 고르는 데 쓰인다. **source 전환 popup 지연의 원인으로 확인한 것은 아니다.**
 helper 이름만 넓혀 기존 commit 우회를 적용하면 조합 종료 동작도 달라지므로, 이 app 의 click·focus·source 전환 callback 과
 중복·유실 여부를 먼저 확인한다. 이번 조사에서는 제품 코드·설치본을 바꾸지 않았다.
+
+## 판별·정책 분리 (2026-10-31)
+
+26.1027.30824 (22943)의 설치 bundle 을 새 `RendererDiscovery`로 읽으면 `otherRenderer`다.
+`Codex (Renderer).app`·`Codex (Aperitif Renderer).app` 형태를 발견하되, `CommitPolicy`는 기존처럼 homi 확정을 선택한다.
+실제 IMK 동작 검증 없이 Chromium 우회를 새로 적용하지 않았다. 별도 실행의 source=true 주입 model 결과이며 실제 callback 결과는 아니다.
+근거: `build/renderer-policy-installed-bundles-20261031.log`, 같은 이름의 fake directory test.
