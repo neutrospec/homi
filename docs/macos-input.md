@@ -29,6 +29,20 @@ sequenceDiagram
 
 macOS 27.2 SDK 의 공개 계약과 homi 대조는 [별도 조사](research/apple-input-sdk-27.md)에 둔다.
 
+### 부분 insert와 남은 mark (2026-11-01)
+
+macOS 27.2 SDK의 `IMKTextInput`은 명시적 replacement range를 문서 기준으로 설명하지만, 일부를 insert한 뒤 나머지 mark가 유지된다는 보장은 없다.
+`IMKInputController.updateComposition`은 composed string을 하나의 `setMarkedText`로 보내며, `NSMarkedClauseSegment`는 mark 안의 clause를 나타낸다.
+조사한 공개 IMK 계약에서는 prefix 확정과 suffix mark를 한 번에 반영해 중간 상태의 변경 알림을 막는 API를 찾지 못했다.
+이는 공개 계약의 조사 범위이며 모든 구현 방법이 불가능하다는 증명은 아니다. ✅ SDK header·[Apple updateComposition 문서](https://developer.apple.com/documentation/inputmethodkit/imkinputcontroller/updatecomposition())
+
+자체 `NSTextView`의 `가나` 전체 mark에 `insertText("가", replacementRange: {0,1})`를 직접 호출하면 text는 `가나`지만 mark가 전부 풀렸다.
+이어 sentinel range로 `나`를 mark하면 `가나나`가 됐다. mark 끝 caret·전체 선택·서로 다른 clause attribute의 세 조건에서 같았다.
+IMK proxy나 Mail을 거치지 않은 AppKit 직접 호출 관측이며 다른 client에 일반화하지 않는다. ✅ 합성 probe
+
+SDK 계약·legacy TSM의 부분 확정 신호와 32-bit 제한·실행 source는 `build/mail-common-20261101/partial-commit-contract.md`·`partial-insert-model.*`에 있다.
+이를 출발점으로 한 [전체 단어 mark 후보와 한계](apps/mail.md#공통-mark-확장-후보의-격리-실험-2026-11-01-제품-적용-보류)는 Mail 원장에 둔다.
+
 ## input source 와 keyboard layout
 
 - System Settings 의 "입력 소스" 목록 항목이 TIS input source 다. ✅ (`tis list`)

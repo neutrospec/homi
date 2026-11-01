@@ -220,6 +220,40 @@ substring=`가나다`로 completion이 왔다. 앞선 기본 control 대조와 �
 `idle-commit-model.swift`·`.log`·`.md`에 source·실행·가정을 남겼다. 오래된 범위를 사용하는 조건과 idle commit을 결합하면
 실제 보고와 같은 유실이 가능하다는 근거이며, Mail의 실제 값·실행 분기 또는 입력기 수정안의 안전성을 증명하지 않는다.
 
+### 공통 mark 확장 후보의 격리 실험 (2026-11-01, 제품 적용 보류)
+
+주인 요청으로 Mail 분기 없이 **완성된 앞 음절을 즉시 insert하지 않고, 현재 음절과 함께 하나의 mark로 유지**하는 후보를 시험했다.
+기준 source는 `dc783ed`다. 제품 Session과 자체 창 없는 `NSTextView` 사이에 실험용 wrapper를 두었으며 제품·설치본은 바꾸지 않았다.
+
+단순 wrapper는 `가나다 → Backspace 세 번 → ㅁ → commit`에서 기존 `가ㅁ` 대신 **`가가나ㅁ`**을 만들었다.
+현재 음절이 빈 뒤 Backspace를 app으로 넘겨 mark가 끝났지만 wrapper의 앞 글자는 남았기 때문이다. 기존 기대값으로 exit 1을 확인했다.
+pending 글자 삭제와 명시적 종료를 보완한 두 번째 모델은 13개 지정 순서의 매 단계에서 기존과 같은 문자열을 남겼다.
+일반 조합·겹받침 삭제·빈 현재 음절·반복 종료·모드 전환·문장부호·선택 대체·명시적으로 이전 field를 끝낸 뒤 이동을 포함한다.
+단, 앞 글자를 지울 때 Backspace의 `handled`는 false에서 true로 달라졌다. key 전달·selection·undo·실제 focus 소유권의 동등성은 검사하지 않았다.
+
+같은 wrapper에 notification 당시 caret까지를 prefix로 저장하는 **합성 host 정책**을 연결했다. 아래 completion 직전 commit은 fixture가 주입한 것이며 실제 IMK callback이 아니다.
+
+| 조건 | 기존 음절별 경로 | 전체 단어 mark 후보 |
+|---|---|---|
+| `가나` 뒤 이전 알림의 prefix로 completion → `다` | `{0,1}`로 completion, `가다` | 알림이 없어 completion **미도달**, `가나다` |
+| `가` 뒤 외부 종료를 먼저 주입 → `나` → 같은 completion → `다` | `가다` | `가다` |
+| `가나`를 명시적으로 종료한 뒤 새 알림의 prefix로 completion → `다` | `{0,2}`로 completion, `가나다` | `{0,2}`로 completion, `가나다` |
+
+첫 행은 누락 교정보다 **추천 시작 시점 변경**을 보인다. 두 번째 행의 추가 종료는 실제 Mail에서 관측한 순서가 아니며,
+입력기가 중간 insert를 줄여도 외부 종료와 오래된 prefix의 조합까지 막지는 못한다는 조건부 반례다. 세 번째 행도 Mail 해결 검증이 아니다.
+
+한자에도 계약 차이가 있다. `한글` 전체를 mark하면 기존 `textBefore(1)`의 기준점이 mark 시작 0으로 바뀌어 `한`을 읽지 못하고 현재 음절 후보로 fallback한다.
+현재 음절의 후보 insert를 전체 mark에 그대로 적용한 합성 대조는 앞의 `한`도 지웠다. 후보 ESC는 조합을 유지해야 하므로 후보 닫힘을 일괄 확정 신호로 쓸 수도 없다.
+이는 표시 wrapper만으로 연결하기 어렵다는 근거이며, 한자 처리를 함께 설계하면 불가능하다는 뜻은 아니다.
+
+**판단:** 단순한 공통 보정으로 채택하지 않는다. 전체 mark는 조합 범위·확정·한자·app의 key 처리 계약을 함께 바꾸는 설계다.
+재검토하려면 확정 전 추천을 늦추는 타협을 명시하고, 남은 조합의 소유권을 Session 한 곳에서 관리하며 한자·종료·실제 app 검증을 갖춰야 한다.
+이를 Mail 전용 우회가 안전하다는 근거로도 쓰지 않는다. [부분 insert의 공개 계약·AppKit 대조](../macos-input.md#부분-insert와-남은-mark-2026-11-01)에서도 더 작은 원자적 교정은 확인하지 못했다.
+
+재실행 source·명령·출력은 `build/mail-common-20261101/`의 `prefix-model`·`knownbad-requirement`·`word-mark-wrapper`·`completion-boundary-model`·`hanja-boundary-fixture`와 각 검토 문서에 있다.
+13개 통과는 문자열 fixture의 범위다. 실제 Mail 해결·IMK lifecycle·다른 app의 입력 안전성을 뜻하지 않는다.
+source에서 다시 만든 모듈로 첫 반례의 exit 1과 보완·completion·한자 모델의 지정 결과를 재확인했다. `swift build`·Debug 347개 test도 기존 known issue 1개 외 실패·warning 없이 끝났다. 기록은 같은 directory의 `*-review.log`·`build.log`·`debug-tests.log`다.
+
 ## 구분할 경계
 
 - **대기 중 종료 없이 조합이 이어지는 경우**에는 S3의 초성이 S2의 종성이 되고, 다음 모음에서 도깨비불로 `insert(S2) → mark(S3)`가 나온다.
