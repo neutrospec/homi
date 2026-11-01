@@ -3,8 +3,8 @@
 **homi** (`com.unocult.inputmethod.homi`) — macOS 한글 입력기. 주인 한 사람이 매일 쓰는 도구이고,
 목표는 **두벌식 한글 입력이 완벽하게 동작하는 것** 하나다. 기능을 늘리는 프로젝트가 아니다 — 잡다한 기능·옵션·변죽은 만들지 않는다.
 
-> **현재 (2026-11-01)**: M0–M4·M6·M7 을 주인이 확인했다. 지금은 M5 — 일상 사용과 app 호환성. [source ID의 prefix 오인과 조회 실패 진단](docs/lessons.md#source-id-의-앞부분만-비교해-다른-입력기를-homi-로-본다-2026-11-01)을 교정했다. [진행 중 HUD fade의 제한 관측](docs/macos-input.md#진행-중-fade-와-새-표시의-제한-관측-2026-11-01)은 반례를 찾지 못해 제품 동작을 유지한다. 앞선 ID 질의·늦은 표시 교정본은 [probe의 기본 입력·전환·app 복귀와 표시](docs/apps/engines/appkit.md#id-질의모드-표시-교정본의-probe-확인-2026-11-01)를 주인이 정상 확인했다. [일반 key 재진입의 조건부 반례](docs/stability-review.md#imk-이론-검증-범위-2026-11-01)는 남아 있고 최근 첫 key·source 선택 증상의 원인은 아직 미확정이다.
-> **설치본**: 2026-11-01 11:17 KST에 09:18 source ID 판정 교정본의 원본 bundle을 복원했다. [Mail의 insert range 단독 대조](docs/apps/mail.md#insert-range-단독-대조-2026-11-01-원복)에서도 누락이 계속돼 실험 코드·test도 원복했다. executable UUID `A73858F5-93E6-398F-AE3E-38F5860283DF`(arm64), CDHash `24db9b36de31460285c6a71d604362523c531f9c`, 서명 `homi code signing`. 원복 후 PID `83907`의 시작 UUID가 일치했다. 최초 설치 때 `swift build` 성공, Debug·Release 각각 347개 test 실행에서 기존 known issue 1개 외 예상 밖 실패나 build warning은 없었다. 주인은 당시 [probe의 기본 입력·Caps Lock 전환·app 복귀](docs/apps/engines/appkit.md#source-id-판정-교정본의-probe-확인-2026-11-01)를 `한a가나`로 정상 확인했다. 일반 key 중첩과 SourceWatcher의 종료 방침은 이번 교정 범위 밖이다.
+> **현재 (2026-11-01)**: M0–M4·M6·M7 을 주인이 확인했다. 지금은 M5 — 일상 사용과 app 호환성. [source ID의 prefix 오인과 조회 실패 진단](docs/lessons.md#source-id-의-앞부분만-비교해-다른-입력기를-homi-로-본다-2026-11-01)을 교정했다. [진행 중 HUD fade의 제한 관측](docs/macos-input.md#진행-중-fade-와-새-표시의-제한-관측-2026-11-01)은 반례를 찾지 못해 제품 동작을 유지한다. 앞선 ID 질의·늦은 표시 교정본은 [probe의 기본 입력·전환·app 복귀와 표시](docs/apps/engines/appkit.md#id-질의모드-표시-교정본의-probe-확인-2026-11-01)를 주인이 정상 확인했다. [일반 key 재진입의 조건부 반례](docs/stability-review.md#imk-이론-검증-범위-2026-11-01)는 남아 있고 최근 첫 key·source 선택 증상의 원인은 아직 미확정이다. [Mail recipient 자동완성의 음절 누락](docs/apps/mail.md)은 재개 규칙이 부족해 원복했고, [얼린 prefix 해석](docs/apps/mail.md#주인-확인-얼린-prefix-의-채움과-되돌림-2026-11-01-1311)에 따라 앞 음절과 현재 음절을 함께 넣고, Mail 이 틀리게 답하는 marked 위치 대신 [다시 mark 한 위치를 기억](docs/apps/mail.md#mail-의-markedrange-응답과-위치-기억-2026-11-01-1418-주인-확인)하는 Mail 규칙을 설치했다. 주인이 Mail recipient 와 probe 에서 정상 확인했다.
+> **설치본**: 2026-11-01 14:18 KST에 [Mail 함께 넣고 다시 mark 규칙](docs/apps/mail.md#함께-넣고-다시-mark-2026-11-01-1346)과 [다시 mark 위치의 기억](docs/apps/mail.md#mail-의-markedrange-응답과-위치-기억-2026-11-01-1418-주인-확인)을 설치했다. executable UUID `FA241B5F-5C11-3755-A8EA-89C1064D72AC`(arm64), CDHash `21a6b854c84053bf9040e3549000c435ab83fd6d`, 서명 `homi code signing`이며 Mail에서 위치·길이 숫자만 남기는 임시 진단이 들어 있었다. 이 설치본에서 주인이 Mail recipient의 `가나다`·`최효주`·대기 뒤 이어 치기·추천 수락·Backspace·제목·본문을 정상 확인했다. 14:26 KST에 진단을 지운 최종본을 설치했다. executable UUID `059B2844-AD9E-379E-A8AF-CDDE755C3819`(arm64), CDHash `f1e5f6f61c61f3972499c1f75212aa722223509a`. `swift build` 성공, Debug·Release 각각 366개 test에서 기존 known issue 1개 외 실패·build warning 없음. 14:27:22 새 PID `2028`의 시작 UUID가 일치했고, 이 최종본에서 주인이 probe의 기본 입력·Caps Lock 전환·app 복귀와 Mail recipient `최효주`를 정상 확인했다. 13:46 함께 넣기 설치본은 둘째 음절 경계에서 음절을 겹쳤다. 12:37 [재개 규칙](docs/apps/mail.md#idle-확정-음절의-재개-2026-11-01-주인-확인에서-부족원복) 설치본은 주인 확인에서 부족해 원복했고 `build/mail-joined-20261101/previous-resume-homi.zip`에 보존했다. 기준 설치본(11:17 복원본, UUID `A73858F5-93E6-398F-AE3E-38F5860283DF`, CDHash `24db9b36de31460285c6a71d604362523c531f9c`)은 `build/mail-resume-20261101/baseline-homi.zip`에 보존했으며, 그 설치본의 [probe 기본 입력·Caps Lock 전환·app 복귀](docs/apps/engines/appkit.md#source-id-판정-교정본의-probe-확인-2026-11-01)는 주인이 `한a가나`로 정상 확인했었다. 일반 key 중첩과 SourceWatcher의 종료 방침은 범위 밖이다.
 > 앞선 2026-10-31 [남은 세 경계 교정본](docs/stability-review.md#구조-개선-뒤-남은-세-경계-2026-10-31)의 probe·Chrome 입력칸 이동·Telegram/terminal 재전송 주인 확인은 당시 설치본의 범위다. [앞선 구조 개선 네 단계](docs/stability-review.md#구조-개선-계획-2026-10-31)의 확인도 구분한다. [후보 뜻 표시 누락](docs/apps/engines/appkit.md#후보-뜻의-첫-표시-누락-보고-2026-10-31-미해결)은 재발 때 조사한다. [Caps Lock](docs/lessons.md#정상-caps-tap-을-기존-판정이-거부한다-2026-10-29)·[Emacs 전달](docs/apps/emacs.md#caps-lock-전달-2026-10-29)의 검증 범위는 각 기록을 따른다.
 > 설치본의 변경·검증 범위는 [activation 기록](docs/lessons.md#2026-10-09-activation-교정callback-관측)과 [Windows Caps Lock 실험](docs/apps/windows-app.md#caps-lock-전달-실험-2026-10-10), 개선 안건은 [안정성 검토](docs/stability-review.md), 남은 작업은 [다음 작업](#다음-작업)에 있다.
 > 이상하면 주인이 곧바로 "최근 key 기록 저장" 을 누른다 → [진행 단계](#진행-단계)
@@ -57,6 +57,8 @@ macOS 기본 한국어 입력기(`com.apple.inputmethod.Korean.2SetKorean`)에�
    - 한자 변환도 marked text 를 바꾼다 — 조합 중인 글자, 또는 ⌥↩ 때 선택 영역에서 시작한 조합.
    - 예외 하나 — 선택 없이 방금 친 단어를 바꿀 때(Apple 식): macOS text 엔진 수준을 알리는 client(`validAttributesForMarkedText` 에
      교체 범위와 `NSTextAlternatives`)에서만, 그 자리 글자를 확인한 뒤 marked text 로 되돌린다. 다른 app 은 app 마다 다르게 깨졌다 (docs/macos-input.md).
+   - Mail 만의 예외 (2026-11-01 주인) — 음절 경계에서 앞 음절과 현재 음절을 함께 insert 한 뒤 현재 음절만 그 자리에 다시 mark 한다.
+     같은 text engine client 에서, marked text 의 시작 위치를 key 처리의 준비 단계에서 확인한 뒤에만. 자동완성이 mark 없는 중간 순간에 prefix 를 얼리기 때문이다 (`AppRules`).
 6. **조합 엔진은 순수하다.** AppKit/IMK 를 모르는 결정적 state machine. 한글 조합의 정확성은 여기서 test 로 증명한다.
 7. **IMK 층은 얇다.** NSEvent 해석 → 판단(`Session`·`ModifierKeys`) → client 반영. 앱별 우회는 재현 증거가 있을 때만, 사유와 함께.
 
@@ -118,6 +120,9 @@ macOS 기본 한국어 입력기(`com.apple.inputmethod.Korean.2SetKorean`)에�
   - 조합 중 Enter·ESC 를 app 이 잃거나 다르게 쓰는 곳(Telegram 의 Enter, terminal 의 Enter·ESC·Tab)은 확정한 뒤 그 key 를 먹고 **새 event 로 다시 보낸다**.
     손쉬운 사용 권한이 없으면 먹지 않고 넘긴다 — key 를 잃지 않는다.
   - Ghostty 는 tmux prefix Ctrl-B·Ctrl-A(Ctrl 단독일 때만)도 영문 trigger 다.
+  - Mail 의 recipient 자동완성은 mark 없는 text change 때 prefix 를 얼려, 대기 뒤 그 prefix 로 완성하거나 되돌린다 — insert(앞 음절) → mark(현재 음절) 사이의
+    순간이면 prefix 가 한 음절 짧아 보이는 음절이 지워진다. 그래서 음절 경계에서 두 음절을 함께 넣고 현재 음절만 다시 mark 한다 (`insertsWithComposing`, [원장](docs/apps/mail.md)).
+    Mail 은 위치를 준 mark 뒤의 `markedRange` 를 한 음절 뒤로 답하므로, 다시 mark 한 위치는 homi 가 기억하고 같은 조합 동안 묻지 않는다.
   - Remote Desktop 은 입력기의 글자를 받지 않고 key 를 이 Mac 의 keyboard layout 으로 글자로 바꿔 보낸다 — homi 가 한/영을 layout 으로 알린다
     (한 → 두벌식 layout `2SetHangul`, A → ABC). 조합은 원격 입력기가 하므로 **원격 Mac 은 두벌식에 둔다**.
 
@@ -271,7 +276,7 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 ## 다음 작업
 
 **2026-11-01 주인 채택:** [후속 네 작업](docs/stability-review.md#후속-네-작업-2026-11-01)을 1번 일반 key 재진입 → 2번 Caps Lock mapping cache → 3번 source 종료 판단 → 4번 첫 renderer 판별의 동기 file I/O 순서로 진행한다.
-현재는 **1번의 반례와 [Mail recipient 자동완성의 음절 누락](docs/apps/mail.md) 대조·처리 규칙 검토**다. Mail과 기존 재진입 반례의 동일 원인을 전제하지 않는다. 각 작업의 교정 기준·상태는 위 표에 둔다.
+Mail 의 누락은 [재개 규칙](docs/apps/mail.md#idle-확정-음절의-재개-2026-11-01-주인-확인에서-부족원복)이 부족해 원복했고, [얼린 prefix 해석](docs/apps/mail.md#주인-확인-얼린-prefix-의-채움과-되돌림-2026-11-01-1311)에 따라 주인이 고른 [함께 넣기 규칙](docs/apps/mail.md#함께-넣고-다시-mark-2026-11-01-1346)을 설치했다. [위치 기억](docs/apps/mail.md#mail-의-markedrange-응답과-위치-기억-2026-11-01-1418-주인-확인)까지 더해 주인이 확인했다. **1번의 반례는 남아 있다.** Mail과 기존 재진입 반례의 동일 원인을 전제하지 않는다. 각 작업의 교정 기준·상태는 위 표에 둔다.
 [공통 mark 확장 후보](docs/apps/mail.md#공통-mark-확장-후보의-격리-실험-2026-11-01-제품-적용-보류)는 격리 모델에서 검토했으며, 추천·한자·key 처리 계약이 달라 제품 적용을 보류했다. 설치본은 유지한다.
 
 2026-11-01 [Apple 입력 API·macOS 27 조사](docs/research/apple-input-sdk-27.md)는 공개 계약과 기존 검증 공백을 정리한다.

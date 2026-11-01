@@ -416,3 +416,50 @@ func coordinatorClientPrecedingQueryInterrupted(stage: String) {
     #expect(host.driver.composing == "간")
     #expect(!host.driver.hasCandidates)
 }
+
+private let textEngineAttributes: [Any] = ["NSTextInputReplacementRangeAttributeName", "NSTextAlternatives"]
+
+@Test("marked 시작 위치: text engine 이고 marked text 가 있을 때만 답한다")
+func markedStartAnswersForTextEngine() {
+    let proxy = TextProxy()
+    proxy.attributeAnswer = textEngineAttributes
+    proxy.markedAnswer = NSRange(location: 4, length: 1)
+    #expect(Client(proxy: proxy).markedStart(while: { true }) == 4)
+    #expect(proxy.queries == ["attributes", "marked"])
+}
+
+@Test("marked 시작 위치: text engine 이 아니거나 marked text 가 없으면 nil — 아니면 위치를 묻지도 않는다",
+    arguments: ["webKit", "noMark", "emptyMark"])
+func markedStartNegative(scenario: String) {
+    let proxy = TextProxy()
+    proxy.attributeAnswer = scenario == "webKit" ? ["NSTextInputReplacementRangeAttributeName"] : textEngineAttributes
+    switch scenario {
+    case "noMark": proxy.markedAnswer = NSRange(location: NSNotFound, length: 0)
+    case "emptyMark": proxy.markedAnswer = NSRange(location: 3, length: 0)
+    default: proxy.markedAnswer = NSRange(location: 3, length: 1)
+    }
+    #expect(Client(proxy: proxy).markedStart(while: { true }) == nil)
+    #expect(proxy.queries == (scenario == "webKit" ? ["attributes"] : ["attributes", "marked"]))
+}
+
+@Test("marked 시작 위치: 질의 중 새 입력이 오면 이후 질의와 응답을 버린다", arguments: ["attributes", "marked"])
+func markedStartCancellation(stage: String) {
+    let proxy = TextProxy()
+    proxy.attributeAnswer = textEngineAttributes
+    proxy.markedAnswer = NSRange(location: 4, length: 1)
+    var current = true
+    if stage == "attributes" { proxy.onAttributesQuery = { current = false } }
+    else { proxy.onMarkedQuery = { current = false } }
+    #expect(Client(proxy: proxy).markedStart(while: { current }) == nil)
+    #expect(proxy.queries == (stage == "attributes" ? ["attributes"] : ["attributes", "marked"]))
+}
+
+@Test("함께 넣기: 위치 없이 두 음절을 넣은 뒤 현재 음절만 그 자리에 mark 한다")
+func joinedInsertCalls() {
+    let proxy = TextProxy()
+    Client(proxy: proxy).apply([.insert("최효"), .markCommitted("효", range: NSRange(location: 1, length: 1))])
+    #expect(proxy.insertedRange == NSRange(location: NSNotFound, length: 0))
+    #expect(proxy.text == "최효" && proxy.marked == "효")
+    #expect(proxy.markedReplacement == NSRange(location: 1, length: 1))
+    #expect(proxy.markedSelection == NSRange(location: 1, length: 0))
+}

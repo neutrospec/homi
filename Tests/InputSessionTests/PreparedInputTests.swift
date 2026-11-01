@@ -246,7 +246,7 @@ func preparedNestedHanja() {
 func preparedCurrentPredicate() {
     let host = PreparedHost()
     var before = false, after = true
-    let result = host.driver.performPrepared({ session, selected, preceding in
+    let result = host.driver.performPrepared({ session, selected, preceding, _ in
         session.handle(KeyEvent(keyCode: KeyCode.returnKey, modifiers: .option), mode: .korean,
             selectedText: selected, textBefore: preceding)
     }, selectedText: { current in

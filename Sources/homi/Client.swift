@@ -164,6 +164,16 @@ extension Client {
         return (text, end)
     }
 
+    /// 지금 marked text 의 시작 문서 위치 — Mail 처럼 음절 경계의 중간 순간에 기대는 app 에서만, key 처리 도중에 묻는다
+    /// (`AppProfile.insertsWithComposing`). 함께 넣은 현재 음절을 이 위치 기준으로 다시 mark 하므로 text engine client 만 답한다.
+    /// WebKit(Mail 본문 등)은 교체 범위만 알려 제외된다. marked text 가 없으면 nil.
+    nonisolated func markedStart(while isCurrent: () -> Bool) -> Int? {
+        guard replacesLikeTextView(while: isCurrent), isCurrent() else { return nil }
+        let marked = call("markedRange") { proxy.markedRange() }
+        guard isCurrent(), marked.location != NSNotFound, marked.length != NSNotFound, marked.length > 0 else { return nil }
+        return marked.location
+    }
+
     /// macOS text 엔진처럼 교체 범위와 받아쓰기 대안을 모두 지원한다고 알리는 client 에서만 재변환한다.
     /// Chromium·WebKit 은 앞의 것만 알리고, terminal 등은 아무것도 알리지 않는다 (docs/macos-input.md).
     nonisolated func replacesLikeTextView() -> Bool { replacesLikeTextView(while: { true }) }

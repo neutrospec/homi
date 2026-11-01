@@ -22,12 +22,17 @@ public struct AppProfile: Sendable, Equatable {
     /// app 이 입력기의 글자를 받지 않고 key 를 homi 아래의 keyboard layout 으로 직접 글자로 바꾼다 — 한/영을 layout 으로 알린다
     /// (`keyboardLayout(in:)`). 원격 화면(Remote Desktop)이 그렇다.
     public var keyboardLayoutFollowsMode = false
+    /// 음절 경계에서 앞 음절과 조합 중인 음절을 함께 insert 한 뒤 조합 중인 음절만 그 자리에 다시 mark 한다 — 문서가 앞 음절만 가진
+    /// 중간 순간을 만들지 않는다. Mail 의 recipient 자동완성은 mark 없는 그 순간에 prefix 를 얼려 한 음절 짧은 prefix 로 완성·되돌림을 해
+    /// 보이는 음절을 지운다 (docs/apps/mail.md). 다시 mark 는 위치를 주므로 결정 5 의 예외 — text engine client 에서만 (`markedStart`).
+    public var insertsWithComposing = false
 
     public init(
         startsInEnglish: Bool = false, englishTriggers: [Trigger] = [], resendWhileComposing: Set<UInt16> = [],
         convertsEnteredText: Bool = true, passThrough: Bool = false,
         toggleKeys: Set<Preferences.ToggleKey> = Preferences.standard.toggleKeys,
-        hanjaKey: Preferences.HanjaKey = .optionReturn, hanjaRecentWord: Bool = true, keyboardLayoutFollowsMode: Bool = false
+        hanjaKey: Preferences.HanjaKey = .optionReturn, hanjaRecentWord: Bool = true, keyboardLayoutFollowsMode: Bool = false,
+        insertsWithComposing: Bool = false
     ) {
         self.startsInEnglish = startsInEnglish
         self.englishTriggers = englishTriggers
@@ -38,6 +43,7 @@ public struct AppProfile: Sendable, Equatable {
         self.hanjaKey = hanjaKey
         self.hanjaRecentWord = hanjaRecentWord
         self.keyboardLayoutFollowsMode = keyboardLayoutFollowsMode
+        self.insertsWithComposing = insertsWithComposing
     }
 
     /// homi 아래에 둘 keyboard layout — homi 가 넘긴 key 는 이것으로 글자가 된다. 늘 ABC 다 (한글 모드의 ` 도 ` 가 된다).
@@ -121,5 +127,9 @@ public enum AppRules {
         // 원격 화면은 입력기의 글자를 받지 않고, key 를 이 Mac 의 keyboard layout 으로 글자로 바꿔 보낸다 —
         // 한/영은 원격의 입력 소스가 아니라 이 layout 이 정한다 (docs/apps/remote-desktop.md, 2026-09-26 주인 + log)
         "com.apple.RemoteDesktop": AppProfile(keyboardLayoutFollowsMode: true),
+
+        // recipient 자동완성이 mark 없는 text change 때 prefix 를 얼린다 — insert(앞 음절) → mark(현재 음절) 사이의 순간이면 prefix 가
+        // 한 음절 짧아, 대기 뒤 completion 이 `가나` 를 `가` + 추천으로, `최효주` 를 `최효` 로 지운다 (docs/apps/mail.md, 2026-11-01 주인)
+        "com.apple.mail": AppProfile(insertsWithComposing: true),
     ]
 }

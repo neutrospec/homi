@@ -243,3 +243,10 @@ func shiftSpaceToggle() {
     var off = Session()
     #expect(off.handle(shiftSpace, mode: .english) == Outcome(handled: false, actions: [], mode: .english))
 }
+
+@Test("Mail 은 음절 경계에서 앞 음절과 현재 음절을 함께 넣는다 — recipient 자동완성의 얼린 prefix (docs/apps/mail.md)")
+func mailInsertsWithComposing() {
+    #expect(AppRules.profile(for: "com.apple.mail").insertsWithComposing)
+    #expect(!AppRules.profile(for: "com.example.unknown").insertsWithComposing)
+    #expect(!AppRules.profile(for: "com.google.Chrome").insertsWithComposing)
+}

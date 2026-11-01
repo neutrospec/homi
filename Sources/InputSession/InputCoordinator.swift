@@ -7,11 +7,15 @@ public protocol InputClient {
     func textBefore(_ count: Int) -> (text: String, end: Int)?
     func selectedText(while isCurrent: () -> Bool) -> String?
     func textBefore(_ count: Int, while isCurrent: () -> Bool) -> (text: String, end: Int)?
+    /// 지금 marked text 의 시작 문서 위치 — `AppProfile.insertsWithComposing` 인 app 의 음절 경계에서만.
+    /// text engine client 이고 marked text 가 있을 때만 답한다. 기본은 nil (위치를 모르면 평소대로 넣는다).
+    func markedStart(while isCurrent: () -> Bool) -> Int?
     func apply(_ actions: [Action])
 }
 
 public extension InputClient {
     var appIDSource: AnyObject? { nil }
+    func markedStart(while isCurrent: () -> Bool) -> Int? { nil }
     func selectedText(while isCurrent: () -> Bool) -> String? {
         guard isCurrent() else { return nil }
         let result = selectedText()
@@ -105,13 +109,13 @@ public final class InputCoordinator {
         return withInput(client: client) { app in
             prepareMode(for: app)
             before()
-            let mode = mode(for: app)
+            var mode = mode(for: app)
             let input = activation.beginInput(app: app)
             let appProfile = profile(app.bundleID)
             var outcome: Outcome
             if mode == .korean && appProfile.hanjaKey == .optionReturn && key.isHanjaKey {
                 let capturedClientApp = clientApp
-                let prepared = driver.performPrepared({ session, selected, before in
+                let prepared = driver.performPrepared({ session, selected, before, _ in
                     session.handle(key, mode: mode, profile: appProfile, selectedText: selected, textBefore: before)
                 }, selectedText: { client.selectedText(while: $0) },
                    textBefore: { client.textBefore($0, while: $1) },
@@ -122,6 +126,30 @@ public final class InputCoordinator {
                     let cancelled = Outcome(handled: true, actions: [], mode: self.mode(for: app))
                     after(cancelled, false)
                     return cancelled
+                }
+            } else if mode == .korean && appProfile.insertsWithComposing && !appProfile.passThrough && driver.hasPendingEnd {
+                // 종료 요청이 기다리는 중 — client 가 문서를 바꿨을 수 있어 질의한 위치도 기억한 위치도 쓰지 않는다.
+                var plain = appProfile
+                plain.insertsWithComposing = false
+                outcome = driver.perform({ $0.handle(key, mode: mode, profile: plain) }, apply: { _ in })
+            } else if mode == .korean && appProfile.insertsWithComposing && !appProfile.passThrough {
+                // 음절 경계의 marked 시작 위치는 한자처럼 Session 복사본의 준비 단계에서 묻는다 — action 을 만들기 전이다.
+                let capturedClientApp = clientApp
+                let prepared = driver.performPrepared({ session, selected, before, start in
+                    session.handle(key, mode: mode, profile: appProfile, selectedText: selected, textBefore: before,
+                        markedStart: start)
+                }, selectedText: { client.selectedText(while: $0) },
+                   textBefore: { client.textBefore($0, while: $1) },
+                   markedStart: { client.markedStart(while: $0) },
+                   isContextCurrent: { self.clientApp == capturedClientApp && self.mode(for: app) == mode })
+                switch prepared {
+                case .completed(let value): outcome = value
+                case .interrupted:
+                    // 질의 중 중첩 전이나 종료 요청이 있었다 — 위치 없이 그때의 mode 로 평소처럼 처리한다. key 를 잃지 않는다.
+                    mode = self.mode(for: app)
+                    var plain = appProfile
+                    plain.insertsWithComposing = false
+                    outcome = driver.perform({ $0.handle(key, mode: mode, profile: plain) }, apply: { _ in })
                 }
             } else {
                 outcome = driver.perform({
@@ -163,7 +191,7 @@ public final class InputCoordinator {
                 let mode = mode(for: app)
                 let input = activation.beginInput(app: app)
                 let capturedClientApp = clientApp
-                let prepared = driver.performPrepared({ session, selected, before in
+                let prepared = driver.performPrepared({ session, selected, before, _ in
                     session.hanjaTapped(mode: mode, profile: profile, selectedText: selected, textBefore: before)
                 }, selectedText: { client.selectedText(while: $0) },
                    textBefore: { client.textBefore($0, while: $1) },

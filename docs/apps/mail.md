@@ -5,10 +5,10 @@
 | bundle ID | `com.apple.mail` |
 | 입력 구현 | recipient의 정적 선언 type은 `MUIAddressField` · 재현 당시 실제 class·field editor는 미확인 |
 | 조사 환경 | 16.0 (3901.200.71.1.16) · 2026-11-01 · macOS 27.2 (26B123), 설치 bundle `Info.plist` 확인 |
-| homi 설치본 | 2026-11-01 09:18 source ID 판정 교정본 (`aa4e74e`) |
-| homi 규칙 | Mail 전용 우회 없음 |
+| homi 설치본 | 2026-11-01 14:18 [함께 넣고 다시 mark](#함께-넣고-다시-mark-2026-11-01-1346)와 [위치 기억](#mail-의-markedrange-응답과-위치-기억-2026-11-01-1418-주인-확인) — 기준 source `8810b48` + 이 교정. 12:37 [재개 규칙](#idle-확정-음절의-재개-2026-11-01-주인-확인에서-부족원복) 설치본은 원복 |
+| homi 규칙 | `insertsWithComposing` — 음절 경계에서 앞 음절과 현재 음절을 함께 넣고 현재 음절만 그 자리에 다시 mark 한다 (`AppRules`, 아래) |
 
-## recipient 자동완성 뒤 중간 음절 누락 (2026-11-01, 미해결)
+## recipient 자동완성 뒤 중간 음절 누락 (2026-11-01, 교정·주인 확인)
 
 주인이 재현하기 쉬운 조건을 보고했다. 실제 이름 대신 한글 음절을 **S1·S2·S3**로 표시한다.
 
@@ -254,12 +254,132 @@ pending 글자 삭제와 명시적 종료를 보완한 두 번째 모델은 13�
 13개 통과는 문자열 fixture의 범위다. 실제 Mail 해결·IMK lifecycle·다른 app의 입력 안전성을 뜻하지 않는다.
 source에서 다시 만든 모듈로 첫 반례의 exit 1과 보완·completion·한자 모델의 지정 결과를 재확인했다. `swift build`·Debug 347개 test도 기존 known issue 1개 외 실패·warning 없이 끝났다. 기록은 같은 directory의 `*-review.log`·`build.log`·`debug-tests.log`다.
 
+### idle 확정 음절의 재개 (2026-11-01, 주인 확인에서 부족·원복)
+
+위 메커니즘에 맞춘 homi 쪽 대응을 Mail 규칙 `AppProfile.resumesIdleCommit` 으로 두었다. 기준 source 는 `8810b48` 이며 제품 코드 일곱 곳을 바꿨다.
+필요한 불변식은 "mark 가 남은 채 text change 가 나지 않는다" 또는 "그 뒤의 selection 을 homi 가 알고 대응한다" 둘 중 하나다.
+앞쪽(전체 단어 mark·Apple 식 즉시 확정)은 조합·한자·확정 계약 전체를 바꾸므로, 뒤쪽을 Mail 에만 좁혔다.
+
+- **규칙**: `commitComposition` 이 event 밖(idle: `isHandlingEvent` 아님·`inputDepth == 0`)에서 와 homi 가 음절 T 를 확정하면
+  Session 이 T 의 key 들을 보관한다 (`Session.commit(resumable:)`). 다음 key 가 자모·Backspace 이고 선택 영역이 T 로 시작하면
+  (`Client.selectionStartsWith` — `selectedRange` 뒤 그 시작에서 T 길이만 읽는다) T 를 다시 조합 중으로 올리고 key 를 평소처럼 처리한다.
+  mark·insert 는 여전히 위치 없이 selection 을 대신하므로 `가나` + 추천 selection `{1,2}` + `다` 는 `가낟 → 가나다` — 끊기지 않고 친 것과 같다.
+  explicit range 는 쓰지 않는다(결정 5). 판단은 key 처리 안에서 동기로 끝난다(결정 3).
+- **질의 위치**: 한자처럼 `SessionDriver.performPrepared` 의 준비 단계에서, Session 복사본의 `inout` 밖에서 한 번 묻는다. action 을 만들기 **전**이라
+  보류했던 [다음 mark 직전 질의](#구분할-경계)의 "이미 만든 outer mark 가 새 조합을 덮는" 반례는 생기지 않는다.
+  질의 중 중첩 전이가 있으면 제안을 버리고 그때의 mode 로 평소처럼 처리한다 — key 를 잃지 않는다. 추가 IPC 는 Mail 에서 idle 확정 다음 첫 key 한 번에 두 건이다.
+- **재개하지 않는 것**: Return·Tab·화살표·Esc(추천 수락·이동은 Mail 몫), Space·문장부호(selection 대체는 남는다 — 이름 뒤에 바로 치는 경우는 드물다고 보고 1차 범위 밖),
+  수식키 조합, 영문 mode, 한자 후보 중, 규칙 없는 app. mouse·deactivate·source 종료·event 안의 확정은 보관하지 않는다. 빈 idle 확정은 앞의 보관을 지우지 않는다.
+  선택 영역이 T 로 시작하지 않으면 아무것도 바꾸지 않으므로 교정 전과 같다.
+- **아는 한계**: 범위를 새로 계산한 completion 의 꼬리가 우연히 T 로 시작하면 한 음절이 재개되지만 다음 모음에서 같은 글자가 된다.
+  이 질의가 completion 뒤 Mail 의 실제 selection 에 대한 첫 관측이기도 하다 — 교정이 안 되면 selection 이 `{1,N}` 이라는 가설이 틀렸거나 completion 전에 다른 변경이 있는 것이다.
+- **test**: HangulCore `ResumeTests`(Composer 재개·한 음절 검사), InputSession `ResumeTests`(Session 과 selection·marked text 를 가진 문서 모델의 coordinator —
+  오래된 범위의 누락 재현 `가ㄷ` 와 교정 `가나다`, 새 범위·자동완성 없음 대조, 질의 중 중첩 key·확정, event 안·deactivate·source·mouse 의 비보관),
+  Homi `ClientTests`(adapter 의 질의 범위·부정·취소), `AppRulesTests`. Debug·Release 각각 367개에서 기존 known issue 1개 외 실패·warning 없음.
+  문서 모델의 통과는 Mail 의 실제 selection 값이나 IMK 실행을 증명하지 않는다.
+- **설치**: 12:37 KST, executable UUID `D1ADD8A8-C9A0-3743-9BC1-AB0A0255180F`(arm64), CDHash `f3c317ee1a09db115480ed7ff549a0124aa6f639`, 서명 `homi code signing`, `codesign --verify --strict` 통과.
+  직전 설치본(UUID `A73858F5-93E6-398F-AE3E-38F5860283DF`)은 `build/mail-resume-20261101/baseline-homi.zip` 에 보존했다. red·build·test·install·identity 기록도 같은 directory 에 있다.
+- **주인이 확인할 것**: 빈 recipient 에서 `가나` → 추천 대기 → `다` 가 `가나다` 인지, 추천 뒤 Return 수락과 Backspace, 그리고 probe 의 기본 입력·Caps Lock 전환·app 복귀가 그대로인지.
+  새 process 의 시작 UUID 도 첫 입력 뒤 log 로 대조한다.
+
+### 주인 확인: 얼린 prefix 의 채움과 되돌림 (2026-11-01 13:11)
+
+재개 규칙 설치본에서 주인이 두 시험을 했다. homi log 의 controller `/27` 에는 13:11:02·10·13 세 번의 idle commit 만 남았다. key 단위 trace 는 보존 기간이 지나 없다.
+
+- `가나` → 대기: 추천이 뜨는 순간 `나` 가 사라지고 `가` 기준 추천이 채워졌다. 이어 `다` 를 치면 `가다` 다.
+  재개 규칙은 선택 영역이 `나` 로 시작할 때만 움직이므로 꼬리가 다른 추천에는 닿지 않는다.
+- `최효` → 대기: `최` 기준 추천이 `최효주` 를 채우고 `효` 부터 선택했다(`최` 만 선택 밖). `주` 를 치면 `최효주` 가 됐다.
+  잠시 뒤 추천이 사라지며 `주` 가 지워져 `최효` 만 남았다. 다음 key 가 없는 외부 편집이라 재개 규칙이 닿지 않는다.
+- Apple 입력기는 `최효` 대기 때 추천이 아예 없다.
+
+**재개 규칙은 이 누락을 고치지 못한다.** 정상 입력을 해치지는 않지만 주인의 두 경우 모두 글자를 잃는다.
+
+**합성 모델의 해석**: 창 없는 `NSTextView` 에 제품 Session 의 action 을 적용했다 (`build/mail-resume-20261101/word-insert-remark.swift`·`.log`, exit 0).
+"mark 없는 마지막 text change 때 `{0, caret}` 을 prefix 로 얼리고, completion 은 그 prefix 로 채우거나(결과 있음) 그 prefix 로 되돌린다(결과 없음)" 는 가설 하나가 위 세 관측을 모두 재현했다.
+
+| 시험 | 지금 homi 모델 | 주인 관측 |
+|---|---|---|
+| `최효` 뒤 채움 | 얼린 prefix `최` · 선택 `{1,2}` | `최` 만 선택 밖 |
+| `최효주` 뒤 되돌림 | 얼린 prefix `최효` · 결과 `최효` | `주` 가 사라짐 |
+| `가나` 뒤 다른 꼬리 · `다` | 얼린 prefix `가` · 결과 `가다` | `가다` |
+
+원인은 homi 의 `insert(앞 음절) → mark(현재 음절)` 사이에 문서가 앞 음절만 가진 순간이 있다는 점이다. 얼린 prefix 가 늘 보이는 글자보다 한 음절 짧다.
+Apple 입력기에는 그 순간이 없어 prefix 가 `최효` 전체가 된다. 그 검색에 결과가 없으면 추천도 없으니 주인 관측과 맞는다.
+
+**후보 (모델에서만 확인)**: Mail 에서 `insert(앞 음절 + 현재 음절)` 을 보낸 뒤 현재 음절만 그 자리에 다시 mark 한다.
+최종 상태는 지금과 같고(앞 음절 확정, 현재 음절 mark) 중간 순간만 보이는 글자 전체가 된다. 모델에서 세 누락이 없어졌고 받침·도깨비불·Backspace 도 같았다.
+앞서 보류한 [전체 단어 mark](#공통-mark-확장-후보의-격리-실험-2026-11-01-제품-적용-보류)와 달리 앞 음절을 mark 에 남기지 않는다. 그래서 한자 `textBefore` 와 Backspace 의 계약은 바뀌지 않는다.
+다만 다시 mark 할 때 명시적 range 가 필요해 결정 5 의 예외가 된다. 실제 Mail recipient 가 그 range 를 받는지, `validAttributesForMarkedText` 에 교체 범위를 알리는지는 확인하지 않았다.
+
+**가설의 범위**: 얼림·검색·되돌림 정책은 모델에 넣은 가정이며 Mail 구현의 확정이 아니다.
+후보 모델의 `최효` 채움은 검색이 `최효` 에 결과를 준다고 둔 것이다. Apple 관측대로 결과가 없다면 후보에서는 추천도 뜨지 않는다.
+
+### 함께 넣고 다시 mark (2026-11-01 13:46)
+
+주인이 [얼린 prefix 해석](#주인-확인-얼린-prefix-의-채움과-되돌림-2026-11-01-1311)의 후보를 골랐다. 재개 규칙은 source·test·설치본에서 뺐다 (patch 는 `build/mail-resume-20261101/resume-rule.patch`).
+
+- **규칙** (`AppProfile.insertsWithComposing`, Mail 만): `insert(앞 음절)` 과 `mark(현재 음절)` 이 함께 나오는 음절 경계에서 marked text 의 시작 위치 S 를 묻는다.
+  답이 있으면 `insert(앞 음절 + 현재 음절)` 을 위치 없이 보내고, 현재 음절만 `markCommitted` 로 `{S + 앞 음절 길이, 현재 음절 길이}` 에 다시 mark 한다.
+  최종 상태는 이전과 같고, 중간 순간의 text change 만 보이는 글자 전체가 된다. 이미 확정했던 음절을 다시 넣는 것이 아니라 같은 반영 안에서 방금 넣은 음절을 mark 로 되돌린다.
+- **질의**: `Client.markedStart` 는 `validAttributesForMarkedText` 로 text engine 인지 확인한 뒤 `markedRange` 를 읽는다.
+  Mail 본문 같은 WebKit 은 교체 범위만 알려 답하지 않고, 그러면 평소대로 넣는다. 질의는 한자처럼 `SessionDriver.performPrepared` 의 준비 단계, 즉 action 을 만들기 전에 한다.
+  음절 경계 key 하나에 추가 IPC 가 두 건이다.
+- **중단**: 질의 중 중첩 전이가 있거나 종료 요청(commitComposition·deactivate)이 오면 위치를 버리고 그때의 mode 로 평소처럼 처리한다. key 는 잃지 않는다.
+  중첩 key 가 있으면 두 key 의 처리 순서가 바뀔 수 있다. [일반 key 재진입의 남은 반례](../stability-review.md#imk-이론-검증-범위-2026-11-01)와 같은 종류다.
+- **아는 한계**: 질의와 반영 사이에 Mail 이 homi 에 알리지 않고 문서를 바꾸면 다시 mark 의 위치가 틀린다.
+  completion 은 mark 를 풀며 commitComposition 을 보내므로 위 중단으로 걸러진다고 보지만 실제로 확인하지 않았다. 규칙은 얼린 prefix 가설에 기대므로 가설이 틀리면 누락을 고치지 못한다.
+- **test**: InputSession `JoinedInsertTests` — Session 의 경계 질의·fallback·한자 기억, recipient 문서 모델의 재현(규칙 없으면 `가다`·`최효주` 선택 `{1,2}`·`최효`)과
+  교정(`가나다`·`최효`·`최효주`), 받침·도깨비불·Backspace 매 단계의 동등성, text engine 아님·질의 중 중첩 key·확정 요청. Homi `ClientTests` — 질의의 판별·취소와 호출 순서. `AppRulesTests`.
+  Debug·Release 각각 361개에서 기존 known issue 1개 외 실패·warning 없음. 문서 모델의 통과는 Mail 의 실제 동작을 증명하지 않는다.
+- **설치**: 13:46 KST, executable UUID `72440AAA-B464-3CC8-A165-26FB128DF592`(arm64), CDHash `22999c5b1df8a8e7b4209383af614884df5c1069`, 서명 `homi code signing`, `codesign --verify --strict` 통과.
+  13:46:51 새 PID `41766` 의 시작 UUID 가 일치했다. red·build·test·install·identity 기록과 바로 앞 재개 규칙 설치본(`previous-resume-homi.zip`)은 `build/mail-joined-20261101/` 에 있다.
+- **주인이 확인할 것**: 빈 recipient 에서 `가나` → 대기 → `다`, `최효` → 대기, `최효주` → 대기가 음절을 잃지 않는지. 추천 수락(Return)과 Backspace, 제목·본문 입력,
+  probe 의 기본 입력·Caps Lock 전환·app 복귀.
+
+### 함께 넣기의 첫 Mail 확인: 추천은 사라지고 셋째 음절이 겹친다 (2026-11-01 13:53)
+
+- **주인 확인**: `가나` 대기 때 추천이 없었다. 교정 전 설치본에서는 `가` 기준 추천이 있었다. 이어 `다` 를 치자 `가나다다` 가 됐다.
+  `최효` 대기 때도 추천이 없었고, `주` 를 치자 `최효주주` 가 됐다가 추천이 뜨며 `최효주` 로 바뀌었다.
+- **trace** (`build/mail-joined-20261101/metadata-1.log`, controller `/9`): 음절 경계마다 text engine 판별 → `markedRange` → `insert` → `markCommitted` 순서였다.
+  대기 중에는 commitComposition 이 없었고, 둘째 경계 약 0.39초 뒤에만 idle commit 이 왔다. 대기 전 첫 경계에서는 주인이 겹침을 보지 않았다.
+- **해석**: 추천이 사라진 것은 얼린 prefix 가 보이는 글자 전체가 된다는 예측과 맞는다. Apple 입력기의 관측과도 같다.
+  겹침은 둘째 경계의 다시 mark 가 지정한 자리를 대신하지 않고 커서 뒤에 새로 들어간 결과와 같다. 위치 값이 틀렸는지 Mail 이 위치를 무시했는지는 trace 로 가를 수 없다.
+  보낸 위치는 "최근 key 기록" 의 `mark … over {…}` 에만 남는다. 이 시험의 기록은 이후 입력으로 ring buffer 에서 밀려났을 수 있다.
+- **설치본의 상태**: Mail recipient 에서 셋째 음절을 겹치게 만들어 일상 사용에 부적합하다. 추천이 채우면 Mail 이 덮어써 겹침이 사라지지만, 추천이 없으면 남는다.
+
+### Mail 의 markedRange 응답과 위치 기억 (2026-11-01 14:18, 주인 확인)
+
+겹침의 원인을 가르려고 key 마다 반영 직후의 위치·길이 숫자만 log 에 남기는 임시 진단을 설치했다 (UUID `16D1F101-91FA-39E6-B49E-5A139FBDFD32`).
+글자와 key code 는 남기지 않았다. 주인이 `가나` → 대기 → `다` 를 치자 `가나다다` 가 됐고 마지막 `다` 가 조합 중이었다.
+
+| 시점 | homi 가 보낸 다시 mark | Mail 이 답한 marked | 문서 길이 |
+|---|---|---|---|
+| `ㄱ`·`가`·`간` | 없음 | `{0,1}` | 1 |
+| `나` 경계 | `{1,1}` | `{2,1}` | 2 |
+| `ㄷ` | 없음 | `{2,1}` | 2 |
+| `다` 경계 | `{3,1}` | `{3,1}` | 4 |
+
+- **사실**: Mail 은 위치를 준 다시 mark 를 화면에 맞게 반영하면서도, 그 뒤 `markedRange` 를 한 음절 뒤(그때의 caret)로 답하고 제자리 mark 동안 그 값을 유지했다.
+  길이 2 문서의 `{2,1}` 은 불가능한 값이다. 위치 없는 mark·insert 는 실제 mark 를 대신했다. 같은 key 의 selection 은 `{1,1}` 로 실제 mark 와 같았다.
+  `NSTokenTextView` 를 쓰는 자체 token field 에서 같은 호출은 정상이었다 (`build/mail-joined-20261101/token-remark-probe.*`). 이 응답이 Mail·IMK 중 어디서 생기는지는 미확인이다.
+- **해석**: 둘째 음절 경계에서 homi 가 틀린 시작 2 를 믿고 `{3,1}` 에 mark 해 문서 끝에 음절이 하나 더 붙었다. 대기는 원인이 아니며 둘째 경계면 언제든 겹친다.
+- **교정**: 다시 mark 한 위치는 homi 가 계산한 값이므로 Session 이 기억한다 (`markStart`). 같은 mark 를 제자리에서 고치는 자모·Backspace 동안 그 값을 쓰고 묻지 않는다.
+  확정·넘기는 key·전환·한자·mouse·조합이 빈 Backspace·평소대로 넣은 경계에서는 버린다. 새 조합의 첫 경계에서만 묻는다 — 위치 없는 mark 뒤의 답은 정확했다.
+  종료 요청이 기다리는 key 와 질의 중단 뒤의 처리는 기억한 위치도 쓰지 않고 평소대로 넣는다.
+- **아는 한계**: ⌥↩ 의 방금 친 단어는 여전히 `markedRange` 로 앞 글자를 찾는다. Mail 에서 다시 mark 뒤에는 그 답이 틀려 글자 확인에 실패하고 조합 중인 글자만 바꾼다. 잘못된 교체는 생기지 않는다.
+- **test**: InputSession `JoinedInsertTests` 에 Mail 의 응답을 흉내 낸 문서 모델의 재현(`가나다다`·`최효주주` 실패)과 교정, 위치 기억·버림, 기다리는 종료를 더했다. Debug·Release 각각 366개에서 기존 known issue 1개 외 실패·warning 없음.
+- **설치**: 14:18 KST, executable UUID `FA241B5F-5C11-3755-A8EA-89C1064D72AC`(arm64), CDHash `21a6b854c84053bf9040e3549000c435ab83fd6d`, 서명 `homi code signing`, `codesign --verify --strict` 통과. 숫자 진단을 남긴 확인용이다.
+- **주인 확인** (14:22–14:23, 이 설치본): 빈 recipient 에서 `가나` 대기 `다` 는 `가나다` 이고 추천이 없었다. `최효주` 를 쉬지 않고 치면 `최효주` 와 추천이 나왔다.
+  `최효` 대기 때는 추천이 없고, `주` 를 더하자 `최효주` 추천이 나왔다. Return 수락·Backspace·제목·본문 입력도 정상이었다.
+  14:19:06 새 PID `35937` 의 시작 UUID 가 일치했다. 진단 숫자에서 다섯 번 모두 둘째 경계는 기억한 시작 1 로 `{2,1}` 에 다시 mark 했고 문서 길이 3 으로 겹침이 없었다. Mail 은 계속 한 음절 뒤 `{3,1}` 을 답했다.
+- **최종본**: 숫자 진단을 지운 같은 source 를 14:26 KST 에 설치했다. executable UUID `059B2844-AD9E-379E-A8AF-CDDE755C3819`(arm64), CDHash `f1e5f6f61c61f3972499c1f75212aa722223509a`, `codesign --verify --strict` 통과. Debug·Release 각각 366개 test 에서 기존 known issue 1개 외 실패·warning 없음. 진단본은 `build/mail-joined-20261101/diagnostic-homi.zip` 에 보존했다.
+
 ## 구분할 경계
 
 - **대기 중 종료 없이 조합이 이어지는 경우**에는 S3의 초성이 S2의 종성이 되고, 다음 모음에서 도깨비불로 `insert(S2) → mark(S3)`가 나온다.
   실제 제품 Session의 합성 `가교주`로 확인했다(`build/mail-recipient-20261101/session-fixture/output.txt`). 이번 Mail 실측은 그 사이 idle commit이 있으므로 이 정상 순서와 구분한다.
-- 실제 Mail의 다음 mark 직전 selection을 한 번 묻는 진단도 보류했다. 새 client IPC 중 일반 key가 재진입하면 이미 만든 outer mark가 새 조합을 덮는 기존 반례를 더 유발할 수 있다.
-  sample을 invalid로 표시해도 입력 손상을 막지 못한다. 근거는 `one-query-proposal.md`이며 제품 코드·설치본은 유지한다.
+- 실제 Mail의 다음 mark 직전 selection을 한 번 묻는 진단은 보류했다. 새 client IPC 중 일반 key가 재진입하면 이미 만든 outer mark가 새 조합을 덮는 기존 반례를 더 유발할 수 있다.
+  sample을 invalid로 표시해도 입력 손상을 막지 못한다. 근거는 `one-query-proposal.md`다. [함께 넣기 규칙](#함께-넣고-다시-mark-2026-11-01-1346)도 action 을 만들기 전 준비 단계에서 묻고 중단 때 위치를 버리므로 이 안과 다르다.
   실제 Mail의 prefix·선택 범위를 확인할 수 있는 읽기 전용 근거를 우선한다. 안전한 구별 없이 commit을 무시하거나 이미 확정한 음절을 다시 넣는 우회는 채택하지 않는다.
 - callback 뒤 별도 closure의 idle range 질의도 검토했다. query 뒤에 action을 적용하지 않으면 앞선 특정 stale mark 반례는 피할 수 있지만,
   추가 동기 IPC·nested run loop·입력칸 식별의 한계가 남는다. main queue 예약만으로 client가 completion을 끝낸 시점이 보장되지는 않는다.
@@ -287,3 +407,10 @@ Apple은 Mail이 [이전 수신자로 주소를 제안·완성](https://support.
 |---|---|---|
 | 2026-11-01 | 설치본 16.0 (3901.200.71.1.16) | recipient의 대기 중 음절 누락을 두 차례 주인 확인. 기본·명시적 completion 대조는 정상이며 후자는 Mail과 같은 idle commit 순서도 관측. 짧은 prefix 모델에서 같은 누락이 가능하나 실제 Mail selection·구현은 미확정. 제품 유지 |
 | 2026-11-01 11:15 | 같은 Mail 설치본 | insert length만 SDK sentinel로 바꿔도 추천 뒤 `가다`로 누락. 다른 호환 경로 미검증으로 11:17 기준 코드·signed bundle 원복 |
+| 2026-11-01 12:37 | 같은 Mail 설치본 | [idle 확정 음절의 재개 규칙](#idle-확정-음절의-재개-2026-11-01-주인-확인에서-부족원복) 설치. 문서 모델 test 는 `가나다`. 실제 Mail·probe 의 주인 확인 대기 |
+| 2026-11-01 13:11 | 같은 Mail 설치본 | 주인 확인: `가나` 대기 때 추천이 `나` 를 지우고, `최효주` 는 추천이 사라지며 `주` 를 지운다. 재개 규칙으로 부족. 얼린 prefix 가설이 세 관측을 재현 ([절](#주인-확인-얼린-prefix-의-채움과-되돌림-2026-11-01-1311)) |
+| 2026-11-01 13:46 | 같은 Mail 설치본 | 재개 규칙 원복, [함께 넣고 다시 mark](#함께-넣고-다시-mark-2026-11-01-1346) 설치. 문서 모델은 세 경우 모두 음절 보존. 실제 Mail·probe 의 주인 확인 대기 |
+| 2026-11-01 13:53 | 같은 Mail 설치본 | 주인 확인: 대기 때 추천이 사라졌으나(Apple 과 같음) 다음 음절 경계에서 `가나다다`·`최효주주` 로 겹침. 위치 값 확인 필요 |
+| 2026-11-01 14:13 | 같은 Mail 설치본 | 숫자 진단: 다시 mark 뒤 Mail 의 `markedRange` 가 한 음절 뒤를 답한다. 14:18 [위치 기억](#mail-의-markedrange-응답과-위치-기억-2026-11-01-1418-주인-확인) 설치, 주인 확인 대기 |
+| 2026-11-01 14:23 | 같은 Mail 설치본 | 주인 확인: `가나다`·`최효주`·`최효` 대기 `주`·추천 수락·Backspace·제목·본문 정상. 14:26 진단을 지운 최종본 설치, probe 확인 대기 |
+| 2026-11-01 14:30 | 같은 Mail 설치본 | 최종본 `059B2844` 에서 주인이 probe 의 기본 입력·Caps Lock 전환·app 복귀와 Mail recipient `최효주` 를 정상 확인 |

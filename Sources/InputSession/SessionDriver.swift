@@ -45,6 +45,8 @@ public final class SessionDriver {
         return pendingCommit?.confirmedRevision == submission.revision && !submission.hasPendingMark
     }
     public var isMutatingSession: Bool { mutationDepth > 0 }
+    /// 경계 끝에 처리할 종료 요청이 기다리는 중 — client 가 그 사이 문서를 바꿨을 수 있다 (`AppProfile.insertsWithComposing` 의 위치).
+    public var hasPendingEnd: Bool { pendingCommit != nil || pendingDeactivation != nil }
 
     @discardableResult
     public func perform<Result>(_ operation: (inout Session) -> Result, apply: (Result) -> Void) -> Result {
@@ -67,6 +69,7 @@ public final class SessionDriver {
     private enum PreparedQuery {
         case selection
         case preceding(Int)
+        case markedStart
     }
     private enum PreparedAnswer<Value> {
         case unanswered
@@ -75,10 +78,13 @@ public final class SessionDriver {
 
     /// Session 값 복사본을 응답 cache 만으로 평가한다. Composer·Session 은 value type 이고 사전은 읽기 전용이다.
     /// 실제 client 질의는 inout 접근 밖에서 같은 event 경계 안에 둔다. 중첩 전이가 끝나면 이전 제안을 버린다.
+    /// marked 시작 위치는 다시 mark 의 명시적 range 가 된다 — 그 질의 중에 종료 요청이 오면 client 가 문서를 바꿨을 수 있어
+    /// 이 제안도 버린다 (`AppProfile.insertsWithComposing`).
     func performPrepared<Result>(
-        _ operation: (inout Session, () -> String?, (Int) -> (text: String, end: Int)?) -> Result,
+        _ operation: (inout Session, () -> String?, (Int) -> (text: String, end: Int)?, () -> Int?) -> Result,
         selectedText: (_ isCurrent: () -> Bool) -> String?,
         textBefore: (Int, _ isCurrent: () -> Bool) -> (text: String, end: Int)?,
+        markedStart: (_ isCurrent: () -> Bool) -> Int? = { _ in nil },
         isContextCurrent: @escaping () -> Bool = { true }
     ) -> Prepared<Result> {
         withEvent {
@@ -86,6 +92,7 @@ public final class SessionDriver {
             let revision = mutationRevision
             var selection: PreparedAnswer<String> = .unanswered
             var preceding: [Int: PreparedAnswer<(text: String, end: Int)>] = [:]
+            var start: PreparedAnswer<Int> = .unanswered
             while true {
                 var proposal = snapshot
                 var missing: PreparedQuery?
@@ -103,6 +110,13 @@ public final class SessionDriver {
                         return nil
                     case .answered(let text): return text
                     }
+                }, {
+                    switch start {
+                    case .unanswered:
+                        if missing == nil { missing = .markedStart }
+                        return nil
+                    case .answered(let location): return location
+                    }
                 })
                 guard mutationRevision == revision && isContextCurrent() else { return .interrupted }
                 guard let missing else {
@@ -114,6 +128,9 @@ public final class SessionDriver {
                 switch missing {
                 case .selection: selection = .answered(selectedText { self.mutationRevision == revision && isContextCurrent() })
                 case .preceding(let count): preceding[count] = .answered(textBefore(count) { self.mutationRevision == revision && isContextCurrent() })
+                case .markedStart:
+                    start = .answered(markedStart { self.mutationRevision == revision && isContextCurrent() })
+                    guard pendingCommit == nil && pendingDeactivation == nil else { return .interrupted }
                 }
                 guard mutationRevision == revision && isContextCurrent() else { return .interrupted }
             }

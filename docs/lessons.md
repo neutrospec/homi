@@ -6,6 +6,20 @@
 - 간헐 결함의 증거는 homi 의 기록이다 — 이상하면 주인이 곧바로 input menu 의 "최근 key 기록 저장" 을 누르고(`~/Library/Logs/homi/`), 그 file 로 가린다.
 - 원인에 🔶 가 붙은 것은 대응이 통했지만 원인은 추정이라는 뜻이다.
 
+## Mail recipient 의 자동완성이 대기 뒤 음절을 지운다 (2026-11-01)
+
+- **증상**: 빈 recipient 에서 `가나` 를 치고 기다리면 `가` 기준 추천이 `나` 를 지워, 이어 친 `다` 와 함께 `가다` 가 됐다.
+  `최효주` 를 친 뒤에는 추천이 사라지며 `주` 가 지워졌다. Apple 입력기에서는 없었다.
+- **원인** 🔶: homi 의 `insert(앞 음절) → mark(현재 음절)` 사이에 문서가 앞 음절만 가진 순간이 있다. Mail 은 mark 없는 그 text change 때 completion prefix 를 저장하는 것으로 보인다.
+  prefix 가 한 음절 짧아 대기 뒤 completion 이 그 prefix 로 채우거나 되돌리며 보이는 음절을 지웠다. Mail 구현을 직접 본 것이 아니라, 세 관측을 모두 재현한 모델과 교정 결과로 뒷받침한다.
+- **실패한 대응**: insert range 의 SDK sentinel 단독 변경과, idle 확정 음절을 다음 key 가 이어 가는 재개 규칙은 누락을 고치지 못해 원복했다.
+- **대응**: Mail 에서만 음절 경계에 두 음절을 함께 insert 하고 현재 음절만 그 자리에 다시 mark 한다 (`insertsWithComposing`, 결정 5 의 Mail 예외). text engine client 에서, 위치를 준비 단계에서 확인한 뒤에만.
+- **대응 중 생긴 결함**: Mail 은 위치를 준 mark 뒤의 `markedRange` 를 한 음절 뒤로 답해, 둘째 음절 경계에서 음절이 겹쳤다 (`가나다다`).
+  위치·길이 숫자만 남기는 임시 진단으로 확인했고, 다시 mark 한 위치를 homi 가 기억해 같은 조합 동안 묻지 않게 고쳤다.
+- **증거·확인**: 문서 모델 test 가 교정 전 누락과 겹침을 재현하고 교정 뒤 음절을 보존한다. Debug·Release 각각 366개 test 통과.
+  진단본에서 주인이 Mail recipient 의 네 경우를, 최종본 `059B2844-AD9E-379E-A8AF-CDDE755C3819` 에서 probe 와 Mail `최효주` 를 정상 확인했다. 자세한 것은 [Mail 원장](apps/mail.md#mail-의-markedrange-응답과-위치-기억-2026-11-01-1418-주인-확인).
+- **교훈**: app 이 답하는 문서 위치는 입력기가 위치를 준 호출 뒤에 틀릴 수 있다. homi 가 계산한 위치는 homi 가 기억하고, app 의 답은 app 이 스스로 둔 mark 에 대해서만 믿는다.
+
 ## source ID 의 앞부분만 비교해 다른 입력기를 homi 로 본다 (2026-11-01)
 
 - **증상·원인**: `hasPrefix("com.unocult.inputmethod.homi")`는 `…homily`·`…homi.evil`·`…homi.korean.extra`도 homi로 판단했다. Caps remap·표시·Chromium commit 정책에 들어가는 값이다. 이런 source를 실제 설치·선택했거나 최근 증상을 일으켰다는 증거는 없다.

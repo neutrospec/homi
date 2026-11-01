@@ -14,7 +14,8 @@ public enum Action: Sendable, Equatable {
     /// 조합 중인 글자를 marked text 로 보인다. 빈 문자열이면 marked text 를 지운다.
     /// marked text 가 없고 선택 영역이 있으면 그것을 대신한다.
     case mark(String)
-    /// 이미 확정된 글자 `range`(문서 위치)를 marked text 로 되돌린다 — ⌥↩ 가 방금 친 단어를 바꿀 때만 (결정 5 의 예외).
+    /// 이미 확정된 글자 `range`(문서 위치)를 marked text 로 되돌린다 — 결정 5 의 예외 둘에서만:
+    /// ⌥↩ 가 방금 친 단어를 바꿀 때, 그리고 `AppProfile.insertsWithComposing` 인 app 에서 함께 넣은 현재 음절을 다시 mark 할 때.
     case markCommitted(String, range: NSRange)
     /// 글자를 확정해 넣는다. marked text 가 있으면 그 자리를, 선택 영역이 있으면 그것을 대신한다.
     case insert(String)
@@ -50,7 +51,8 @@ public struct Outcome: Sendable, Equatable {
 /// client 반영은 할 일 목록으로 돌려준다. IMK 에서는 `SessionDriver` 가 한자 질의를 값 복사본의
 /// 준비 단계와 분리하고 질의·상태 변경·반영을 동기 경계로 감싸 재진입한 lifecycle 을 처리한다.
 /// 조합 중인 글자는 marked text 로만 보이고, 이미 확정한 글자는 다시 쓰지 않는다 (AGENTS.md 결정 5) —
-/// 예외는 ⌥↩ 가 방금 친 단어를 바꿀 때 하나: 교체를 제대로 받는 client 에서, 그 자리 글자를 확인한 뒤에만.
+/// 예외는 둘이다. ⌥↩ 가 방금 친 단어를 바꿀 때 — 교체를 제대로 받는 client 에서, 그 자리 글자를 확인한 뒤에만.
+/// 그리고 Mail 처럼 중간 순간의 text change 에 기대는 app 의 음절 경계 — text engine client 에서, 방금 넣은 현재 음절을 다시 mark 할 때만.
 ///
 /// 모드는 session 밖(app 별 기억)에 있고 key 마다 받아서 돌려준다. 전환(`toggle`)은 전환 key 의 event 처리 안에서 끝난다 —
 /// 전환 key(Caps Lock·오른쪽 ⌘ 의 tap)와 다음 key 가 같은 흐름에서 차례로 오므로 "전환 → 다음 key" 순서가 구조로 보장된다 (결정 1·3).
@@ -60,6 +62,10 @@ public struct Session: Sendable {
     /// 이 입력칸에 homi 가 방금 이어서 친 한글 중 확정된 것 — ⌥↩ 가 바꿀 단어를 찾는 곳 (app 의 문서를 뒤지지 않는다).
     /// 커서가 움직일 만한 일(한글 아닌 key, 수식키 조합, click, 입력칸 이동, 전환)이 있으면 비운다.
     private var recent = ""
+    /// 지금 marked text 의 문서 시작 위치 — homi 가 위치를 주어 다시 mark 한 뒤에만 안다 (`AppProfile.insertsWithComposing`).
+    /// Mail 은 위치를 준 mark 뒤의 `markedRange` 를 한 음절 뒤로 답하고 제자리 mark 동안 그 값을 유지한다 (docs/apps/mail.md).
+    /// 그래서 같은 mark 를 제자리에서 고치는 자모·Backspace 동안 이 값을 쓰고, 그 밖의 모든 일에서 버린다.
+    private var markStart: Int?
     /// 한자 후보를 고르는 중이면 그 상태.
     private var choosing: Choosing? {
         didSet {
@@ -111,22 +117,27 @@ public struct Session: Sendable {
     public var hasCandidates: Bool { choosing != nil }
 
     /// key 하나를 처리한다. `profile` 은 이 입력칸의 app 규칙 (`AppRules`).
-    /// ⌥↩ 때만 app 에게 묻는 것 둘 — `SessionDriver` 의 경계 안에서 실행한다:
+    /// app 에게 묻는 것 — `SessionDriver` 의 경계 안에서 실행한다. ⌥↩ 때 둘:
     /// - `selectedText`: 선택 영역의 글자
     /// - `textBefore(n)`: 조합 중인 글자(없으면 커서) 바로 앞 n 글자와 그 끝의 문서 위치.
     ///   확정된 글자의 교체를 제대로 받는 client 만 답한다 — 아니면 nil 이고, 조합 중인 글자만 바꾼다.
+    /// 그리고 `AppProfile.insertsWithComposing` 인 app 의 음절 경계에서 하나:
+    /// - `markedStart`: 지금 marked text 의 시작 문서 위치. text engine client 만 답한다 — 아니면 nil 이고 평소대로 넣는다.
     public mutating func handle(
         _ key: KeyEvent, mode: Mode, profile: AppProfile = AppProfile(), selectedText: () -> String? = { nil },
-        textBefore: (Int) -> (text: String, end: Int)? = { _ in nil }
+        textBefore: (Int) -> (text: String, end: Int)? = { _ in nil }, markedStart: () -> Int? = { nil }
     ) -> Outcome {
-        let outcome = handleKey(key, mode: mode, profile: profile, selectedText: selectedText, textBefore: textBefore)
+        let outcome = handleKey(key, mode: mode, profile: profile, selectedText: selectedText, textBefore: textBefore,
+            markedStart: markedStart)
         return Self.following(outcome, from: mode, profile: profile)
     }
 
     private mutating func handleKey(
         _ key: KeyEvent, mode: Mode, profile: AppProfile, selectedText: () -> String? = { nil },
-        textBefore: (Int) -> (text: String, end: Int)? = { _ in nil }
+        textBefore: (Int) -> (text: String, end: Int)? = { _ in nil }, markedStart: () -> Int? = { nil }
     ) -> Outcome {
+        let knownStart = markStart
+        markStart = nil  // 아래 두 곳(제자리 mark)에서만 다시 이어 간다
         if profile.passThrough {
             // 한/영 전환 없는 app — 전환도 조합도 하지 않는다. (조합이 남아 있을 수 없지만, 있다면 잃지 않게 확정한다.)
             return Outcome(handled: false, actions: commit(), mode: mode)
@@ -155,6 +166,7 @@ public struct Session: Sendable {
                 if !recent.isEmpty { recent.removeLast() }  // app 이 확정된 글자 하나를 지운다
                 return Outcome(handled: false, actions: [], mode: mode)
             }
+            if !composer.composing.isEmpty { markStart = knownStart }  // 같은 mark 를 제자리에서 고친다
             return Outcome(handled: true, actions: [.mark(composer.composing)], mode: mode)
         }
         guard let jamo = Dubeolsik.jamo(keyCode: key.keyCode, shift: key.modifiers.contains(.shift)) else {
@@ -163,6 +175,16 @@ public struct Session: Sendable {
         }
         let committed = composer.type(jamo)
         remember(committed)
+        let composing = composer.composing
+        if committed.isEmpty {
+            markStart = knownStart  // 같은 mark 를 제자리에서 고친다 — 새 조합이면 아직 모른다
+        } else if !composing.isEmpty, profile.insertsWithComposing, let start = knownStart ?? markedStart() {
+            // 앞 음절만 가진 중간 순간을 문서에 남기지 않는다 — 함께 넣고 현재 음절만 그 자리에 다시 mark (`AppProfile.insertsWithComposing`).
+            // insert 는 위치 없이 marked text 를 대신하므로 두 음절은 `start` 에서 시작한다. 다시 mark 한 위치는 기억한다 (`markStart`).
+            let range = NSRange(location: start + committed.utf16.count, length: composing.utf16.count)
+            markStart = range.location
+            return Outcome(handled: true, actions: [.insert(committed + composing), .markCommitted(composing, range: range)], mode: mode)
+        }
         let actions: [Action] = committed.isEmpty ? [] : [.insert(committed)]
         return Outcome(handled: true, actions: actions + [.mark(composer.composing)], mode: mode)
     }
@@ -300,6 +322,7 @@ public struct Session: Sendable {
         mode: Mode, profile: AppProfile, selectedText: () -> String? = { nil },
         textBefore: (Int) -> (text: String, end: Int)? = { _ in nil }
     ) -> Outcome? {
+        markStart = nil
         guard !profile.passThrough else { return nil }
         if choosing != nil { return again(mode: mode) }
         guard mode == .korean else { return nil }
@@ -356,6 +379,7 @@ public struct Session: Sendable {
         let closing: [Action] = choosing.map { [.hideCandidates] + $0.restore } ?? []
         choosing = nil
         recent = ""
+        markStart = nil
         let text = composer.flush()
         return closing + (text.isEmpty ? [] : [.insert(text)])
     }
