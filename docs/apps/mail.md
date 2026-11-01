@@ -143,6 +143,43 @@ mark의 `{NSNotFound,0}`·조합·commit 정책·추가 질의·timing 코드는
 패치·red/Debug/Release test·설치·시작·내용 없는 callback·원복 기록은 `build/mail-range-20261101/`에 있다.
 기존 signed bundle은 그 directory의 `baseline-homi.zip`으로 보존했다. 단독 시험은 Mail의 실제 prefix·selection 값을 관측한 것이 아니다.
 
+### Apple 한국어 입력기와의 차이 (2026-11-01, 주인 관측)
+
+주인은 Apple 한국어 입력기로 비교했을 때 **S1에서 대기하면 추천이 나오고, S1S2에서는 나오지 않으며, S1S2S3에서는 다시 나온다**고 보고했다.
+입력 누락이 없었고, homi처럼 S1S2를 입력한 상태에서 S1 기준으로 보이는 추천이 나타나는 장면도 없었다.
+이는 같은 Mail에서 입력기별 상호작용이 다르다는 단서다. 후보의 실제 검색어·selection·Apple의 client 호출은 이 비교에서 수집하지 않았다.
+S1S2의 추천 부재를 단순한 prefix 불일치, Apple만의 특례, 모든 조합 중 추천 억제로 단정하지 않는다.
+
+앞선 자체 token field에서는 10:45:45.353에 `controlTextDidChange`가 **text=`가`, hasMark=false**를 관측했고,
+같은 key의 처리가 끝난 45.357에는 **text=`가나`, hasMark=true**였다. 일반 field에서도 같은 중간 notification을 확인했다.
+즉 homi의 `insert(가) → mark(나)` 사이 상태를 client가 볼 수 있다는 것은 실제 AppKit 대조의 사실이다.
+Mail이 그 시점의 prefix를 저장하고 새 mark 뒤에도 유지한다는 것은 여전히 가설이다.
+
+과거 [Apple 입력기의 별도 probe](../macos-input.md#marked-text-없이-확정하고-바꿔치기한다)는 자모마다 확정 text를 넣고 replacement로 고쳤다.
+이때는 client에 보이는 text·변경 알림의 시점이 homi와 달라질 수 있지만, 현재 Mail 안의 Apple 호출 방식까지 확인한 것은 아니다.
+또한 [Mozc의 공개 구현](https://github.com/google/mozc/blob/921b8cc99904c8d31b771e395513da0a5d55182a/src/mac/mozc_imk_input_controller.mm)은 preedit segment들을 하나의 mark로 모은다.
+조합·확정 단위가 다르면 중간 prefix가 노출되는 시점도 다르므로, 이 조건의 결함이 모든 CJK 입력기에서 똑같이 나타나야 하는 것은 아니다.
+
+조사한 공개 IMK API에서는 insert와 다음 mark를 하나의 client transaction으로 묶거나 Mail 추천을 억제하는 수단을 찾지 못했다.
+[NSTextStorage의 batch editing](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/TextEditing/Tasks/BatchEditing.html)은 client 측 제어이며 외부 입력기의 권한으로 일반화하지 않는다.
+기본 입력을 Apple식 replacement로 전환하거나 조합 전체를 무조건 오래 유지하는 것은 확정·편집·focus 경계를 바꾼다.
+따라서 새 비교는 **해법 부재나 Mail 단독 결함의 근거가 아니라, 두 입력기의 반영 방식과 자동완성의 접점을 더 좁힐 근거**로 둔다.
+공개 계약·코드 검토는 같은 `build/` directory의 `apple-comparison-contract-review.md`·`apple-comparison-code-review.md`에 있다.
+
+별도 창 없는 `NSTextView`에 현재 제품 Session의 action을 적용한 자동 대조도 진행했다.
+Apple 조건은 과거 호출 형태의 수동 모델이며 현재 Apple 입력기를 실행한 것이 아니다.
+
+| `가나`까지 만드는 방식 | 마지막 text-change 알림의 text | 알림 때 범위를 저장하는 조건부 completion 모델 |
+|---|---|---|
+| homi Session의 음절별 insert → mark | `가` (1회) | 저장 `{0,1}` → 후보 `가나다`의 selection `{1,2}` |
+| Apple식 확정·replacement 모델 | `가나` (5회) | 저장 `{0,2}` → selection `{2,1}` |
+| 전체 단어 mark 모델 | 알림 없음 | completion 경로 미도달 — 해결 통과 아님 |
+
+범위는 상수로 넣지 않고 notification 당시 자체 view의 selection에서 계산했다. 다만 **그 시점에만 저장한다는 host 정책은 가정**이다.
+IMK callback이 없는 homi 모델에는 `나` 조합이 남아 이후에도 `가나다`가 됐다. 실제 Mail의 idle commit 뒤 누락 재현으로 세지 않는다.
+Apple 모델의 completion 뒤 입력기 상태는 미확인으로 후속 입력을 검사하지 않았다. 근거는 `notification-comparison.swift`·`.log`·`.md`다.
+확정 단위를 늘리는 안은 추천 시작 시점·Backspace·focus 처리가 바뀌므로 이 결과만으로 제품에 적용하지 않는다. 설치본은 유지한다.
+
 ## 구분할 경계
 
 - **대기 중 종료 없이 조합이 이어지는 경우**에는 S3의 초성이 S2의 종성이 되고, 다음 모음에서 도깨비불로 `insert(S2) → mark(S3)`가 나온다.
