@@ -121,6 +121,28 @@ REA 도구는 연결되지 않아 설치·설정 없이 시스템 `dyld_info` �
 정적 자료와 독립 검토는 `mail-static-review.md`·`mail-static-independent.md`·`mailui-block-review.md`, 주소·바이트 대조는 `mailui-stub-resolution.*`·`mailui-block-resolution.*`에 있다.
 원본 disassembly는 `build/`에만 두고, 정적 경로를 실제 실행 관측이나 Mail의 결함 확정으로 확대하지 않는다.
 
+### insert range 단독 대조 (2026-11-01, 원복)
+
+주인 요청으로 IMK 계약과 다른 `insertText`의 인자만 분리해 시험했다. 기준은 `7c7cea3`의 제품 코드·09:18 설치본이며,
+유일한 runtime 변경은 `.insert`의 `replacementRange.length`를 `0`에서 `NSNotFound`로 바꾼 것이다. location은 계속 `NSNotFound`이고,
+mark의 `{NSNotFound,0}`·조합·commit 정책·추가 질의·timing 코드는 바꾸지 않았다.
+
+- SDK sentinel을 검사하도록 기존 test를 먼저 바꾸니 insert 검사 두 개는 실패하고 mark 검사는 통과했다.
+  단독 변경 후 `swift build`와 Debug·Release 각각 347개 test에서 기존 일반 key 재진입 known issue 1개 외 실패·warning은 없었다.
+- 11:12 시험본 UUID는 `6A3EB3B4-A74F-321C-A007-18BF565948E6`, CDHash는 `ea907058ca1a38b3ea3fd01d3c928e0276ad4638`, 서명은 `homi code signing`이다.
+  시작 log의 PID `56247`·실행 UUID가 설치본과 일치했다.
+- 같은 Mail 빈 recipient에서 `가나` → 추천 대기 → `다`를 입력한 주인은 **추천 목록이 나타났고 여전히 `가다`**라고 확인했다.
+  controller `56247-B3BBCD1B-1A60-4B22-90E1-21D472AB88D3/2`의 첫 시험 구간에서 11:15:11.497 mark 반환 → 11.880 idle commit → 11.884 insert 반환 →
+  13.297·13.381 새 mark가 관측돼, 앞선 `{NSNotFound,0}` 조건과 같은 형태의 종료 순서였다.
+
+**이 인자 차이만 교정해서는 이번 Mail 누락이 해결되지 않았다.** 이는 기존 인자가 계약상 옳다거나, 모든 상황에서 길이가 무시된다는 증거는 아니다.
+시험본의 Chrome·native 기본 입력 등 다른 경로는 주인 확인을 받지 않았으므로, 효과 없는 전역 실험을 유지하지 않고 11:17에 제품 코드·test와 서명된 기존 bundle을 원복했다.
+원복 UUID `A73858F5-93E6-398F-AE3E-38F5860283DF`, CDHash `24db9b36de31460285c6a71d604362523c531f9c`를 검사했고, 11:17:25 새 PID `83907`의 시작 UUID도 일치했다.
+계약 차이의 독립 교정·호환성 검증은 남는다.
+
+패치·red/Debug/Release test·설치·시작·내용 없는 callback·원복 기록은 `build/mail-range-20261101/`에 있다.
+기존 signed bundle은 그 directory의 `baseline-homi.zip`으로 보존했다. 단독 시험은 Mail의 실제 prefix·selection 값을 관측한 것이 아니다.
+
 ## 구분할 경계
 
 - **대기 중 종료 없이 조합이 이어지는 경우**에는 S3의 초성이 S2의 종성이 되고, 다음 모음에서 도깨비불로 `insert(S2) → mark(S3)`가 나온다.
@@ -150,3 +172,4 @@ Apple은 Mail이 [이전 수신자로 주소를 제안·완성](https://support.
 | 날짜 | version | 내용 |
 |---|---|---|
 | 2026-11-01 | 설치본 16.0 (3901.200.71.1.16) | recipient의 대기 중 음절 누락을 두 차례 주인 확인. 기본·명시적 completion 대조는 정상이며 후자는 Mail과 같은 idle commit 순서도 관측. 짧은 prefix 모델에서 같은 누락이 가능하나 실제 Mail selection·구현은 미확정. 제품 유지 |
+| 2026-11-01 11:15 | 같은 Mail 설치본 | insert length만 SDK sentinel로 바꿔도 추천 뒤 `가다`로 누락. 다른 호환 경로 미검증으로 11:17 기준 코드·signed bundle 원복 |
