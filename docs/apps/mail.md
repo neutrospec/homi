@@ -18,7 +18,44 @@
 4. 추천이 나타날 시간을 준 뒤 S3를 입력하면 S2가 사라져 **S1S3**가 된다고 보고했다.
 
 추천 prefix가 실제로 확정된 text만 읽는지, S2가 selected range에 포함됐는지, 별도 편집으로 사라졌는지는 미확인이다.
-추천이 늦게 나타나는 동작과 글자 유실은 구분한다. 반복 가능한 사용자 보고이며 agent가 실제 실패를 포착한 결과는 아직 아니다.
+추천이 늦게 나타나는 동작과 글자 유실은 구분한다. 이후 주인이 같은 조건의 누락을 다시 확인했고 아래 callback 순서를 확보했다.
+
+### 실패 재현 때의 callback (2026-11-01 10:24 KST)
+
+빈 recipient 칸에서 두 음절 입력 → 약 2초 대기 → 세 번째 음절 입력을 요청했고, 주인은 추천을 직접 고르지 않는 이 검사에 **중간 음절 누락**으로 답했다.
+동시 관측은 `metadata-3.log`의 새 controller `45843-4CD2CFD2-28B0-4585-BE61-8D18CE742D0D/16`이다. 실제 글자·key code는 기록하지 않았다.
+
+| 시각 | 관측한 homi 경계 |
+|---|---|
+| 10:24:13.293–15.077 | 한글 mode로 입력을 시작하고 mark 네 차례 뒤 insert → mark를 보냈다. 마지막 반환 때 composing=true다. |
+| 10:24:15.465 | 마지막 mark 반환 약 0.39초 뒤, inputDepth=0에서 `commitComposition`이 왔다. renderer=notFound라 TIS를 질의하지 않고 `insert`를 보냈다. 반환 때 composing=false다. |
+| 10:24:16.984·17.260 | 이후 두 입력은 각각 새 mark만 보냈다. 두 번째에 이전 조합을 확정하는 insert는 없었다. |
+| 10:24:18.438 | 다른 app으로 돌아가는 시점에 deactivate·insert와 그 안의 commit callback이 왔다. 앞선 대기 중 commit과 구분한다. |
+
+**해석**: 주인이 수행한 순서와 대조하면 S2 조합 뒤 기다리는 동안 먼저 확정 요청을 받고, S3는 새 조합으로 시작한 흐름에 해당한다.
+문자 대응은 주인 보고·순수 Session의 정상 순서와의 대조이며 trace가 문자열을 직접 확인한 것은 아니다.
+이 controller의 생성부터 기록한 구간에는 일반 key 재진입 신호나 중첩 key의 client action이 관측되지 않았다. 다른 경로의 재진입 가능성을 배제하지 않는다.
+
+조합 종료 callback과 homi의 insert 호출은 확인했다. **그 insert가 Mail 문서에 S2를 보존했는지, 자동완성이 이후 S2를 포함하는 selection을 만들었는지는 아직 모른다.**
+Mail 자동완성 코드가 callback을 직접 일으켰는지도 시각만으로 확정하지 않는다. 기존 일반 key 재진입 반례 대신 이 idle commit 전후의 외부 편집 경계를 우선 대조한다.
+
+### 기본 AppKit control 대조 (2026-11-01 10:28 KST)
+
+별도 app의 기본 `NSTokenField`와 `NSTextField`에서 `가나` → 약 2초 대기 → `다`를 입력했고, 주인은 **두 칸 모두 `가나다`**로 정상 확인했다.
+token field에는 가상 후보 `가나다`·`가나마`, completion delay 0.4초, 첫 후보 선택 0을 설정했다. field editor·selection은 직접 바꾸지 않았다.
+
+시험창 자체 기록에서 `가나` 뒤 marked range와 selection은 모두 `{1,1}`로 유지됐다. 대기 뒤 `ㄷ`에 `가낟`, 다음 `ㅏ`에 `insert(나) → mark(다)`가 반영됐다.
+그 대기 중 completion delegate는 호출되지 않았고 homi trace에도 idle commit이 없었다. 따라서 **Mail에서 실패한 자동완성·idle commit 경로에 도달하지 않은 대조 결과**다.
+영문 예비 입력에는 token completion delegate가 호출됐으므로 delegate 연결 자체가 빠진 시험은 아니다.
+근거는 `build/mail-recipient-20261101/completion-probe-2D225E11-17E7-41E6-AD50-D7741ABD0F53.log`와 `metadata-4.log`다. 시험창의 가상 글자만 기록했고 실제 Mail 내용은 수집하지 않았다.
+
+초기 선택 -1 조건은 실행하지 않았다. 현재는 한글 조합 중 후보 callback 자체가 없어 선택 index만 바꾸는 반복보다, 공개 completion API의 조합 종료 동작을 먼저 대조한다.
+실제 Mail의 commit 경로에는 재사용할 range 질의 결과가 없다. 관측용 client 질의를 새로 넣으면 재진입·timing을 바꿀 수 있어, 우선 자체 client 안의 합성 관측을 진행한다.
+
+별도 standalone `NSTextView`에서 `complete(nil)`을 직접 호출하면 후보를 빈 배열로 돌려줘도 `unmarkText → completions(range: {0,2})`가 호출되고 `가나`의 mark가 해제됐다.
+mark 끝 caret와 전체 mark 선택 양쪽에서 같았다. 이는 window·IMK에 연결하지 않은 API 실험이며 Mail callback이나 음절 누락을 재현한 것이 아니다.
+근거는 같은 directory의 `completion-api-fixture.swift`·`completion-api-output.log`·`completion-api-review.md`다.
+다음 실제 대조는 Mail의 빈 recipient에서 가상 `가나` → 대기 → `다`를 입력하고 추천 유무·결과·idle commit을 함께 확인하는 것이다.
 
 ## 구분할 경계
 
@@ -35,10 +72,9 @@
 현재 Mail의 빈 `New Message` 창과 AX의 `Mail.toField`를 확인했다. 이 role·identifier로 구현 class나 실제 mark/selection 관계를 확정하지 않는다.
 제품 코드는 유지한 채 내용 없는 homi trace 관측을 준비했다. 실제 recipient·주소·본문이나 최근 key recorder를 file로 수집하지 않는다.
 첫 4분 관측에는 Mail과 연결할 controller·실패 구간을 확보하지 못했다. 이는 Mail에서 callback이나 재진입이 없었다는 증거가 아니다.
-Mail로 식별된 controller만 저장하는 10분 관측을 이어 준비했으며, 실제 재현 결과는 주인 확인을 기다린다.
+Mail로 식별된 controller만 저장하는 두 번째 관측에도 해당 입력 구간이 없었다. 세 번째 관측에서 위 재현 순서를 확보한 뒤 수집을 종료했다.
 별도 AppKit 시험창은 고정 가상 후보를 가진 기본 `NSTokenField`와 일반 `NSTextField`를 대조한다. 주소록·Mail 계정은 사용하지 않는다.
-첫 후보의 초기 선택 0과 -1을 비교하며 field editor를 교체하거나 selection을 직접 조작하지 않는다.
-별도 bundle의 compile·서명 검증까지 마쳤고 실제 keyboard 시험은 아직이다. 이 시험창의 성공·실패도 Mail의 실제 구현과 같은 경로라는 증거는 아니다.
+별도 bundle의 compile·서명 검증과 위 실제 keyboard 대조를 마쳤다. 이 시험창의 성공·실패도 Mail의 실제 구현과 같은 경로라는 증거는 아니다.
 
 Apple은 Mail이 [이전 수신자로 주소를 제안·완성](https://support.apple.com/en-au/guide/mail/mlhlp1113/mac)한다고 설명한다.
 [`NSTokenField`](https://developer.apple.com/documentation/appkit/nstokenfield)는 일반 mail app 주소의 예를 들지만 현재 Apple Mail이 이 class를 쓴다는 증거는 아니다.
@@ -48,4 +84,4 @@ Apple은 Mail이 [이전 수신자로 주소를 제안·완성](https://support.
 
 | 날짜 | version | 내용 |
 |---|---|---|
-| 2026-11-01 | 설치본 16.0 (3901.200.71.1.16) | recipient 자동완성 대기 뒤 중간 음절 누락 보고. 원인·다른 app으로의 일반화는 미확정. 관측·대조 준비 |
+| 2026-11-01 | 설치본 16.0 (3901.200.71.1.16) | recipient 자동완성 대기 뒤 중간 음절 누락 재현을 주인 확인. 10:24 대기 중 commit callback·insert·새 조합 순서를 관측. 기본 token/plain 대조는 정상이나 대기 중 completion·idle commit 경로가 없었다. 실제 Mail selection·문서 반영 원인은 미확정 |
