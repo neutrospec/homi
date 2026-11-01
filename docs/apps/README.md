@@ -22,6 +22,7 @@ homi 를 바꿀 때(특히 `Sources/InputSession/AppRules.swift`) 그 app 의 �
 |---|---|---|---|---|
 | [Telegram](telegram.md) | `ru.keepcoder.Telegram` | AppKit | 12.9 | 조합 중 Enter 다시 보내기 |
 | [TextEdit](textedit.md) | `com.apple.TextEdit` | AppKit | 1.21 | — |
+| [Apple Mail](mail.md) | `com.apple.mail` | recipient 구현 미확인 | 16.0 | 전용 우회 없음·자동완성 뒤 음절 누락 조사 |
 | [VS Code](vscode.md) | `com.microsoft.VSCode` · `com.microsoft.VSCodeInsiders` | Chromium | 1.139.0 | ESC → 영문 |
 | [Obsidian](obsidian.md) | `md.obsidian` | Chromium | 1.13.7 | ESC → 영문 |
 | [Chrome](chrome.md) | `com.google.Chrome` | Chromium | 154.0.8037.98 | — |

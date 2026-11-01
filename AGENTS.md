@@ -271,7 +271,7 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 ## 다음 작업
 
 **2026-11-01 주인 채택:** [후속 네 작업](docs/stability-review.md#후속-네-작업-2026-11-01)을 1번 일반 key 재진입 → 2번 Caps Lock mapping cache → 3번 source 종료 판단 → 4번 첫 renderer 판별의 동기 file I/O 순서로 진행한다.
-현재는 **1번의 반례와 실제 증상 대조·처리 규칙 검토**다. 이번 기록은 제품 동작을 바꾸지 않으며 각 작업의 교정 기준·상태는 위 표에 둔다.
+현재는 **1번의 반례와 [Mail recipient 자동완성의 음절 누락](docs/apps/mail.md) 대조·처리 규칙 검토**다. Mail과 기존 재진입 반례의 동일 원인을 전제하지 않는다. 각 작업의 교정 기준·상태는 위 표에 둔다.
 
 2026-11-01 [Apple 입력 API·macOS 27 조사](docs/research/apple-input-sdk-27.md)는 공개 계약과 기존 검증 공백을 정리한다.
 [IMK 이론 검증](docs/stability-review.md#imk-이론-검증-범위-2026-11-01)은 한자 질의 교정과 일반 key 재진입의 남은 반례를 다룬다.
