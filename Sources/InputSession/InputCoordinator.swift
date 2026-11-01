@@ -1,5 +1,7 @@
 /// 입력 판단에 필요한 client 경계. 실제 IMK client 와 test client 가 같은 순서로 호출된다.
 public protocol InputClient {
+    /// app ID 질의의 출처 객체. 입력칸·focus·조합 소유권의 증거가 아니다. client 질의 없이 돌려준다.
+    var appIDSource: AnyObject? { get }
     func bundleIdentifier() -> String?
     func selectedText() -> String?
     func textBefore(_ count: Int) -> (text: String, end: Int)?
@@ -9,6 +11,7 @@ public protocol InputClient {
 }
 
 public extension InputClient {
+    var appIDSource: AnyObject? { nil }
     func selectedText(while isCurrent: () -> Bool) -> String? {
         guard isCurrent() else { return nil }
         let result = selectedText()
@@ -33,6 +36,8 @@ public final class InputCoordinator {
     public let driver: SessionDriver
     /// 실제 client 에서 얻은 ID 만 cache 한다. fallback 은 다음 event 에 다시 확인한다.
     public private(set) var clientApp: ClientAppID?
+    /// ID 를 확인한 proxy 의 수명을 늘리지 않는다. 문서/입력칸 identity 로 쓰지 않는다.
+    private weak var clientAppSource: AnyObject?
     /// 종료 flush 와 실제 입력 event 를 구분한다. driver 의 depth 로 대신하면 새 시작을 continuation 으로 오인한다.
     public private(set) var inputDepth = 0
     public var needsStart: Bool { activation.needsStart }
@@ -200,7 +205,16 @@ public final class InputCoordinator {
 
     private func resolveApp(_ client: any InputClient) -> InputApp {
         if let clientApp { return .client(clientApp) }
-        guard let id = ClientAppID(client.bundleIdentifier()) else { return .fallback(fallbackApp()) }
+        // 질의 도중 같은 proxy 의 중첩 입력이 실제 ID 를 확인할 수 있다. 강한 지역 참조는 질의가 끝날 때까지 주소 재사용을 막는다.
+        let source = client.appIDSource
+        guard let id = ClientAppID(client.bundleIdentifier()) else {
+            if let source, client.appIDSource === source, clientAppSource === source, let clientApp {
+                return .client(clientApp)
+            }
+            return .fallback(fallbackApp())
+        }
+        // 질의 도중 출처가 바뀌면 유효 ID 는 기존처럼 보존하되 출처를 증명했다고 여기지 않는다.
+        clientAppSource = (source != nil && client.appIDSource === source) ? source : nil
         clientApp = id
         let app = InputApp.client(id)
         notice(.appResolved(app: id.bundleID, mode: mode(for: app), passThrough: profile(id.bundleID).passThrough))

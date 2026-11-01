@@ -6,6 +6,30 @@
 - 간헐 결함의 증거는 homi 의 기록이다 — 이상하면 주인이 곧바로 input menu 의 "최근 key 기록 저장" 을 누르고(`~/Library/Logs/homi/`), 그 file 로 가린다.
 - 원인에 🔶 가 붙은 것은 대응이 통했지만 원인은 추정이라는 뜻이다.
 
+## ID 질의의 중첩이 이미 확인한 app 을 놓친다 (2026-11-01)
+
+- **증상·원인**: 첫 `bundleIdentifier` 질의 도중 중첩 입력이 실제 app ID를 확인했어도, 바깥 질의가 nil·빈 문자열로 돌아오면 `resolveApp`은 fallback app의 mode를 썼다. 실제 app은 한글·fallback은 영문인 조건과 그 반대 모두 잘못된 판단을 만들었다. 제품 코드의 조건부 반례이며 실제 IMK 발생이나 Telegram 증상과의 인과는 미확인이다.
+- **증거**: 제품 `Client`·coordinator·SessionDriver와 fake IMK proxy를 연결한 `ClientIdentityTests`에서 실패를 먼저 확인했다(`build/explicit-review-20261101/key-identity-before.log`). 단순 cache 재사용은 다른 proxy의 ID까지 채택하는 대조 반례가 있어 사용하지 않았다.
+- **대응**: 추가 IPC 없이 ID 질의의 출처 proxy를 확인한다. 바깥 답이 nil·빈 값이고 그 질의 중 **같은 출처**가 실제 ID를 확인했을 때만 재사용한다. 질의 동안 지역 참조로 출처를 보존하고 cache의 출처는 weak로 둔다. 출처가 없거나 바뀌면 기존 fallback, 유효한 바깥 답과 기존 cache의 우선순위도 유지한다. 실제 영문 시작 뒤 중첩 한글 전환, 두 mode 방향, 출처 변경·해제와 질의 횟수를 회귀로 검사한다.
+- **한계**: 같은 proxy가 한 동기 질의 동안 같은 client process를 가리킨다는 기존 app 식별의 가정을 둔다. proxy를 DOM 입력칸·focus·확정 완료의 증거로 쓰지 않는다. 첫 ID가 끝내 없을 때의 fallback과 일반 `insert → mark` 중첩 known issue는 별개로 남는다.
+
+## 오래된 모드 말풍선 요청이 뒤늦게 표시된다 (2026-11-01)
+
+- **증상·원인**: `showMode`는 caret 질의 후 과거 mode·좌표를 조건 없는 Task로 예약했다. 질의 중 새 요청이 생기거나 실행 전에 mode·owner가 바뀌어도 옛 말풍선이 표시될 수 있었다. 사용자가 이 표시 오류를 보고한 것은 아니다.
+- **대응**: 제품 `ModePresentation`이 caret 질의 전에 요청 세대를 잡고, `afterEvent` 뒤에도 최신 요청·active owner·app·mode·pass-through를 확인한다. busy 중 실행되면 Session을 읽거나 Task를 반복 생성하지 않고 현재 event 끝에 연결한다. commit·mouse·deactivate·source 종료·close와 owner 교체는 옛 요청을 무효화한다. 실제 app ID가 없는 경우에는 HUD만 생략하며 입력과 mode는 기존대로 처리한다.
+- **증거·한계**: 실제 presentation helper·SessionDriver에 queue·caret·context를 주입해 중첩 질의·역순 실행·mode ABA·무효화 뒤 owner 복귀·busy·수명과 추가 caret 질의 없음을 검사한다. IMK callback 자체의 실행 test는 아니며 controller hook의 연결은 code review로 확인했다. 같은 proxy의 실제 입력칸 소유권, 이미 표시된 창의 이동, 진행 중인 fade animation 취소까지 검증하거나 교정한 것은 아니다.
+
+## 한자 사전 load 실패가 진단 없이 묻힌다 (2026-11-01)
+
+`Memory.swift`의 `try?`는 사전 파일 읽기·mapping 실패를 기록 없이 nil로 바꿨다. `do/catch`에서 고정 영문 error를 한 번 남기고
+기존 nil 반환·초기화 시점·기본 입력을 유지한다. 경로·오류 description·입력 내용은 기록하지 않는다.
+`HanjaDictionary(contentsOf:)`가 여기서 던지는 것은 `Data(contentsOf:options:)`의 오류이며, malformed 사전의 형식 검사를 추가한 것은 아니다.
+
+위 세 변경은 `swift build`, Debug·Release 각각 **342개 test**(TIS 11·Install 9·InputSession 187·Homi 117·HangulCore 18)를 확인했다.
+기존 일반 key 중첩 known issue 1개 외 예상 밖 실패나 warning은 없다. 2026-11-01 **09:02 KST** 자체 서명으로 설치했고
+새 PID `21412`의 startup과 설치 출력의 executable UUID가 일치했다. [probe 기본 입력·전환·app 복귀와 표시](apps/engines/appkit.md#id-질의모드-표시-교정본의-probe-확인-2026-11-01)는 주인이 정상 확인했다.
+근거: `build/explicit-review-20261101/{build,debug-tests,release-tests,install,startup}.log`. 조건부 중첩 순서의 실제 발생이나 다른 app 전체의 검증을 뜻하지 않는다.
+
 ## 같은 초에 저장한 진단 기록이 이전 파일을 덮어쓴다 (2026-11-01)
 
 - **증상·원인**: `saveRecord`의 파일 이름은 초 단위인데 atomic write는 기존 이름을 교체한다. 같은 초에 두 번 저장하면 첫 snapshot을 잃는다. 사용자 기록에서 실제 유실을 발견한 것은 아니다.

@@ -34,6 +34,14 @@ macOS 의 text 엔진이다. `NSTextInputClient` 의 기준 구현이라 다른 
 
 ## 기록
 
+### ID 질의·모드 표시 교정본의 probe 확인 (2026-11-01)
+
+macOS **27.2 (26B123)**, `local.hangul.probe` 0, homi **09:02 설치본**에서 주인이 실제 keyboard로
+`한글` → Backspace → `ㄹ` 복원 → Caps Lock → 영문 `a` → Caps Lock → `가`, 다른 app에 ⌘Tab 왕복 후 `나`를 정상 확인했다.
+최종 **`한글a가나`**는 probe screenshot에서도 확인했고 한/A 말풍선도 정상이라고 보고했다.
+근거는 주인 보고·probe screenshot이며, 보조 기록은 `build/explicit-review-20261101/probe.log`다.
+이는 대표 AppKit의 기본 입력·표시 확인이며, ID 질의 재진입·Task 역순 실행·진행 중 fade나 과거 Telegram 증상 해결을 재현한 검사는 아니다.
+
 ### 중첩 key 관측본의 probe 확인 (2026-11-01)
 
 macOS 27.2 (`26B123`), `local.hangul.probe` 0, homi 07:53 설치본에서 주인이 실제 keyboard로

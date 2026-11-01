@@ -3,8 +3,8 @@
 **homi** (`com.unocult.inputmethod.homi`) — macOS 한글 입력기. 주인 한 사람이 매일 쓰는 도구이고,
 목표는 **두벌식 한글 입력이 완벽하게 동작하는 것** 하나다. 기능을 늘리는 프로젝트가 아니다 — 잡다한 기능·옵션·변죽은 만들지 않는다.
 
-> **현재 (2026-11-01)**: M0–M4·M6·M7 을 주인이 확인했다. 지금은 M5 — 일상 사용과 app 호환성. [진단 기록 덮어쓰기 교정](docs/lessons.md#같은-초에-저장한-진단-기록이-이전-파일을-덮어쓴다-2026-11-01)과 [실행본 식별](docs/macos-input.md#실행본과-진단-기록의-연결-2026-11-01)을 설치했다. 입력 판단은 직전 [중첩 key 관측본](docs/apps/engines/appkit.md#중첩-key-관측본의-probe-확인-2026-11-01) 그대로다. 주인은 그 관측본에서 현재까지 문제를 느끼지 않았다고 보고했다. [일반 key 재진입의 조건부 반례](docs/stability-review.md#imk-이론-검증-범위-2026-11-01)는 남아 있고, 최근 첫 key·source 선택 증상의 원인은 아직 미확정이다.
-> **설치본**: 2026-11-01 08:08 KST 진단 기록 교정본. executable UUID `491DDEFC-CD9C-307F-9F87-3E2CE248C435`(arm64), CDHash `054cf996799eccaac8f6cd3c605fcc3d0b72696f`, 서명 `homi code signing`. 새 PID `67210`의 시작 log와 설치 출력 UUID가 일치했다. `swift build` 성공, Debug·Release 각각 315개 test 실행에서 기존 known issue 1개 외 예상 밖 실패나 build warning은 없다. 이번 변경은 startup·export·설치 경로이며 실제 사용자 기록을 저장하는 검사는 하지 않았다.
+> **현재 (2026-11-01)**: M0–M4·M6·M7 을 주인이 확인했다. 지금은 M5 — 일상 사용과 app 호환성. [같은 proxy의 ID 질의 중첩](docs/lessons.md#id-질의의-중첩이-이미-확인한-app-을-놓친다-2026-11-01)과 [늦은 모드 말풍선](docs/lessons.md#오래된-모드-말풍선-요청이-뒤늦게-표시된다-2026-11-01)을 교정하고 사전 load 실패 진단을 추가했다. 주인은 [probe의 기본 입력·전환·app 복귀와 표시](docs/apps/engines/appkit.md#id-질의모드-표시-교정본의-probe-확인-2026-11-01)를 정상 확인했다. [일반 key 재진입의 조건부 반례](docs/stability-review.md#imk-이론-검증-범위-2026-11-01)는 남아 있고, 최근 첫 key·source 선택 증상의 원인은 아직 미확정이다.
+> **설치본**: 2026-11-01 09:02 KST ID 질의·모드 표시 교정본. executable UUID `D427C181-568A-3981-9832-C214671E4A61`(arm64), CDHash `6e9e7934850876d28f32f2e7fda2fbbddd3ed6f7`, 서명 `homi code signing`. 새 PID `21412`의 시작 log와 설치 출력 UUID가 일치했다. `swift build` 성공, Debug·Release 각각 342개 test 실행에서 기존 known issue 1개 외 예상 밖 실패나 build warning은 없다. 일반 key 중첩·SourceWatcher의 종료 방침·진행 중인 HUD fade는 이번 교정 범위 밖이다.
 > 앞선 2026-10-31 [남은 세 경계 교정본](docs/stability-review.md#구조-개선-뒤-남은-세-경계-2026-10-31)의 probe·Chrome 입력칸 이동·Telegram/terminal 재전송 주인 확인은 당시 설치본의 범위다. [앞선 구조 개선 네 단계](docs/stability-review.md#구조-개선-계획-2026-10-31)의 확인도 구분한다. [후보 뜻 표시 누락](docs/apps/engines/appkit.md#후보-뜻의-첫-표시-누락-보고-2026-10-31-미해결)은 재발 때 조사한다. [Caps Lock](docs/lessons.md#정상-caps-tap-을-기존-판정이-거부한다-2026-10-29)·[Emacs 전달](docs/apps/emacs.md#caps-lock-전달-2026-10-29)의 검증 범위는 각 기록을 따른다.
 > 설치본의 변경·검증 범위는 [activation 기록](docs/lessons.md#2026-10-09-activation-교정callback-관측)과 [Windows Caps Lock 실험](docs/apps/windows-app.md#caps-lock-전달-실험-2026-10-10), 개선 안건은 [안정성 검토](docs/stability-review.md), 남은 작업은 [다음 작업](#다음-작업)에 있다.
 > 이상하면 주인이 곧바로 "최근 key 기록 저장" 을 누른다 → [진행 단계](#진행-단계)
@@ -273,6 +273,7 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 2026-11-01 [Apple 입력 API·macOS 27 조사](docs/research/apple-input-sdk-27.md)는 공개 계약과 기존 검증 공백을 정리한다.
 [IMK 이론 검증](docs/stability-review.md#imk-이론-검증-범위-2026-11-01)은 한자 질의 교정과 일반 key 재진입의 남은 반례를 다룬다.
 일반 key의 stale mark 생략·FIFO·사전 flush는 client 적용 전후와 pass-through 순서를 해결하지 못해 보류했다.
+같은 proxy의 ID 질의가 중첩된 뒤 바깥 답이 nil인 [별도 mode 오류](docs/lessons.md#id-질의의-중첩이-이미-확인한-app-을-놓친다-2026-11-01)는 교정·설치했다. 입력칸 소유권의 해결로 확대하지 않는다.
 `key.whileBusy`의 실제 기록이 있으면 같은 controller의 호출 경계를 대조한다. 종류별 첫 발생만 기록하므로 기록 부재를 미발생으로 세지 않는다.
 
 일반 Mac 의 Caps Lock 누락은 [gesture 교정과 주인 확인](docs/lessons.md#정상-caps-tap-을-기존-판정이-거부한다-2026-10-29)을 마쳤으며 일상 사용을 지켜본다.

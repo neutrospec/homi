@@ -76,6 +76,12 @@ activation layout은 [제품 경계 검사](#4-activation의-layout-호출--제�
 그때의 TIS 선택을 재조회한다. 실제 OS 검증은 아니며 종료 대상 변경은 보류한다.
 재발을 기다리는 것만이 다음 행동은 아니다. 기본 입력 보호와 실제 OS 관측의 경계는 유지한다.
 
+**재발 없는 후속 교정 (2026-11-01)**: 위 일반 `insert → mark` 반례는 남겨 두고, 별도의
+[app ID 질의 중첩 오류](lessons.md#id-질의의-중첩이-이미-확인한-app-을-놓친다-2026-11-01)를 제품 `Client`와 연결해 교정했다.
+바깥 질의의 nil·빈 답에 같은 proxy가 중첩 중 확인한 실제 ID만 재사용한다. 다른 proxy나 출처 미확인은 기존 fallback을 유지한다.
+이 출처는 app 식별용이며 입력칸 소유권·client의 insert 적용 완료를 알려주지 않는다.
+Debug·Release 342개 test에서 기존 known issue 1개 외 새 실패 없이 설치했고, [probe의 기본 입력·전환·복귀](apps/engines/appkit.md#id-질의모드-표시-교정본의-probe-확인-2026-11-01)를 주인이 확인했다.
+
 ## 기본 입력을 먼저 보호할 안건
 
 | 안건 | 판단 · 중요도 | 문서·교훈에 비춘 다음 행동 |
@@ -387,10 +393,10 @@ build·test 결과는 `build/source-review-build-20261031.log`·`build/source-re
 | 첫 후보 목록의 뜻 표시 누락 | **주인 결정: 재발 때 재검토** | [probe 보고](apps/engines/appkit.md#후보-뜻의-첫-표시-누락-보고-2026-10-31-미해결). 같은 한 글자의 다음 목록에는 뜻이 보였다. 첫 쪽 사전 값은 비어 있지 않다. 재발하면 첫 show 와 다음 show 의 데이터·label 가시성을 대조한다. |
 | caret 질의의 부작용 | **관측 채택, 교정 보류** | [Chromium 원장](apps/engines/chromium.md)의 firstRect 실패는 click 확정과 다른 경로다. homi 의 attributes 질의와 그 callback 이 실제로 연결되는지 먼저 확인한다. 표시를 위해 입력을 위험하게 하지 않는다. client 질의를 event 밖으로 옮기면 교착 교훈을 깨므로 기각한다. [27 SDK 계약](research/apple-input-sdk-27.md)상 조합 중 index 0은 inline 시작이며 현재 caret과 같다는 보장은 없다. 잘못된 인자로 단정하지 않고 표시 의도·실제 좌표와 zero rect가 후보 창 위치에 미치는 영향을 확인한다. 추가 질의 없이 실패·zero를 주입해 표시와 선택 가능성을 확인한다. 기본 입력보다 후순위다. |
 | Chromium 최초 판별 | **cache 실패 교정·판별과 정책 분리** | [3번 구현·검증](#3번-renderer-판별과-commit-정책-분리)을 따른다. 미확인을 부재로 고정하지 않고 첫 callback 의 기존 판단을 검사했다. 실제 간헐 증상의 원인으로 확인한 것은 아니다. cold 조회의 단순 async 이동은 여전히 보류한다. |
-| ModeHUD·indicator 의 stale Task | **indicator 는 activation 교정에 포함, ModeHUD 는 후순위** | indicator 는 owner·app·현재 mode·pass-through 를 확인한다. ModeHUD 의 Task guard 는 별도 안건이며 실제 실패는 미관측이다. 표시 때문에 mode·source 를 다시 바꾸지 않는다. |
+| ModeHUD·indicator 의 stale Task | **2026-11-01 ModeHUD 요청 순서·현재 context 검사 교정** | [교훈과 검증 범위](lessons.md#오래된-모드-말풍선-요청이-뒤늦게-표시된다-2026-11-01). caret 질의 전 요청 세대와 event 종료 경계, owner·app·mode를 검사한다. 실제 app ID 미확인은 HUD만 생략한다. 입력 판단과 진행 중 fade는 별개다. |
 | ModeHUD 의 hide animation | **후순위 관측** | [ModeHUD](../Sources/homi/ModeHUD.swift)는 예약 작업을 취소하지만 이미 시작한 fade 까지 끝내는 보장은 없다. 새 말풍선과 겹친 animation 의 실제 표시부터 확인한다. 조합·client 반영을 고칠 이유는 없다. |
 | `UserDefaults` 저장의 비동기화 | **근거 없는 성능 교정은 보류** | [저장 계약](macos-input.md#mode-저장과-key-처리)을 확인하니 key 경로의 `Memory.save` 만으로 동기 disk stall 이라고 단정할 수 없다. 지연이 관측되면 측정 후 판단하며 mode 의 SOT 는 계속 동기 memory 다. |
-| 진단·resource 의 작은 개선 | **export 충돌 교정·검증·설치 완료, 사전 오류 표시는 후순위** | [같은 초의 기록 덮어쓰기](lessons.md#같은-초에-저장한-진단-기록이-이전-파일을-덮어쓴다-2026-11-01)는 기존 파일을 보존하는 publish로 교정했다. 한자 사전의 parse 실패가 `try?`로 사라지는 문제는 별도 안건이며 이번에는 바꾸지 않는다. |
+| 진단·resource 의 작은 개선 | **export 충돌 교정·설치 완료, 사전 load 실패 진단 추가** | [기록 덮어쓰기](lessons.md#같은-초에-저장한-진단-기록이-이전-파일을-덮어쓴다-2026-11-01)는 교정했다. [사전 읽기·mapping 실패](lessons.md#한자-사전-load-실패가-진단-없이-묻힌다-2026-11-01)도 고정 메시지로 알린다. 이전 기록의 ‘parse 실패’는 부정확했다. 사전 전체의 형식 검증은 추가하지 않았다. |
 
 후보 문제의 model 결과는 `showSuppressed=true, candidatesStillOpen=true` 였다. 보이지 않는 후보가 숫자·Enter 를 후보 선택으로 처리할 수 있다는 점에서
 표시만의 장식 문제와 다르다. 다만 한자 경로의 문제이므로 기본 조합·focus 이동의 검증을 건너뛰고 설치하지 않는다.

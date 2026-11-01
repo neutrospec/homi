@@ -13,6 +13,11 @@ import Synchronization
 nonisolated final class HomiInputController: IMKInputController, CandidateOwner {
     // Session·사전은 기존처럼 controller 생성 때 준비한다. lazy coordinator 의 첫 key 로 사전 I/O 를 옮기지 않는다.
     private let session = SessionDriver(hanja: hanjaDictionary)
+    private lazy var modePresentation = ModePresentation(owner: self, context: { owner in
+        guard let controller = owner as? HomiInputController, let app = controller.app else { return nil }
+        return ModePresentationContext(app: app, mode: memory.withLock { $0.mode(for: app) },
+            passThrough: controller.profile(for: app).passThrough)
+    })
     var compositionSubmission: CompositionSubmission { session.submission }
     private lazy var coordinator = InputCoordinator(driver: session, modes: StoredModes(),
         profile: { AppRules.profile(for: $0, preferences: preferences.withLock { $0 }) },
@@ -46,6 +51,7 @@ nonisolated final class HomiInputController: IMKInputController, CandidateOwner 
     }
 
     override func deactivateServer(_ sender: Any!) {
+        modePresentation.invalidate()
         observeClient("deactivate.begin", lifecycle: true)
         defer { observeClient("deactivate.return", lifecycle: true) }
         let id = app ?? "unknown"
@@ -58,6 +64,7 @@ nonisolated final class HomiInputController: IMKInputController, CandidateOwner 
 
     /// client 가 조합을 끝내 달라고 할 때 — focus 이동, input source 전환.
     override func commitComposition(_ sender: Any!) {
+        modePresentation.invalidate()
         observeClient("commitComposition.begin", lifecycle: true)
         defer { observeClient("commitComposition.return", lifecycle: true) }
         record("commitComposition \(app ?? "unknown")")
@@ -108,6 +115,7 @@ nonisolated final class HomiInputController: IMKInputController, CandidateOwner 
             })
             return false
         case .leftMouseDown:
+            modePresentation.invalidate()
             coordinator.mouseDown(client: client, before: {
                 record("mouseDown")
                 cancelModifiers(endingGesture: true)
@@ -175,9 +183,8 @@ nonisolated final class HomiInputController: IMKInputController, CandidateOwner 
     /// 커서 옆 말풍선. 커서 줄의 위치는 지금(key 처리 도중, app 이 homi 를 기다리는 동안) 묻고 — 그 밖에서 client 를 부르면
     /// app 과 교착할 수 있다 (조사: Chrome) — 그리는 일은 key 처리 뒤로 미룬다.
     private func showMode(_ mode: Mode, near client: Client) {
-        let line = client.caretLine()
-        let text = mode.glyph
-        Task { @MainActor in ModeHUD.shared.show(text, below: line) }
+        let expected = app.map { ModePresentationContext(app: $0, mode: mode, passThrough: false) }
+        modePresentation.request(mode.glyph, expected: expected) { client.caretLine() }
     }
 
     /// coordinator 의 알림은 관찰·표시에만 쓴다. 입력 판단의 상태는 coordinator 와 shared memory 에 있다.
@@ -187,19 +194,27 @@ nonisolated final class HomiInputController: IMKInputController, CandidateOwner 
             observeClient("key.whileBusy", lifecycle: true)
         case .becameActive:
             let controller = Unchecked(self)
-            MainActor.assumeIsolated { ActiveInputSession.controller = controller.value }
+            MainActor.assumeIsolated {
+                if ActiveInputSession.controller !== controller.value {
+                    ActiveInputSession.controller?.modePresentation.invalidate()
+                    ActiveInputSession.controller = controller.value
+                }
+            }
         case .received(let app):
             if !receivedEvent {
                 receivedEvent = true
                 log.info("receiving events from \(app, privacy: .public), controller: \(self.traceID, privacy: .public)")
             }
         case .appResolved(let app, let mode, let passThrough):
+            modePresentation.invalidate()
             showIndicator(mode, app: app, passThrough: passThrough)
         case .modePrepared(let app, let mode, let passThrough):
+            modePresentation.invalidate()
             log.info("input start prepared for \(app, privacy: .public), controller: \(self.traceID, privacy: .public), mode: \(String(describing: mode), privacy: .public)")
             record("input start \(app) \(mode)")
             showIndicator(mode, app: app, passThrough: passThrough)
         case .modeChanged(let app, let mode, let passThrough):
+            modePresentation.invalidate()
             log.info("mode \(String(describing: mode), privacy: .public) for \(app, privacy: .public)")
             record("mode \(mode)")
             showIndicator(mode, app: app, passThrough: passThrough)
@@ -235,6 +250,7 @@ nonisolated final class HomiInputController: IMKInputController, CandidateOwner 
     /// source 전환 알림은 deactivate 가 빠져도 온다. bound client 에만 확정하고, 반복은 무해하다.
     func sourceChanged(selected: Bool) {
         guard !selected else { return }
+        modePresentation.invalidate()
         observeClient("sourceEnd.begin", lifecycle: true)
         defer { observeClient("sourceEnd.return", lifecycle: true) }
         log.info("source end handled, controller: \(self.traceID, privacy: .public)")
@@ -244,6 +260,7 @@ nonisolated final class HomiInputController: IMKInputController, CandidateOwner 
     }
 
     override func inputControllerWillClose() {
+        modePresentation.invalidate()
         observeClient("controllerClose.begin", lifecycle: true)
         defer { observeClient("controllerClose.return", lifecycle: true) }
         log.info("closing controller: \(self.traceID, privacy: .public)")

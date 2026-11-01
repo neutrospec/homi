@@ -32,6 +32,8 @@ extension ModifierEvent {
 /// 예외는 `markCommitted` 하나: ⌥↩ 가 방금 친 단어를 바꿀 때, 교체를 제대로 받는 client 에서 그 자리 글자를 확인한 뒤에만.
 nonisolated struct Client: InputClient {
     let proxy: any IMKTextInput & NSObjectProtocol
+    /// app ID 를 질의한 proxy 자체다. 같은 입력칸이나 focus 를 뜻하지 않는다.
+    var appIDSource: AnyObject? { proxy as AnyObject }
     weak var owner: HomiInputController?
     private let traceOverride: ClientTrace?
     private let candidatesOverride: CandidatePresentation?

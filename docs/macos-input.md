@@ -106,6 +106,9 @@ macOS 가 focus 전환 때 다른 source 를 복원하는 경로까지 없애지
   ✅ (macOS 27.2 SDK `TextServices.h` · 2026-10-31). Secure Event Input 과 이 제한의 조작은 [Chromium 코드에서도 별개](apps/engines/chromium.md#입력-context-와-source-제한-2026-10-30)다.
 - `tis watch`와 homi 의 source 알림 log 는 callback 때의 현재 source 를 읽는다. 알림 도착 사이에 여러 전환이 있으면 중간 상태를 놓칠 수 있다.
   ✅ (`Watcher.report`·`SourceWatcher.sourceChanged` + [Orca 동시 관측](apps/orca.md#input-menu-의-homi-누락-보고와-회복-2026-10-31-미해결)).
+- TIS property는 없음·invalid일 때 NULL을 반환할 수 있다(`TextInputSources.h:703–710`). 현재 `SourceWatcher.homiSelected`는 ID property의 NULL을 false로 접는다.
+  현재 keyboard source의 ID가 실제로 NULL이었던 증거는 없다. 이를 unknown으로 나누더라도 종료 생략·Caps remap 유지·Chromium commit의 손실 조건이 서로 달라,
+  한 가지 fallback으로 바꾸지 않았다. [source 종료의 정보 경계](stability-review.md#유지보류기각하는-제안)와 기존 기본 입력의 우선순위를 따른다.
 
 이 관찰을 typing 경로에 넣거나 system 상태를 바꾸지 않는다. 관찰 중 `imklaunchagent` 를 종료하지 않는다.
 

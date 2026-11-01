@@ -34,5 +34,10 @@ nonisolated let hanjaDictionary: HanjaDictionary? = {
         log.error("hanja.txt missing from bundle")
         return nil
     }
-    return try? HanjaDictionary(contentsOf: url)
+    do {
+        return try HanjaDictionary(contentsOf: url)
+    } catch {
+        log.error("hanja dictionary could not be loaded")
+        return nil
+    }
 }()
