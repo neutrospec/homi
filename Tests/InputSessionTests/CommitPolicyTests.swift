@@ -10,13 +10,13 @@ func commitPolicyReadsSourceAfterRenderer(selected: Bool) throws {
         #expect($0 == app)
         calls.append("inspect")
         return .helperRenderer
-    }, homiSelected: {
+    }, sourceSelection: {
         calls.append("source")
-        return selected
+        return selected ? .selected : .other
     })
     #expect(calls == ["inspect", "source"])
     #expect(decision.renderer == .helperRenderer)
-    #expect(decision.sourceSelected == selected)
+    #expect(decision.sourceSelection == (selected ? .selected : .other))
     #expect(decision.ending == (selected ? .alreadyCommittedByClient : .commitToClient))
 }
 
@@ -24,12 +24,12 @@ func commitPolicyReadsSourceAfterRenderer(selected: Bool) throws {
     arguments: [RendererEvidence.otherRenderer, .notFound, .unavailable])
 func commitPolicyKeepsUnverifiedEvidenceSeparate(renderer: RendererEvidence) throws {
     let app = try #require(ClientAppID("homi.tests.other-renderer"))
-    let decision = CommitPolicy.decide(app: app, inspect: { _ in renderer }, homiSelected: {
+    let decision = CommitPolicy.decide(app: app, inspect: { _ in renderer }, sourceSelection: {
         Issue.record("이 근거에서는 source 를 질의하지 않아야 한다")
-        return true
+        return .selected
     })
     #expect(decision.renderer == renderer)
-    #expect(decision.sourceSelected == nil)
+    #expect(decision.sourceSelection == nil)
     #expect(decision.ending == .commitToClient)
 }
 
@@ -38,11 +38,26 @@ func commitPolicyWithoutClientID() {
     let decision = CommitPolicy.decide(app: nil, inspect: { _ in
         Issue.record("ID 없는 callback 에서는 bundle 을 조사하지 않아야 한다")
         return .helperRenderer
-    }, homiSelected: {
+    }, sourceSelection: {
         Issue.record("ID 없는 callback 에서는 source 를 질의하지 않아야 한다")
-        return true
+        return .selected
     })
     #expect(decision.renderer == .unavailable)
-    #expect(decision.sourceSelected == nil)
+    #expect(decision.sourceSelection == nil)
     #expect(decision.ending == .commitToClient)
+}
+
+@Test("commit 정책: unknown 을 조회하지 않음과 구별하고 false fallback 을 명시한다",
+    arguments: [SourceSelection.UnknownReason.sourceCopyNil, .propertyNil, .typeMismatch, .emptyID])
+func commitPolicyUnknownKeepsCompatibility(reason: SourceSelection.UnknownReason) throws {
+    let app = try #require(ClientAppID("homi.tests.renderer"))
+    var reads = 0
+    let decision = CommitPolicy.decide(app: app, inspect: { _ in .helperRenderer }, sourceSelection: {
+        reads += 1
+        return .unknown(reason)
+    })
+    #expect(reads == 1)
+    #expect(decision.sourceSelection == .unknown(reason))
+    #expect(decision.ending == .commitToClient)
+    #expect(decision.sourceSelection?.diagnostic == "unknown(\(reason.rawValue))")
 }

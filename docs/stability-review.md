@@ -73,7 +73,8 @@ insert 또는 skip만 선택할 수 있다고 가정하면, insert는 전자에�
 단순 queue·false·true 반환, stale mark 생략이나 강제 flush는 client 적용 순서와 목적지를 보장하지 못해 무유실 교정으로 채택하지 않는다.
 activation layout은 [제품 경계 검사](#4-activation의-layout-호출--제품-경계-검증정책-유지)로 넓혔으며 중복 억제 정책은 채택하지 않았다.
 두 controller의 SourceWatcher 순서는 정적 검토와 추상 모델 단계다. watcher는 notification payload가 아니라
-그때의 TIS 선택을 재조회한다. 실제 OS 검증은 아니며 종료 대상 변경은 보류한다.
+그때의 TIS 선택을 재조회한다. [source ID 비교와 unknown 진단](lessons.md#source-id-의-앞부분만-비교해-다른-입력기를-homi-로-본다-2026-11-01)은 별도로 교정했다.
+owner 모델은 실제 SourceWatcher 메서드·OS 검증이 아니며, 종료 대상과 unknown의 false fallback 변경은 보류한다.
 재발을 기다리는 것만이 다음 행동은 아니다. 기본 입력 보호와 실제 OS 관측의 경계는 유지한다.
 
 **재발 없는 후속 교정 (2026-11-01)**: 위 일반 `insert → mark` 반례는 남겨 두고, 별도의
@@ -394,7 +395,7 @@ build·test 결과는 `build/source-review-build-20261031.log`·`build/source-re
 | caret 질의의 부작용 | **관측 채택, 교정 보류** | [Chromium 원장](apps/engines/chromium.md)의 firstRect 실패는 click 확정과 다른 경로다. homi 의 attributes 질의와 그 callback 이 실제로 연결되는지 먼저 확인한다. 표시를 위해 입력을 위험하게 하지 않는다. client 질의를 event 밖으로 옮기면 교착 교훈을 깨므로 기각한다. [27 SDK 계약](research/apple-input-sdk-27.md)상 조합 중 index 0은 inline 시작이며 현재 caret과 같다는 보장은 없다. 잘못된 인자로 단정하지 않고 표시 의도·실제 좌표와 zero rect가 후보 창 위치에 미치는 영향을 확인한다. 추가 질의 없이 실패·zero를 주입해 표시와 선택 가능성을 확인한다. 기본 입력보다 후순위다. |
 | Chromium 최초 판별 | **cache 실패 교정·판별과 정책 분리** | [3번 구현·검증](#3번-renderer-판별과-commit-정책-분리)을 따른다. 미확인을 부재로 고정하지 않고 첫 callback 의 기존 판단을 검사했다. 실제 간헐 증상의 원인으로 확인한 것은 아니다. cold 조회의 단순 async 이동은 여전히 보류한다. |
 | ModeHUD·indicator 의 stale Task | **2026-11-01 ModeHUD 요청 순서·현재 context 검사 교정** | [교훈과 검증 범위](lessons.md#오래된-모드-말풍선-요청이-뒤늦게-표시된다-2026-11-01). caret 질의 전 요청 세대와 event 종료 경계, owner·app·mode를 검사한다. 실제 app ID 미확인은 HUD만 생략한다. 입력 판단과 진행 중 fade는 별개다. |
-| ModeHUD 의 hide animation | **후순위 관측** | [ModeHUD](../Sources/homi/ModeHUD.swift)는 예약 작업을 취소하지만 이미 시작한 fade 까지 끝내는 보장은 없다. 새 말풍선과 겹친 animation 의 실제 표시부터 확인한다. 조합·client 반영을 고칠 이유는 없다. |
+| ModeHUD 의 hide animation | **제한 관측에서 반례 없음·유지** | [AppKit fixture 관측](macos-input.md#진행-중-fade-와-새-표시의-제한-관측-2026-11-01)에서 진행 중 fade 뒤 새 show의 alpha·visible은 유지됐다. 제품의 실제 픽셀·모든 timing 검증은 아니며 현재 근거로 animation을 고치지 않는다. |
 | `UserDefaults` 저장의 비동기화 | **근거 없는 성능 교정은 보류** | [저장 계약](macos-input.md#mode-저장과-key-처리)을 확인하니 key 경로의 `Memory.save` 만으로 동기 disk stall 이라고 단정할 수 없다. 지연이 관측되면 측정 후 판단하며 mode 의 SOT 는 계속 동기 memory 다. |
 | 진단·resource 의 작은 개선 | **export 충돌 교정·설치 완료, 사전 load 실패 진단 추가** | [기록 덮어쓰기](lessons.md#같은-초에-저장한-진단-기록이-이전-파일을-덮어쓴다-2026-11-01)는 교정했다. [사전 읽기·mapping 실패](lessons.md#한자-사전-load-실패가-진단-없이-묻힌다-2026-11-01)도 고정 메시지로 알린다. 이전 기록의 ‘parse 실패’는 부정확했다. 사전 전체의 형식 검증은 추가하지 않았다. |
 

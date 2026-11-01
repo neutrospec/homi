@@ -34,6 +34,13 @@ macOS 의 text 엔진이다. `NSTextInputClient` 의 기준 구현이라 다른 
 
 ## 기록
 
+### source ID 판정 교정본의 probe 확인 (2026-11-01)
+
+macOS **27.2 (26B123)**, `local.hangul.probe` 0, homi **09:18 설치본**에서 주인이 실제 keyboard로
+`한` → Caps Lock → 영문 `a` → Caps Lock → `가`, 다른 app에 ⌘Tab 왕복 후 `나`를 입력해 **`한a가나`**가 정상이라고 확인했다.
+근거는 주인 보고이며, 보조 기록은 `build/fade-source-20261101/probe.log`다.
+대표 AppKit의 기본 조합·내부 한/영 전환·app 복귀 확인이며, TIS 조회 실패·유사 ID나 과거 source 누락 증상을 재현한 검사는 아니다.
+
 ### ID 질의·모드 표시 교정본의 probe 확인 (2026-11-01)
 
 macOS **27.2 (26B123)**, `local.hangul.probe` 0, homi **09:02 설치본**에서 주인이 실제 keyboard로

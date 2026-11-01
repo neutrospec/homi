@@ -39,10 +39,10 @@ func rendererFirstColdCommit(nested: Bool) throws {
     }
 
     compose()
-    let first = CommitPolicy.decide(app: app, inspect: { discovery.inspect($0.bundleID) }, homiSelected: {
+    let first = CommitPolicy.decide(app: app, inspect: { discovery.inspect($0.bundleID) }, sourceSelection: {
         sourceReads += 1
         #expect(!files.calls.isEmpty)
-        return true
+        return .selected
     })
     driver.end(first.ending) { delivered += $0 }
     #expect(first.renderer == .helperRenderer)
@@ -51,9 +51,9 @@ func rendererFirstColdCommit(nested: Bool) throws {
     let readsAfterFirst = files.calls.count
 
     compose()
-    let second = CommitPolicy.decide(app: app, inspect: { discovery.inspect($0.bundleID) }, homiSelected: {
+    let second = CommitPolicy.decide(app: app, inspect: { discovery.inspect($0.bundleID) }, sourceSelection: {
         sourceReads += 1
-        return false
+        return .other
     })
     driver.end(second.ending) { delivered += $0 }
     #expect(delivered == [.insert("한")])
@@ -83,9 +83,9 @@ func rendererUnavailableCanRecover(locationMissing: Bool) throws {
     }, contents: files.read)
     var sourceReads = 0
     func decide() -> CommitPolicy.Decision {
-        CommitPolicy.decide(app: app, inspect: { discovery.inspect($0.bundleID) }, homiSelected: {
+        CommitPolicy.decide(app: app, inspect: { discovery.inspect($0.bundleID) }, sourceSelection: {
             sourceReads += 1
-            return true
+            return .selected
         })
     }
     let first = decide()
@@ -150,13 +150,13 @@ func rendererOtherNamesRemainEvidence(name: String) throws {
     files.entries[fixtureFrameworks.path] = ["Codex Framework.framework"]
     files.entries[fixtureFrameworks.appending(path: "Codex Framework.framework/Helpers").path] = [name]
     let discovery = RendererDiscovery(locate: { _ in fixtureApp }, contents: files.read)
-    let decision = CommitPolicy.decide(app: app, inspect: { discovery.inspect($0.bundleID) }, homiSelected: {
+    let decision = CommitPolicy.decide(app: app, inspect: { discovery.inspect($0.bundleID) }, sourceSelection: {
         Issue.record("다른 renderer 이름의 발견만으로 source 를 읽거나 우회를 적용하면 안 된다")
-        return true
+        return .selected
     })
     #expect(decision.renderer == .otherRenderer)
     #expect(decision.ending == .commitToClient)
-    #expect(decision.sourceSelected == nil)
+    #expect(decision.sourceSelection == nil)
 }
 
 @Test("renderer: 다른 이름을 먼저 찾아도 기존 helper 탐색을 끝낸다")

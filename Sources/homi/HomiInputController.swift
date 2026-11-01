@@ -71,9 +71,9 @@ nonisolated final class HomiInputController: IMKInputController, CandidateOwner 
         let clientApp = coordinator.clientApp
         let decision = MainActor.assumeIsolated {
             CommitPolicy.decide(app: clientApp,
-                inspect: { RendererDiscovery.shared.inspect($0.bundleID) }, homiSelected: SourceWatcher.homiSelected)
+                inspect: { RendererDiscovery.shared.inspect($0.bundleID) }, sourceSelection: CurrentSource.read)
         }
-        let selected = decision.sourceSelected.map { $0 ? "yes" : "no" } ?? "not queried"
+        let selected = decision.sourceSelection?.diagnostic ?? "not queried"
         let renderer = decision.renderer.rawValue
         let id = app ?? "unknown"
         let senderType = sender.map { String(describing: type(of: $0)) } ?? "nil"

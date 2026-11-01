@@ -42,6 +42,8 @@ final class Indicator: NSObject {
 /// Emacs 전달 옵션에서는 F18 로 보내 Emacs 자체 입력기의 전환 명령을 실행한다.
 /// 그 밖(다른 input source, 비밀번호 칸의 ABC, 다른 한/영 전환 없는 app)에서는 Caps Lock 이 원래대로 동작한다.
 final class SourceWatcher: NSObject {
+    private var reportedUnknown: Set<SourceSelection.UnknownReason> = []
+
     override init() {
         super.init()
         DistributedNotificationCenter.default().addObserver(
@@ -60,9 +62,10 @@ final class SourceWatcher: NSObject {
     }
 
     @objc func sourceChanged(_ note: Notification) {
-        let selected = update()
+        let selection = update()
+        let selected = selection.compatibilitySelected
         let controllerID = ActiveInputSession.controller?.traceID ?? "none"
-        log.info("source notification, homi selected: \(selected), active controller: \(ActiveInputSession.controller != nil), controller: \(controllerID, privacy: .public)")
+        log.info("source notification, homi selected: \(selection.diagnostic, privacy: .public), active controller: \(ActiveInputSession.controller != nil), controller: \(controllerID, privacy: .public)")
         ActiveInputSession.controller?.sourceChanged(selected: selected)
     }
 
@@ -82,24 +85,22 @@ final class SourceWatcher: NSObject {
         CapsLockRemap.apply(.system)
     }
 
-    /// 지금 선택된 input source 가 homi 인가.
-    static func homiSelected() -> Bool {
-        let source = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
-        let id = TISGetInputSourceProperty(source, kTISPropertyInputSourceID)
-            .map { Unmanaged<CFString>.fromOpaque($0).takeUnretainedValue() as String } ?? ""
-        return id.hasPrefix("com.unocult.inputmethod.homi")
-    }
-
     @discardableResult
-    private func update(front: String? = nil) -> Bool {
-        let selected = Self.homiSelected()
+    private func update(front: String? = nil) -> SourceSelection {
+        let selection = CurrentSource.read()
+        if case .unknown(let reason) = selection, reportedUnknown.insert(reason).inserted {
+            log.warning("source lookup unknown: \(reason.rawValue, privacy: .public); using not-selected fallback")
+        }
+        // property nil·빈 ID 의 기존 false 를 유지한다. copy nil·타입 오류는 새 방어적 fallback 이다.
+        // 이 값은 실제 source 해제의 증거가 아니다.
+        let selected = selection.compatibilitySelected
         let settings = preferences.withLock { $0 }
         let app = front ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
         let route = CapsLockRoute.resolve(homiSelected: selected, app: app, preferences: settings)
         CapsLockRemap.apply(route)
         ModifierActivityObserver.shared.setContext(app: selected ? app : nil)
         Indicator.shared.setVisible(selected)
-        return selected
+        return selection
     }
 }
 

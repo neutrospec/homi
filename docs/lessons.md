@@ -6,6 +6,19 @@
 - 간헐 결함의 증거는 homi 의 기록이다 — 이상하면 주인이 곧바로 input menu 의 "최근 key 기록 저장" 을 누르고(`~/Library/Logs/homi/`), 그 file 로 가린다.
 - 원인에 🔶 가 붙은 것은 대응이 통했지만 원인은 추정이라는 뜻이다.
 
+## source ID 의 앞부분만 비교해 다른 입력기를 homi 로 본다 (2026-11-01)
+
+- **증상·원인**: `hasPrefix("com.unocult.inputmethod.homi")`는 `…homily`·`…homi.evil`·`…homi.korean.extra`도 homi로 판단했다. Caps remap·표시·Chromium commit 정책에 들어가는 값이다. 이런 source를 실제 설치·선택했거나 최근 증상을 일으켰다는 증거는 없다.
+- **증거·대응**: 기존 prefix를 추출한 제품 판정 함수에서 세 반례의 실패를 먼저 확인한 뒤, 현재 bundle이 선언한 parent·한국어 mode 두 ID와 정확히 비교하도록 바꿨다. 실제 `Info.plist`와 허용 ID의 일치도 test로 고정했다. 근거는 `SourceSelectionTests`와 `build/fade-source-20261101/source-prefix-before.log`다.
+- **조회 실패의 분리**: TIS Copy nil·ID property nil·CF 타입 불일치·빈 ID는 이유가 있는 `unknown`으로 반환한다. 질의하지 않은 경우와도 구분하며 원시 ID·입력 내용은 새 log에 넣지 않는다. Watcher는 이유별 첫 발생만 warning을 남기고 기존 notification·commit 진단에도 unknown을 표시한다.
+- **한계**: property nil·빈 ID에는 기존 false fallback을 유지한다. Copy nil·타입 불일치의 false는 새 방어적 fallback이다. unknown에서 source 종료·Chromium commit을 어떻게 결정할지는 해결하지 않았다. 추가 TIS 질의 없이 기존 Caps → observer → indicator → 최신 owner 전달 순서를 유지하며, 이를 실제 입력칸의 소유권 증명으로 보지 않는다.
+
+`swift build`, Debug·Release 각각 **347개 test**(TIS 11·Install 9·InputSession 190·Homi 119·HangulCore 18)를 실행했다.
+기존 일반 key 중첩 known issue 1개 외 새 실패·warning은 없다. **09:18 KST** 자체 서명으로 설치했고 새 PID `45843`의 startup과 설치 출력 UUID가 일치했다.
+설치 뒤 실제 source notification에서 yes/no 분류도 확인했다(`source-observation.log`). 조회 실패나 유사 ID를 실제 TIS에 발생시킨 검사는 아니다.
+근거는 `build/fade-source-20261101/{build,debug-tests,release-tests,install,startup}.log`.
+[probe의 기본 조합·Caps Lock 전환·app 복귀](apps/engines/appkit.md#source-id-판정-교정본의-probe-확인-2026-11-01)는 주인이 `한a가나`로 정상 확인했다.
+
 ## ID 질의의 중첩이 이미 확인한 app 을 놓친다 (2026-11-01)
 
 - **증상·원인**: 첫 `bundleIdentifier` 질의 도중 중첩 입력이 실제 app ID를 확인했어도, 바깥 질의가 nil·빈 문자열로 돌아오면 `resolveApp`은 fallback app의 mode를 썼다. 실제 app은 한글·fallback은 영문인 조건과 그 반대 모두 잘못된 판단을 만들었다. 제품 코드의 조건부 반례이며 실제 IMK 발생이나 Telegram 증상과의 인과는 미확인이다.

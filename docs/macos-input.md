@@ -106,9 +106,11 @@ macOS 가 focus 전환 때 다른 source 를 복원하는 경로까지 없애지
   ✅ (macOS 27.2 SDK `TextServices.h` · 2026-10-31). Secure Event Input 과 이 제한의 조작은 [Chromium 코드에서도 별개](apps/engines/chromium.md#입력-context-와-source-제한-2026-10-30)다.
 - `tis watch`와 homi 의 source 알림 log 는 callback 때의 현재 source 를 읽는다. 알림 도착 사이에 여러 전환이 있으면 중간 상태를 놓칠 수 있다.
   ✅ (`Watcher.report`·`SourceWatcher.sourceChanged` + [Orca 동시 관측](apps/orca.md#input-menu-의-homi-누락-보고와-회복-2026-10-31-미해결)).
-- TIS property는 없음·invalid일 때 NULL을 반환할 수 있다(`TextInputSources.h:703–710`). 현재 `SourceWatcher.homiSelected`는 ID property의 NULL을 false로 접는다.
-  현재 keyboard source의 ID가 실제로 NULL이었던 증거는 없다. 이를 unknown으로 나누더라도 종료 생략·Caps remap 유지·Chromium commit의 손실 조건이 서로 달라,
-  한 가지 fallback으로 바꾸지 않았다. [source 종료의 정보 경계](stability-review.md#유지보류기각하는-제안)와 기존 기본 입력의 우선순위를 따른다.
+- TIS source ID는 unique reverse-DNS 문자열이며, property가 없음·invalid일 때 Get은 NULL을 반환할 수 있다(`TextInputSources.h:313–332, 703–710`).
+  현재 keyboard source의 ID가 실제로 NULL이었던 증거는 없다. `TISCopyCurrentKeyboardInputSource` 주석은 NULL 발생 조건을 명시하지 않는다.
+  2026-11-01 `CurrentSource`가 nil·CF 타입 불일치·빈 ID를 이유별 unknown으로 구분하도록 바꿨다([교훈](lessons.md#source-id-의-앞부분만-비교해-다른-입력기를-homi-로-본다-2026-11-01)).
+  관측과 행동은 별개다. property nil·빈 ID의 기존 false fallback은 유지하고 Copy nil·타입 오류에도 방어적으로 false를 쓴다.
+  종료 생략·Caps remap 유지·Chromium commit은 손실 조건이 서로 달라 새 방침을 채택하지 않았다. [source 종료의 정보 경계](stability-review.md#유지보류기각하는-제안)를 따른다.
 
 이 관찰을 typing 경로에 넣거나 system 상태를 바꾸지 않는다. 관찰 중 `imklaunchagent` 를 종료하지 않는다.
 
@@ -410,6 +412,10 @@ Quartz 의 session event tap 은 별도 thread 에서 원본을 반환하고, IM
   남은 LANG1·오른쪽 Option·F18 을 homi 소유로 보고 원래 값을 복원한다. 기록 없는 다른 도구의 같은 값은 지우지 않는다. ✅ (실패·재시작 주입 test)
   저장 key `windowsCapsLockOriginalMapping`은 이전 설치본과의 호환을 위해 유지한다 (2026-10-29).
   disk 기록의 비동기성·crash 직후의 즉시 복원까지 증명한 것은 아니다. 원격 전달 검증은 [Windows App 원장](apps/windows-app.md#caps-lock-전달-실험-2026-10-10).
+- `IOHIDEventSystemClientCopyProperty`의 NULL은 반환값만으로 정상 무설정과 읽기 실패를 구별할 근거가 부족하다.
+  SDK는 성공 외 NULL을 명시하지만 [TN2450](https://developer.apple.com/library/archive/technotes/tn2450/)의 `hidutil` 예제는 `(null)`을 활성 remap 없음으로 설명한다.
+  CLI와 API의 두 경계를 같은 것으로 단정하지 않는다. 현재 `nil → []`를 무조건 오류로 바꾸면 정상 첫 remap도 막을 수 있어 유지한다.
+  반대로 읽기 실패 뒤 빈 mapping을 쓰면 다른 항목을 잃을 수 있다는 조건부 위험은 남는다. 실제 발생은 미확인이다. (2026-11-01 계약 검토)
 
 ### mode 저장과 key 처리
 
@@ -468,6 +474,15 @@ Quartz 의 session event tap 은 별도 thread 에서 원본을 반환하고, IM
 - **대문자 고정 표시는 macOS 에 맡긴다** — homi 가 IOKit 으로 lock 상태를 바꾸면 macOS 가 자기 표시를 띄운다. ✅
   macOS 는 대문자 고정이 켜진 동안 입력을 멈출 때마다 커서 아래에 표시를 띄운다 (Sonoma 부터, homi 와 무관 ✅ 주인).
   끄는 feature flag(`redesigned_text_cursor`)가 있다고 하나 🔶 주인은 끄지 않기로 했다.
+
+### 진행 중 fade 와 새 표시의 제한 관측 (2026-11-01)
+
+macOS 27.2 (`26B123`)의 별도 AppKit fixture에서 `ModeHUD`와 같은 취소·alpha 복원·0.9초 대기·0.25초 fade 순서를 실행했다.
+첫 fade 시작 뒤 0.01·0.10·0.20·0.24초에 새 show를 예약한 각 1회에서, 새 show와 이전 completion 전후 모두 alpha 1·visible true였다.
+0.10초 case의 별도 연장 관측 1회에서는 새 show의 다음 fade도 정상 종료했다. 이 조건에서 새 표시가 숨겨지는 반례는 없었다.
+제품 `ModeHUD`를 직접 실행한 검사가 아니며, 화면 밖 `NSPanel`의 API 값 관측이라 실제 픽셀·깜빡임·모든 timing을 보장하지 않는다.
+completion의 정확한 동기 실행 지점·내부 animation 취소 방식도 확정하지 않는다. 제품 fade는 변경하지 않았다.
+근거·재실행 방법은 `build/fade-source-20261101/fade.md`·`fade-probe.swift`·`fade*-output.txt`다.
 
 ## 확정한 글자를 바꾸는 호출은 app 마다 다르다 (한자)
 
