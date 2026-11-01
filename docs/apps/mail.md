@@ -23,7 +23,9 @@
 ## 구분할 경계
 
 - 중첩 key 없이도 자동완성이 mark·selection·문서를 바꿀 가능성을 조사한다. **selection에 S2가 포함된 것만으로 손실이 설명되지는 않는다.**
-  다음 `insert(S2)`가 확정한 뒤 `mark(S3의 초성)`가 어느 부분을 바꾸는지, 그 사이 외부 편집이나 종료 callback이 있었는지가 필요하다.
+  보고처럼 S2에 받침이 없으면 S3의 초성은 먼저 S2의 종성으로 붙고, 다음 모음에서 도깨비불로 `insert(S2) → mark(S3)`가 나온다.
+  첫 초성의 단일 mark와 다음 모음의 insert→mark 양쪽에서 어느 부분이 바뀌는지, 그 사이 외부 편집이나 종료 callback이 있었는지가 필요하다.
+  실제 제품 Session의 합성 `가교주`로 이 순서를 확인했다(`build/mail-recipient-20261101/session-fixture/output.txt`). Mail의 반영 결과 검사는 아니다.
 - 기존 [일반 key 재진입 반례](../stability-review.md#imk-이론-검증-범위-2026-11-01)와 동일 원인을 전제하지 않는다.
   제품 trace의 action·call·controller·종료 순서를 실제 결과와 대조하되 호출 반환을 client 반영 완료의 증거로 삼지 않는다.
 - `replacementRange` 전역 변경·늦은 mark 재질의·강제 확정은 [이전 실패](../lessons.md#imk-현재-selection-의-range-계약이-구현과-다르다-2026-10-09-교정-보류)를 먼저 대조한다.
