@@ -114,6 +114,10 @@ REA 도구는 연결되지 않아 설치·설정 없이 시스템 `dyld_info` �
 - `handleControlTextChange`는 조건에 따라 `_editingStringWithRange:`가 얻은 범위와 문자열을 `editingRange`·`currentPrefix`에 저장하고 `_startCompleting`을 지연 예약한다.
 - `_startCompleting`의 block은 저장한 `currentPrefix`를 읽어 검색 request에 사용한다. 이 block 본문에는 범위를 직접 재계산하는 호출이 없지만,
   다른 callee의 부작용과 비동기 결과 callback 전체는 확인하지 않아 표시 전 갱신이 전혀 없다고 결론내리지 않는다.
+- 후속 flag 대조에서 `_showSelectedCompletionInField`는 `insertCompletion` 호출 전 `isShowingSelectedCompletion=true`, 반환 뒤 false로 둔다.
+  `handleControlTextChange`는 showing이 true이면 저장 range와 prefix를 모두 갱신하지 않는다. 따라서 **completion 중 동기 재진입한 변경 알림**에는
+  이 갱신 차단이 적용될 수 있다. flag 검사 전 `_editingStringWithRange:` 질의는 실행된다. `ignoreCompletionForTextChange`만 true일 때는
+  range 갱신만 막고 prefix 갱신까지 반드시 막는 것은 아니다. selector 바이트·분기 대조는 `mailui-completion-flags-review.md`·`mailui-completion-flags-resolution.*`에 있다.
 
 **저장된 편집 범위를 이후 completion에 사용하는 경로는 실제 code에 있다.** 그러나 실제 시험에서 이 분기가 실행됐는지, 그때 저장한 범위가 짧았는지, 중간 갱신이 있었는지는 미확인이다.
 현재 구체적 가설은 **S1 확정 때의 text change가 짧은 범위를 저장 → S2 mark 뒤에도 그 값 유지 → 지연된 completion이 S2를 교체 대상에 포함**하는 흐름이다.
@@ -180,6 +184,42 @@ IMK callback이 없는 homi 모델에는 `나` 조합이 남아 이후에도 `�
 Apple 모델의 completion 뒤 입력기 상태는 미확인으로 후속 입력을 검사하지 않았다. 근거는 `notification-comparison.swift`·`.log`·`.md`다.
 확정 단위를 늘리는 안은 추천 시작 시점·Backspace·focus 처리가 바뀌므로 이 결과만으로 제품에 적용하지 않는다. 설치본은 유지한다.
 
+### 첫 음절의 실제 Apple 대조 (2026-11-01 11:38 KST)
+
+같은 기본 `NSTokenField`에 가상 후보 `가나다`·`가나마`, delay 0.4초를 두고 **강제 completion 없이** Apple 두벌식으로
+`가` → 2초 대기 → `나` → 2초 대기 → `다`를 입력했다. 주인은 세 단계 모두 추천이 나왔다고 확인했다.
+`first-syllable-probe/run-C04CA3ED-CD74-4A40-8541-C8B6BF27BF20.log`에서 source는 Apple 두벌식으로 확인된다.
+
+| 시각 | 자기 field에서 직접 관측한 것 |
+|---|---|
+| 11:38:02.549 → 02.969 | `가`의 변경 알림 → completion의 substring=`가`, hasMark=false |
+| 04.935 | 추천이 채운 `가나다` 뒤 다음 자음으로 `간`이 됨. 앱에 mark가 없어도 음절 조합은 이어짐 |
+| 05.160–.161 → 05.565 | `가`·`가나`의 변경 알림 → completion의 substring=`가나`, hasMark=false |
+| 08.409–.410 → 08.813 | `가나`·`가나다`의 변경 알림 → completion의 substring=`가나다`, hasMark=false |
+
+이 probe는 editor 상태·notification을 관측하며 IMK의 insert 호출을 가로채지는 않는다. **입력기 내부 조합과 앱의 marked text가 별개**인 실제 대조이며,
+첫 음절 추천에 Mail만의 특례가 필요하다는 근거는 없다. Mail의 S1S2에서만 추천이 없었던 이유는 여전히 별도 질문이다.
+
+homi 대조는 같은 창을 재사용했고, 주인은 기존 입력이 남아 있었다며 준비 혼선을 보고했다. 새 process·빈 칸이 보장된 A/B 시험으로 세지 않는다.
+다만 같은 log의 11:40:34.351에 editor가 빈 뒤 35.411 `가` → 38.030 `가나` → 40.441 `가나다`가 관측됐고,
+한글 구간에는 hasMark=true이며 completion delegate 호출이 없었다. 다음 빈 칸 재입력 구간도 같고, 11:40:50.583 조합 종료 뒤 50.986에는
+substring=`가나다`로 completion이 왔다. 앞선 기본 control 대조와 일치한다. 초기 영문 입력과 추가 편집을 이 한글 구간에 섞지 않는다.
+사용자 보고는 모든 단계 추천 없음이며, 이후 별도 편집의 최종 상태까지 같은 시험 결과로 확대하지 않는다.
+
+### idle commit을 포함한 조건부 누락 모델
+
+창 없는 자기 `NSTextView`에 제품 Session의 action을 적용하고, `가나` 뒤 **세 조건 모두 같은 `Session.commit()`을 명시적으로 주입**했다.
+범위는 notification 당시 자체 editor의 selection에서 계산했다. 실제 IMK callback·Mail 실행을 재현한 것은 아니다.
+
+| completion 조건 | 다음 `다` 뒤 결과 |
+|---|---|
+| completion 없음 | `가나다` |
+| commit 전 알림의 범위를 보관해 사용 | `가다` |
+| commit으로 온 알림의 갱신된 범위를 사용 | `가나다` |
+
+`idle-commit-model.swift`·`.log`·`.md`에 source·실행·가정을 남겼다. 오래된 범위를 사용하는 조건과 idle commit을 결합하면
+실제 보고와 같은 유실이 가능하다는 근거이며, Mail의 실제 값·실행 분기 또는 입력기 수정안의 안전성을 증명하지 않는다.
+
 ## 구분할 경계
 
 - **대기 중 종료 없이 조합이 이어지는 경우**에는 S3의 초성이 S2의 종성이 되고, 다음 모음에서 도깨비불로 `insert(S2) → mark(S3)`가 나온다.
@@ -187,6 +227,9 @@ Apple 모델의 completion 뒤 입력기 상태는 미확인으로 후속 입력
 - 실제 Mail의 다음 mark 직전 selection을 한 번 묻는 진단도 보류했다. 새 client IPC 중 일반 key가 재진입하면 이미 만든 outer mark가 새 조합을 덮는 기존 반례를 더 유발할 수 있다.
   sample을 invalid로 표시해도 입력 손상을 막지 못한다. 근거는 `one-query-proposal.md`이며 제품 코드·설치본은 유지한다.
   실제 Mail의 prefix·선택 범위를 확인할 수 있는 읽기 전용 근거를 우선한다. 안전한 구별 없이 commit을 무시하거나 이미 확정한 음절을 다시 넣는 우회는 채택하지 않는다.
+- callback 뒤 별도 closure의 idle range 질의도 검토했다. query 뒤에 action을 적용하지 않으면 앞선 특정 stale mark 반례는 피할 수 있지만,
+  추가 동기 IPC·nested run loop·입력칸 식별의 한계가 남는다. main queue 예약만으로 client가 completion을 끝낸 시점이 보장되지는 않는다.
+  실제 Mail에 설치하지 않았으며 `idle-range-observation-review.md`에 검토 범위를 남겼다.
 - 기존 [일반 key 재진입 반례](../stability-review.md#imk-이론-검증-범위-2026-11-01)와 동일 원인을 전제하지 않는다.
   제품 trace의 action·call·controller·종료 순서를 실제 결과와 대조하되 호출 반환을 client 반영 완료의 증거로 삼지 않는다.
 - `replacementRange` 전역 변경·늦은 mark 재질의·강제 확정은 [이전 실패](../lessons.md#imk-현재-selection-의-range-계약이-구현과-다르다-2026-10-09-교정-보류)를 먼저 대조한다.

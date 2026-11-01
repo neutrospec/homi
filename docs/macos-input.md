@@ -277,6 +277,9 @@ keyDown return     → insertText "글" repl={1,1} → doCommand insertNewline: 
   이 입력기는 app 의 text 를 cache 하는 비공개 IMK class 위에 있고 `unreliableApps` 같은 목록을 둔다 (조사 → `docs/research/app-compat-and-hangul.md` §3).
 - 낱자모는 호환 자모(U+3131–318E), 음절은 완성형(U+AC00–D7A3)이다. Backspace 도 자모 단위의 바꿔치기이고 마지막 자모는 app 이 지운다(`deleteBackward:`).
   도깨비불은 `insertText` 두 번(`일`+ㅓ → `이` 바꿔치기 + `러`). Return 은 조합 중인 글자를 같은 자리에 다시 넣어 확정하고 먹지 않는다 → app 이 `insertNewline:`. ✅ (run 2)
+- **입력기 내부의 조합과 client의 marked text는 별개다.** 2026-11-01 기본 `NSTokenField`에서 실제 Apple 두벌식은 첫 `가`부터 hasMark=false로
+  변경 알림·추천 요청을 보냈고, 추천 뒤에도 다음 자음으로 `간`을 이어 만들었다. homi는 같은 control의 한글 입력 중 mark를 유지했다.
+  [실제 대조와 준비 한계](apps/mail.md#첫-음절의-실제-apple-대조-2026-11-01-1138-kst)는 Mail 원장에 있다. 이 관측을 현재 Mail 안의 Apple 호출·선택 범위로 확대하지 않는다.
 
 ### Caps Lock 전환은 key 와 다른 통로로 늦게 온다
 
