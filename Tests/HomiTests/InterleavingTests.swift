@@ -94,7 +94,8 @@ func interleavingOrdinaryKeySequential() {
 }
 
 // 같은 controller 에 일반 key 가 client 호출 중 재진입할 수 있다는 조건의 코드 반례다.
-// 실제 macOS 가 이 순서로 전달하는지는 확인하지 않았다.
+// 2026-11-03 실제 IMK 는 insert·mark 호출 중의 새 key 를 homi 에 넣지 않았다 — 글자 그대로 넣거나 버렸다 (docs/macos-input.md).
+// 이 test 는 그 전달 경로를 가정한 code 의 동작을 고정한다.
 @Test("coordinator·Client: 가정한 insert 직후 일반 key 재진입의 조합 일치")
 func interleavingOrdinaryKeyNested() {
     let host = InterleavingHost(startsInEnglish: false)
@@ -103,7 +104,7 @@ func interleavingOrdinaryKeyNested() {
     #expect(host.key(15).handled)
     #expect(host.proxy.text == "한")
     #expect(host.driver.composing == "가")
-    withKnownIssue("일반 key 중첩 시 오래된 mark 가 덮는다. 실제 IMK 발생 여부는 미확인이다.") {
+    withKnownIssue("일반 key 중첩을 가정하면 오래된 mark 가 덮는다. 실제 IMK 는 insert·mark 중의 새 key 를 homi 에 넣지 않았다 (2026-11-03).") {
         #expect(host.proxy.marked == host.driver.composing)
     }
 }

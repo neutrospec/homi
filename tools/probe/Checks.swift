@@ -200,7 +200,7 @@ enum ProbeChecks {
     private static func type(_ letters: String, in view: ProbeTextView) {
         for letter in letters { key(codes[letter]!, characters: String(letter), in: view) }
     }
-    private static func key(_ code: UInt16, characters: String, modifiers: NSEvent.ModifierFlags = [], in view: ProbeTextView) {
+    static func key(_ code: UInt16, characters: String, modifiers: NSEvent.ModifierFlags = [], in view: ProbeTextView) {
         let raw = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true)!
         raw.timestamp = UInt64(ProcessInfo.processInfo.systemUptime * 1_000_000_000)
         raw.flags = CGEventFlags(rawValue: UInt64(modifiers.rawValue))

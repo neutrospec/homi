@@ -285,6 +285,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.window = window
         self.input = input
         observe()
+        // 일반 key 재진입 실험 (2026-11-03): 주인의 실제 입력이 만든 첫 insertText 도중 같은 context 에 일반 key 하나를 보낸다.
+        // 검사 runner(Task)를 쓰지 않는다 — 그 경로의 crash 와 섞지 않기 위해서다. 한 번만 보내고 끝난다.
+        let injectOnMark = CommandLine.arguments.contains("--inject-nested-key-on-mark")
+        if CommandLine.arguments.contains("--inject-nested-key") || injectOnMark {
+            let inject: () -> Void = { [weak input] in
+                guard let input else { return }
+                journal?.write("INJECT \(injectOnMark ? "setMarkedText" : "insertText") 중 같은 context 에 일반 key k")
+                ProbeChecks.key(40, characters: "k", in: input)
+                let marked = input.hasMarkedText() ? (input.string as NSString).substring(with: input.markedRange()) : ""
+                journal?.write("INJECT 중첩 key 반환 — 문서 \(quoted(input.string)) mark \(quoted(marked))")
+            }
+            if injectOnMark { input.onMarkOnce = inject } else { input.onInsertOnce = inject }
+        }
         journal?.write("start       sys=\(systemSource())  ctx=\(input.inputContext?.selectedKeyboardInputSource ?? "-")")
         let manual = inputOnly || CommandLine.arguments.contains("--check-manual")
         if CommandLine.arguments.contains("--check") || manual {

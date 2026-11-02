@@ -21,7 +21,7 @@
 
 | 순서 | 작업 · 현재 상태 | 다음 행동과 교정 기준 |
 |---|---|---|
-| 1 | **일반 key 재진입 — 진행: 증상 대조·처리 규칙 검토** | [기존 반례와 실패한 후보](#imk-이론-검증-범위-2026-11-01)를 기준으로 client 호출의 적용 전·후, 중첩 key·pass-through·종료를 구분한다. 조합 상태·client mark·최종 글자·key 순서·입력 대상을 함께 보존해야 한다. 실제 IMK 발생은 미확인이다. |
+| 1 | **일반 key 재진입 — 실제 경로 실험: homi 에 오지 않음 (2026-11-03)** | insert·mark 호출 중 같은 입력칸의 새 key 는 IMK 가 homi 에 넣지 않고 글자 그대로 넣거나 버렸다 ([실험](macos-input.md#client-호출-중-같은-입력칸의-새-key-2026-11-03)). homi 의 조합·client mark 불일치는 이 경로에서 생기지 않았고, 남은 위험은 homi 가 볼 수 없는 곳에 있다. homi 쪽 교정 대상이 없다. activate 의 layout 호출 중과 실제 app 의 전달 순서는 미확인이다. |
 | 2 | **Caps Lock mapping cache — 대기** | [CapsLockMapping](../Sources/homi/CapsLockMapping.swift)의 같은 route 조기 반환에 외부 mapping 소실·교체를 주입한다. 실제 상태와 cache를 대조할 경계를 정하고, 다른 도구의 mapping·복원값과 Windows App·Emacs 전달을 보존한다. 읽기 실패를 정상 빈 mapping으로 단정하지 않는다([HID 계약의 한계](macos-input.md#homi-process-와-hid-mapping-의-수명)). |
 | 3 | **source 종료 판단 — 대기** | unknown의 false fallback과 조회 뒤 최신 owner에게 종료를 보내는 경계를 제품 경로에서 검사한다. 조회 실패·owner 교체·종료 누락을 구분하고, 잘못된 확정·중복·필요한 종료 누락을 함께 평가한다. source·proxy identity만으로 client 확정·입력칸 소유권을 판정하지 않는다. [현재 판단](#유지보류기각하는-제안)을 출발점으로 삼는다. |
 | 4 | **첫 renderer 판별의 동기 file I/O — 대기** | [cold 조회](#3번-renderer-판별과-commit-정책-분리)를 입력 경로 밖에서 준비할 수 있는지 검토한다. 첫 callback과 cache 준비의 선후, 조회 실패·회복을 검사하고 기존 commit 정책을 보존한다. 준비 전 callback을 다른 정책으로 처리하는 단순 async 이동은 채택하지 않는다. |
@@ -29,7 +29,8 @@
 교정 후보는 기본 입력·Backspace·내부 한/영·focus 이동을 먼저 보호한다. 코드 변경은 실패 test → 교정 → 필요한 전체 검사 → 설치·해당 app 확인으로 진행한다.
 안전한 해법의 근거가 부족하면 남은 반례와 보류 이유를 기록한다. 네 작업의 완료를 Telegram 첫 key 오류·input menu 누락의 해결로 자동 확대하지 않는다.
 
-1번의 현재 반례는 **내부 조합은 `가`, client mark는 오래된 `ㄱ`인 불일치**다. 새 key의 내부 처리가 빠졌다는 뜻은 아니다.
+1번의 모델 반례는 **내부 조합은 `가`, client mark는 오래된 `ㄱ`인 불일치**다. 새 key의 내부 처리가 빠졌다는 뜻은 아니다.
+2026-11-03 실제 IMK 경로에서는 그 전제(중첩 key 를 homi 가 처리한다)가 성립하지 않았다 — [실험](macos-input.md#client-호출-중-같은-입력칸의-새-key-2026-11-03). 반례는 가정한 전달 경로의 code 반례로 남는다.
 [Telegram의 첫 key 영문·초성 누락](apps/telegram.md)은 이 순서로 재현한 것이 아니며, [Chrome의 source 왕복·입력칸 이동](apps/chrome.md)과의 인과도 미확정이다.
 주인은 Telegram의 초성이 끝까지 빠진 채 남았다고 추가 회상했다([원장](apps/telegram.md#창-전환-뒤-초성-누락-2026-10-30-미해결)).
 Mail의 재현 조건은 일반 key 중첩과 외부 자동완성의 mark·selection 변경을 구분할 실제 사례로 조사했고, [재개 규칙](apps/mail.md#idle-확정-음절의-재개-2026-11-01-주인-확인에서-부족원복)은 주인 확인에서 부족해 원복했다. 얼린 prefix 해석에 따른 [함께 넣기 규칙](apps/mail.md#함께-넣고-다시-mark-2026-11-01-1346)과 다시 mark 위치의 기억을 Mail 에만 설치했고 주인이 확인했다. 겉모양만으로 같은 결함으로 묶지 않는다.
@@ -60,7 +61,7 @@ activate·deactivate·commit·client 확인·source 종료의 다섯 lifecycle �
 제품 [InputCoordinator](../Sources/InputSession/InputCoordinator.swift)와 [StoredModes](../Sources/homi/Memory.swift)를 연결한
 fake client에서도 같은 결과를 확인했다. 별도 process에서 선택 한자 `selectedText` 질의 중 일반 key를 중첩하면
 Swift exclusivity 위반으로 exit 134였다. 이들은 제품 경로의 **조건부 구조적 반례**이며, 실제 IMK가 이 순서를
-전달하는지 미확인이다. 한자 질의의 충돌은 [별도 교정](lessons.md#한자-질의-중-중첩-입력이-session-접근과-겹친다-2026-11-01)했고, 일반 action 반영 중 중첩은 `InterleavingTests`의 known issue로 남는다. Telegram이나 첫 key 누락의 원인으로 확대하지 않는다.
+전달하는지 미확인이다. 한자 질의의 충돌은 [별도 교정](lessons.md#한자-질의-중-중첩-입력이-session-접근과-겹친다-2026-11-01)했고, 일반 action 반영 중 중첩은 `InterleavingTests`의 known issue로 남는다. Telegram이나 첫 key 누락의 원인으로 확대하지 않는다. 2026-11-03 실제 IMK 는 insert·mark 중의 새 key 를 homi 에 넣지 않았다 ([실험](macos-input.md#client-호출-중-같은-입력칸의-새-key-2026-11-03)).
 
 **교정 후보 대조** (`34d6a64`, 2026-11-01): 제품 coordinator·SessionDriver·Session을 연결한 독립 fixture에서
 `insert(한)`의 적용 직전·직후에 `k`·문장부호·⌘A·Backspace·toggle·commit·focus 이동을 주입했다.

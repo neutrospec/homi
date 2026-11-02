@@ -166,7 +166,8 @@ source 선택·enable·등록, HID 변경, app activation이나 복구 동작은
 
 ## client 호출은 IMK lifecycle 을 재진입시킬 수 있다
 
-기존의 lifecycle 재진입 관측과 일반 key가 같은 controller로 중첩되는지는 별개다. 후자는 실제 OS에서 미확인이지만 허용한 제품 코드 모델의 [조건부 반례와 가정](stability-review.md#imk-이론-검증-범위-2026-11-01)이 있다.
+기존의 lifecycle 재진입 관측과 일반 key가 같은 controller로 중첩되는지는 별개다. 제품 코드 모델에는 후자를 허용한 [조건부 반례와 가정](stability-review.md#imk-이론-검증-범위-2026-11-01)이 있으나,
+2026-11-03 실제 IMK 경로에서는 client 호출 중의 새 key 가 homi 에 오지 않았다 — [아래 실험](#client-호출-중-같은-입력칸의-새-key-2026-11-03).
 
 - client 를 부르는 동안 `commitComposition`·deactivate·activate 가 끼어들 수 있다.
   macOS 27 의 실제 관측은 [PriType #15](https://github.com/ghostface2232/PriType-Swift/pull/15)에 있다.
@@ -184,6 +185,27 @@ source 선택·enable·등록, HID 변경, app activation이나 복구 동작은
   그 사이 재진입으로 owner가 바뀔 수 있다고 가정하면 조회 시점과 대상이 어긋나지만, 실제 발생은 미확인이다.
   다른 source를 거쳐 homi로 돌아온 뒤 알림을 받으면 현재 선택은 true여서 이전 controller의 종료를 복구하지 않는다.
   이 사실만으로 글자 유실을 확정할 수는 없다. client 자체 확정과 별도 종료 여부가 필요하며 [대상 확대의 판단](stability-review.md#유지보류기각하는-제안)을 따른다.
+
+### client 호출 중 같은 입력칸의 새 key (2026-11-03)
+
+probe(`NSTextView`)가 homi 의 client 호출을 처리하는 **도중에** 같은 입력칸에 새 key `k` 를 보냈다. 주인이 실제로 친 key 위에 한 번만 얹었다
+(`scripts/probe.sh <log> --inject-nested-key` 는 첫 `insertText`, `--inject-nested-key-on-mark` 는 첫 `setMarkedText` 도중). macOS 27.2, 설치본 `059B2844`, 근거는 `build/key-reentry-20261103/`.
+
+| homi 가 진행 중인 호출 | 끼어든 key 의 결과 (probe log) | homi 가 받았나 | 화면 (주인 확인) |
+|---|---|---|---|
+| `insertText "한"` (`한` 뒤 `ㄱ`) | 그 안에서 client 에 `insertText "k"`, handled | 아니다 — `key.whileBusy` 없음 | `한kㄱ` |
+| `setMarkedText "ㅎ"` (첫 `ㅎ`) | client 호출 없이 handled — key 가 사라졌다 | 아니다 | 밑줄 친 `ㅎ` |
+
+- **IMK 는 client 호출 중의 새 key 를 같은 controller 에 넣지 않았다** ✅. homi 의 조합과 client 의 mark 도 어긋나지 않았다(`ㄱ`·`ㅎ`).
+  [일반 key 재진입 반례](stability-review.md#imk-이론-검증-범위-2026-11-01)의 전제 — 중첩 key 를 homi 가 처리한다 — 는 이 두 경로에서 성립하지 않았다.
+- 대신 그 key 는 **homi 를 거치지 않고** 글자 그대로 들어가거나(insert 중) 사라졌다(mark 중) ✅. insert 중의 경우는 순서도 바뀌었다.
+  homi 는 그 key 를 보지 못하므로 homi 쪽에서 되돌릴 수 없다. 처리하는 쪽이 app 의 IMK 다리인지 homi process 의 framework 인지, 두 결과가 왜 다른지는 모른다 🔶.
+- app 이 client 호출을 처리하는 **도중에** key 를 꺼내 보낸 경우다. 보통의 AppKit app 은 그 사이 key 를 꺼내지 않는다고 본다 🔶. 실제 app 이 이 순서를 만드는지,
+  activate 의 layout 호출 중에도 같은지는 확인하지 않았다 (probe 가 그 호출에 끼어들 방법이 없다).
+- 겉모양은 [Telegram 의 두 미해결 증상](apps/telegram.md#client-호출-중-새-key-의-우회와-대조-2026-11-03)과 같다 — 원인으로 단정하지 않는다.
+  homi 의 최근 기록은 homi 에 도착한 key 마다 `key` 줄을 남기므로, 재발 직후 "최근 key 기록 저장"이 그 key 의 도착 여부를 가른다.
+- 같은 날 `--check-input-manual` 자동 검사는 첫 입력칸을 비우는 layout 에서 probe 가 crash 했다 — `@objc ProbeTextView.selectedRange` getter 의
+  executor 검사 안 EXC_BAD_ACCESS(`build/key-reentry-20261103/probe-crash.ips`). 원인을 확인하기 전에는 actor 검사를 우회하지 않는다.
 
 ### 실행본과 진단 기록의 연결 (2026-11-01)
 
