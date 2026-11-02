@@ -14,7 +14,7 @@
   prefix 가 한 음절 짧아 대기 뒤 completion 이 그 prefix 로 채우거나 되돌리며 보이는 음절을 지웠다. Mail 구현을 직접 본 것이 아니라, 세 관측을 모두 재현한 모델과 교정 결과로 뒷받침한다.
 - **실패한 대응**: insert range 의 SDK sentinel 단독 변경과, idle 확정 음절을 다음 key 가 이어 가는 재개 규칙은 누락을 고치지 못해 원복했다.
 - **대응**: Mail 에서만 음절 경계에 두 음절을 함께 insert 하고 현재 음절만 그 자리에 다시 mark 한다 (`insertsWithComposing`, 결정 5 의 Mail 예외). text engine client 에서, 위치를 준비 단계에서 확인한 뒤에만.
-- **대응 중 생긴 결함**: Mail 은 위치를 준 mark 뒤의 `markedRange` 를 한 음절 뒤로 답해, 둘째 음절 경계에서 음절이 겹쳤다 (`가나다다`).
+- **대응 중 생긴 결함**: 위치를 준 mark 뒤의 `markedRange` 가 한 음절 뒤로 와, 둘째 음절 경계에서 음절이 겹쳤다 (`가나다다`). Mail 이 아니라 [IMK 경로의 답](docs/macos-input.md#위치를-준-mark-뒤의-markedrange-응답-2026-11-03)이다 (2026-11-03 확인).
   위치·길이 숫자만 남기는 임시 진단으로 확인했고, 다시 mark 한 위치를 homi 가 기억해 같은 조합 동안 묻지 않게 고쳤다.
 - **증거·확인**: 문서 모델 test 가 교정 전 누락과 겹침을 재현하고 교정 뒤 음절을 보존한다. Debug·Release 각각 366개 test 통과.
   진단본에서 주인이 Mail recipient 의 네 경우를, 최종본 `059B2844-AD9E-379E-A8AF-CDDE755C3819` 에서 probe 와 Mail `최효주` 를 정상 확인했다. 자세한 것은 [Mail 원장](apps/mail.md#mail-의-markedrange-응답과-위치-기억-2026-11-01-1418-주인-확인).

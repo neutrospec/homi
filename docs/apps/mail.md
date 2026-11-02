@@ -350,6 +350,8 @@ Apple 입력기에는 그 순간이 없어 prefix 가 `최효` 전체가 된다.
 
 ### Mail 의 markedRange 응답과 위치 기억 (2026-11-01 14:18, 주인 확인)
 
+> 2026-11-03: 같은 답이 평범한 `NSTextView` 에서도 숫자까지 같게 나왔다 — Mail 의 결함이 아니라 [IMK 경로의 것](../docs/macos-input.md#위치를-준-mark-뒤의-markedrange-응답-2026-11-03)이다. 아래의 "Mail 이 답한" 은 그 경로를 거친 값이다.
+
 겹침의 원인을 가르려고 key 마다 반영 직후의 위치·길이 숫자만 log 에 남기는 임시 진단을 설치했다 (UUID `16D1F101-91FA-39E6-B49E-5A139FBDFD32`).
 글자와 key code 는 남기지 않았다. 주인이 `가나` → 대기 → `다` 를 치자 `가나다다` 가 됐고 마지막 `다` 가 조합 중이었다.
 
@@ -362,12 +364,13 @@ Apple 입력기에는 그 순간이 없어 prefix 가 `최효` 전체가 된다.
 
 - **사실**: Mail 은 위치를 준 다시 mark 를 화면에 맞게 반영하면서도, 그 뒤 `markedRange` 를 한 음절 뒤(그때의 caret)로 답하고 제자리 mark 동안 그 값을 유지했다.
   길이 2 문서의 `{2,1}` 은 불가능한 값이다. 위치 없는 mark·insert 는 실제 mark 를 대신했다. 같은 key 의 selection 은 `{1,1}` 로 실제 mark 와 같았다.
-  `NSTokenTextView` 를 쓰는 자체 token field 에서 같은 호출은 정상이었다 (`build/mail-joined-20261101/token-remark-probe.*`). 이 응답이 Mail·IMK 중 어디서 생기는지는 미확인이다.
+  `NSTokenTextView` 를 쓰는 자체 token field 에서 같은 호출은 정상이었다 (`build/mail-joined-20261101/token-remark-probe.*`) — 그 대조는 in-process 직접 호출이라 IMK 경로를 거치지 않았다.
+  2026-11-03 IMK 경로의 `NSTextView` 에서 같은 `{2,1}` 이 나와 주인은 IMK 경로로 확정했다.
 - **해석**: 둘째 음절 경계에서 homi 가 틀린 시작 2 를 믿고 `{3,1}` 에 mark 해 문서 끝에 음절이 하나 더 붙었다. 대기는 원인이 아니며 둘째 경계면 언제든 겹친다.
 - **교정**: 다시 mark 한 위치는 homi 가 계산한 값이므로 Session 이 기억한다 (`markStart`). 같은 mark 를 제자리에서 고치는 자모·Backspace 동안 그 값을 쓰고 묻지 않는다.
   확정·넘기는 key·전환·한자·mouse·조합이 빈 Backspace·평소대로 넣은 경계에서는 버린다. 새 조합의 첫 경계에서만 묻는다 — 위치 없는 mark 뒤의 답은 정확했다.
   종료 요청이 기다리는 key 와 질의 중단 뒤의 처리는 기억한 위치도 쓰지 않고 평소대로 넣는다.
-- **아는 한계**: ⌥↩ 의 방금 친 단어는 여전히 `markedRange` 로 앞 글자를 찾는다. Mail 에서 다시 mark 뒤에는 그 답이 틀려 글자 확인에 실패하고 조합 중인 글자만 바꾼다. 잘못된 교체는 생기지 않는다.
+- **아는 한계**: ⌥↩ 의 방금 친 단어는 여전히 `markedRange` 로 앞 글자를 찾는다. 함께 넣기의 다시 mark 뒤에는 그 답이 틀려 글자 확인에 실패하고 조합 중인 글자만 바꾼다. 잘못된 교체는 생기지 않는다.
 - **test**: InputSession `JoinedInsertTests` 에 Mail 의 응답을 흉내 낸 문서 모델의 재현(`가나다다`·`최효주주` 실패)과 교정, 위치 기억·버림, 기다리는 종료를 더했다. Debug·Release 각각 366개에서 기존 known issue 1개 외 실패·warning 없음.
 - **설치**: 14:18 KST, executable UUID `FA241B5F-5C11-3755-A8EA-89C1064D72AC`(arm64), CDHash `21a6b854c84053bf9040e3549000c435ab83fd6d`, 서명 `homi code signing`, `codesign --verify --strict` 통과. 숫자 진단을 남긴 확인용이다.
 - **주인 확인** (14:22–14:23, 이 설치본): 빈 recipient 에서 `가나` 대기 `다` 는 `가나다` 이고 추천이 없었다. `최효주` 를 쉬지 않고 치면 `최효주` 와 추천이 나왔다.
@@ -415,3 +418,4 @@ Apple은 Mail이 [이전 수신자로 주소를 제안·완성](https://support.
 | 2026-11-01 14:13 | 같은 Mail 설치본 | 숫자 진단: 다시 mark 뒤 Mail 의 `markedRange` 가 한 음절 뒤를 답한다. 14:18 [위치 기억](#mail-의-markedrange-응답과-위치-기억-2026-11-01-1418-주인-확인) 설치, 주인 확인 대기 |
 | 2026-11-01 14:23 | 같은 Mail 설치본 | 주인 확인: `가나다`·`최효주`·`최효` 대기 `주`·추천 수락·Backspace·제목·본문 정상. 14:26 진단을 지운 최종본 설치, probe 확인 대기 |
 | 2026-11-01 14:30 | 같은 Mail 설치본 | 최종본 `059B2844` 에서 주인이 probe 의 기본 입력·Caps Lock 전환·app 복귀와 Mail recipient `최효주` 를 정상 확인 |
+| 2026-11-03 06:13 | probe(`NSTextView`)에 Mail 규칙·숫자 진단을 넣은 실험 build | 다시 mark 뒤 `markedRange` 가 Mail 과 같은 `{2,1}` — 틀린 값의 주인은 [IMK 경로](../macos-input.md#위치를-준-mark-뒤의-markedrange-응답-2026-11-03). 같은 source 로 최종본 재설치 (UUID 동일) |

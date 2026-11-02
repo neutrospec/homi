@@ -286,15 +286,57 @@ keyDown return     → insertText "글" repl={1,1} → doCommand insertNewline: 
 - 이 방식은 입력기가 문서 위치를 정확히 알고, client 가 `replacementRange` 를 정확히 지켜야 성립한다. 문서 model 이 복잡하거나 비동기인
   client(웹·Electron·terminal)에서 위치가 어긋나면 자모가 따로 확정된다 — **풀어쓰기와 같은 모양** 🔶.
   Telegram(NSTextView)에서 Apple 두벌식이 초성을 잃은 것(`아` → `ㅏ`, 주인)도 이 방식이 어긋난 모양으로 본다 — homi 로는 재현되지 않았다 🔶. 결정 5 의 근거다.
-- 입력기가 client 에게 묻는 것은 `selectedRange`(key 마다 여러 번)·`hasMarkedText`·`validAttributesForMarkedText` 뿐이다.
-  문서 내용은 묻지 않고 조합 중인 음절의 위치를 cursor 위치로 계산한다. ✅ (run 2)
+- 이때 probe 에 기록된 질의는 `selectedRange`(key 마다 여러 번)·`hasMarkedText`·`validAttributesForMarkedText` 뿐이었고 문서 내용 질의는 없었다 (run 2).
+  그러나 probe 는 입력기의 문서 질의를 보지 못한다 — [아래 대조](#probe-에-닿지-않는-입력기의-질의-2026-11-03). Apple 이 문서를 묻지 않는다는 증거로 쓰지 않는다.
   이 입력기는 app 의 text 를 cache 하는 비공개 IMK class 위에 있고 `unreliableApps` 같은 목록을 둔다 (조사 → `docs/research/app-compat-and-hangul.md` §3).
-  2026-11-02 binary 분석의 내부 경로·자모 풀림 후보와, 이 관측(문서 내용 질의 없음)과의 어긋남은 [Apple 입력기 내부 조사](research/apple-korean-ime-internals.md)에 있다.
+  binary 분석의 내부 경로와 자모 풀림 후보는 [Apple 입력기 내부 조사](research/apple-korean-ime-internals.md)에 있다.
 - 낱자모는 호환 자모(U+3131–318E), 음절은 완성형(U+AC00–D7A3)이다. Backspace 도 자모 단위의 바꿔치기이고 마지막 자모는 app 이 지운다(`deleteBackward:`).
   도깨비불은 `insertText` 두 번(`일`+ㅓ → `이` 바꿔치기 + `러`). Return 은 조합 중인 글자를 같은 자리에 다시 넣어 확정하고 먹지 않는다 → app 이 `insertNewline:`. ✅ (run 2)
 - **입력기 내부의 조합과 client의 marked text는 별개다.** 2026-11-01 기본 `NSTokenField`에서 실제 Apple 두벌식은 첫 `가`부터 hasMark=false로
   변경 알림·추천 요청을 보냈고, 추천 뒤에도 다음 자음으로 `간`을 이어 만들었다. homi는 같은 control의 한글 입력 중 mark를 유지했다.
   [실제 대조와 준비 한계](apps/mail.md#첫-음절의-실제-apple-대조-2026-11-01-1138-kst)는 Mail 원장에 있다. 이 관측을 현재 Mail 안의 Apple 호출·선택 범위로 확대하지 않는다.
+
+### probe 에 닿지 않는 입력기의 질의 (2026-11-03)
+
+macOS 27.2, 같은 probe 창에서 주인이 차례로 쳤다 (`build/substring-probe-20261103/probe.log`).
+
+- **Apple 두벌식 `한글` + Return** — 쓰기는 run 1·2 와 같다: `ㅎ`{NSNotFound} → `하`{0,1} → `한`{0,1} → `한`{0,1}·`ㄱ`{NSNotFound} → `그`{1,1} → `글`{1,1} →
+  Return 의 `글`{1,1} 뒤 app 의 `insertNewline:`. 둘째 key 의 `selectedRange` 는 `{1,0}`이었고 `attributedSubstring` 은 한 번도 기록되지 않았다. ✅
+- **homi `한자` 뒤 ⌥↩ (방금 친 단어)** — homi 는 `markedRange`(`{4,1}`)와 mark 앞 `attributedSubstringFromRange:{3,1}`(`한`)을 받아야만 `한자`를 `{3,2}` 위에 다시 mark 한다.
+  기록에는 그 `setMarkedText "한자" repl={3,2}`가 있지만, 같은 key 에 `markedRange`·`attributedSubstring {3,1}` 은 없다. ✅
+- 그러니 **입력기가 보낸 문서 질의는 probe 의 `NSTextInputClient` override 에 닿지 않는다** ✅. 기구는 SDK 에 있다 (`IMKInputSession.h:96–119`, 2026-11-03 확인):
+  `IMKTextInput` 의 `selectedRange`·`markedRange`·`length`·`attributedSubstringFromRange:` 는 **TSMDocumentAccess Carbon event** 에 기대고, 지원하지 않는 client 에서는 `NSNotFound`·nil 이 온다.
+  `replacementRange` 도 `kEventParamTextInputSendReplaceRange` 로 가며 그런 client 에서는 무시된다. ✅ (header)
+  TSMDocumentAccess event 에는 길이·selection·문자·font·glyph·첫 rect·lock 만 있고 **marked range 를 묻는 event 가 없다** (`CarbonEvents.h:2272–2285`) —
+  그래서 `markedRange` 는 IMK 가 자기가 보낸 mark 로 계산한 값이라고 본다 🔶. app 쪽 handler 가 view 의 어느 method 를 부르는지는 모른다.
+  key 시작마다 보이는 `selectedRange` → 선택 범위의 `attributedSubstring` 과 잦은 `selectedRange`·`hasMarkedText`·`validAttributesForMarkedText` 는
+  homi 가 묻지 않는 key 에서도 나온다 — framework·app 쪽 입력 처리의 질의다.
+- probe 로 믿을 수 있는 것은 client 가 받은 쓰기(`insertText`·`setMarkedText`)와 그 순서다. 입력기가 무엇을 물었는지는 입력기 쪽 호출 기록으로 본다.
+  binary 분석의 "Apple 은 한글 key 마다 커서 앞 한 글자를 묻는다"([조사](research/apple-korean-ime-internals.md))는 이 관측과 모순되지 않는다.
+
+### 위치를 준 mark 뒤의 markedRange 응답 (2026-11-03)
+
+[Mail 에서 본](apps/mail.md#mail-의-markedrange-응답과-위치-기억-2026-11-01-1418-주인-확인) "다시 mark 뒤 `markedRange` 가 한 음절 뒤" 가 Mail 의 것인지 가르려고,
+probe 의 bundle ID 에 Mail 규칙(`insertsWithComposing`)과 11-01 의 숫자 진단을 잠시 넣은 build(UUID `49DC8543-FF29-3A26-80B8-2CDB9C5E1398`)로
+평범한 `NSTextView` 인 probe 창에 `최효` → 대기 → `주` → Return → `가나다` 를 쳤다 (`build/markedrange-20261103/`, 글자는 남기지 않았다).
+
+| key | homi 가 보낸 것 | 직후 `markedRange` | `selectedRange` | 문서 길이 |
+|---|---|---|---|---|
+| `ㅊ`·`초`·`최`·`쵷` | 제자리 mark | `{0,1}` | `{0,1}` | 1 |
+| `효` 경계 | insert `최효` + mark `효` at `{1,1}` | **`{2,1}`** | `{1,1}` | 2 |
+| `횾` | 제자리 mark | **`{2,1}`** | `{1,1}` | 2 |
+| `주` 경계 | insert `효주` + mark `주` at `{2,1}` | **`{3,1}`** | `{2,1}` | 3 |
+| Return 뒤 `ㄱ`·`가`·`간` | 제자리 mark | `{4,1}` | `{4,1}` | 5 |
+| `나`·`다` 경계 | mark at `{5,1}`·`{6,1}` | **`{6,1}`·`{7,1}`** | `{5,1}`·`{6,1}` | 6·7 |
+
+- **Mail 과 숫자까지 같다** ✅. 위치를 준 mark 뒤의 `markedRange` 는 선택 범위의 끝(= 실제 mark 한 음절 뒤)을 답하고, 이어지는 제자리 mark 동안 그 값을 유지하며,
+  확정 뒤 새 조합에서는 다시 맞다. 위치 없는 mark 뒤의 답도 맞다. 자체 `NSTokenTextView` 를 in-process 로 직접 부른 11-01 대조가 맞았던 것은 IMK 경로를 거치지 않아서다.
+- **그러니 틀린 값의 주인은 Mail 이 아니라 IMK 경로다** ✅ (TSM 에 marked range event 가 없으므로 IMK 의 계산으로 본다 🔶). homi 의 [위치 기억](apps/mail.md#mail-의-markedrange-응답과-위치-기억-2026-11-01-1418-주인-확인)은
+  Mail 특례가 아니라 **위치를 준 mark 뒤의 `markedRange` 는 어느 app 에서도 믿지 않는다**는 규칙이다. 지금 그 값을 쓰는 곳은 Mail 의 함께 넣기뿐이라 제품 변경은 없다.
+- **marked text 의 selection 은 음절 전체로 닿는다** ✅. homi 는 `setMarkedText` 에 글자 뒤 caret `{len,0}` 을 보내지만(`Client.swift`, `ClientTests`),
+  probe 의 `setMarkedText` 가 받은 selection 은 늘 `{0,len}` 이고 client 의 `selectedRange` 도 조합 중 음절 `{n,1}` 에 머문다 (9월 기록부터 같다).
+  SDK 는 NSString 을 주면 "전체에 2 pixel 밑줄의 기본 marking" 이라 하고 selection 은 "가능하면" 반영한다고 한다 (`IMKInputSession.h:81`). hilite 가 전체를 선택 스타일로 덮어 caret 이 무시된다는 것이 해석이다 🔶.
+  알려진 피해는 없다. app 이 selection 을 뜻으로 쓰는 곳(자동완성)에서는 조건이 된다. `mark(forStyle:)` 로 스타일을 붙여 보내는 실험은 피해가 보일 때 한다 (`AERegistry.h:731–739` 에 상수가 남아 있다).
 
 ### Caps Lock 전환은 key 와 다른 통로로 늦게 온다
 
