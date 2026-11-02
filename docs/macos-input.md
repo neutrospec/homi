@@ -308,7 +308,8 @@ macOS 27.2, 같은 probe 창에서 주인이 차례로 쳤다 (`build/substring-
   `IMKTextInput` 의 `selectedRange`·`markedRange`·`length`·`attributedSubstringFromRange:` 는 **TSMDocumentAccess Carbon event** 에 기대고, 지원하지 않는 client 에서는 `NSNotFound`·nil 이 온다.
   `replacementRange` 도 `kEventParamTextInputSendReplaceRange` 로 가며 그런 client 에서는 무시된다. ✅ (header)
   TSMDocumentAccess event 에는 길이·selection·문자·font·glyph·첫 rect·lock 만 있고 **marked range 를 묻는 event 가 없다** (`CarbonEvents.h:2272–2285`) —
-  그래서 `markedRange` 는 IMK 가 자기가 보낸 mark 로 계산한 값이라고 본다 🔶. app 쪽 handler 가 view 의 어느 method 를 부르는지는 모른다.
+  그래서 `markedRange` 는 IMK 가 자기가 보낸 mark 로 계산한 값이라고 본다 🔶. binary 분석은 IMK 가 자체 protocol 로 app process 의 IMK 다리에 묻고
+  그 다리가 답한다고 본다 [I] — view 의 override 가 불리지 않는 것과 맞는다 ([조사](research/apple-korean-ime-internals.md)).
   key 시작마다 보이는 `selectedRange` → 선택 범위의 `attributedSubstring` 과 잦은 `selectedRange`·`hasMarkedText`·`validAttributesForMarkedText` 는
   homi 가 묻지 않는 key 에서도 나온다 — framework·app 쪽 입력 처리의 질의다.
 - probe 로 믿을 수 있는 것은 client 가 받은 쓰기(`insertText`·`setMarkedText`)와 그 순서다. 입력기가 무엇을 물었는지는 입력기 쪽 호출 기록으로 본다.
@@ -331,7 +332,7 @@ probe 의 bundle ID 에 Mail 규칙(`insertsWithComposing`)과 11-01 의 숫자 
 
 - **Mail 과 숫자까지 같다** ✅. 위치를 준 mark 뒤의 `markedRange` 는 선택 범위의 끝(= 실제 mark 한 음절 뒤)을 답하고, 이어지는 제자리 mark 동안 그 값을 유지하며,
   확정 뒤 새 조합에서는 다시 맞다. 위치 없는 mark 뒤의 답도 맞다. 자체 `NSTokenTextView` 를 in-process 로 직접 부른 11-01 대조가 맞았던 것은 IMK 경로를 거치지 않아서다.
-- **그러니 틀린 값의 주인은 Mail 이 아니라 IMK 경로다** ✅ (TSM 에 marked range event 가 없으므로 IMK 의 계산으로 본다 🔶). homi 의 [위치 기억](apps/mail.md#mail-의-markedrange-응답과-위치-기억-2026-11-01-1418-주인-확인)은
+- **그러니 틀린 값의 주인은 Mail 이 아니라 IMK 경로다** ✅ (TSM 에 marked range event 가 없고, 분석가는 app process 쪽 IMK 다리의 계산으로 본다 — 어느 쪽이든 IMK 경로다 🔶). homi 의 [위치 기억](apps/mail.md#mail-의-markedrange-응답과-위치-기억-2026-11-01-1418-주인-확인)은
   Mail 특례가 아니라 **위치를 준 mark 뒤의 `markedRange` 는 어느 app 에서도 믿지 않는다**는 규칙이다. 지금 그 값을 쓰는 곳은 Mail 의 함께 넣기뿐이라 제품 변경은 없다.
 - **marked text 의 selection 은 음절 전체로 닿는다** ✅. homi 는 `setMarkedText` 에 글자 뒤 caret `{len,0}` 을 보내지만(`Client.swift`, `ClientTests`),
   probe 의 `setMarkedText` 가 받은 selection 은 늘 `{0,len}` 이고 client 의 `selectedRange` 도 조합 중 음절 `{n,1}` 에 머문다 (9월 기록부터 같다).

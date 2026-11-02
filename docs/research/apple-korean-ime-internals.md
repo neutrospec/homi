@@ -57,7 +57,21 @@ probe run 2 에서는 `attributedSubstring` 질의가 한 번도 없었는데, �
 (`CarbonEvents.h:2272–2285`). 2026-11-03 평범한 `NSTextView` 에 IMK 경로로 같은 순서를 보내자 Mail 과 같은 `{2,1}` 이 나왔다 ([기록](../docs/macos-input.md#위치를-준-mark-뒤의-markedrange-응답-2026-11-03)).
 틀린 값은 Mail 이 아니라 IMK 경로의 것이고, TSM 에 event 가 없으니 IMK 의 계산으로 본다 🔶. 분석가가 제안한 판별 실험과 같은 실험이며 결론의 이름만 다르다.
 
+## 넷째 답 (2026-11-03) — 목록은 비어 있고, 입력칸 신호는 비공개
+
+- **`markedRange` 의 주인** [O/I]: 분석가가 3-(b) 를 철회했다. Apple 입력기가 쓰는 adaptor 의 `markedRange` 는 TSMDocumentAccess 가 아니라 IMK 자체 protocol 로
+  app process 의 IMK 다리에 묻고, 답이 없으면 composing text 로 대신한다 [O]. `{1,1}` → `{2,1}` 산술은 그 다리(IMKInputSession) 쪽으로 본다 [I] — 우리 실험과 같은 결론이다.
+  산술 자체는 unexported code 라 읽지 못했다 [G]. 실험으로 충분하므로 여기서 닫는다.
+- **`appsWithUnreliableTextInputImplementation`** [O]: 시작 때 **빈 집합**이다. plist·defaults·문자열 배열이 아니다. framework adaptor 의 `_insertText:replacementRange:` 가
+  insert 뒤 "insertion misalignment (expected/found)" 나 "range error" 를 관측했을 때만 그 bundle ID 를 넣고, app 마다 한 번만 검사한다(`textInputReliabilityChecked`).
+  즉 Apple 이 믿지 않는 app 의 **정적 지도는 없다** — 그 입력기 process 안에서 학습되는 집합이다. 들어간 뒤 무엇이 달라지는지는 [G]. 앞서 언급된 Safari·Spotlight 문자열은 이 목록과 무관하다 [G].
+  → `AppRules` 의 증거로 쓸 것이 없다. framework 가 "첫 insert 에서 app 을 검사한다"는 전략을 가진 것은 기록해 둔다 — homi 는 문서를 읽지 않는 쪽을 택했다 (결정 5).
+- **`isIncrementalSearchInputContext`** [O]: `IMKTextInput` client 의 **비공개 method** 하나이고 controller 마다 cache 된다. bundle ID·attributes·`validAttributesForMarkedText` 가 아니다.
+  공개 `NSTextInputClient` 에 대응하는 신호는 없다 [I]. 입력기는 app 의 responder chain 을 볼 수 없으므로, 자동완성 입력칸을 입력칸의 특성으로 알아볼 **공개 수단은 없다**.
+  → Mail 규칙은 bundle ID 로 둔다. 비공개 method 를 probe 에서 불러 보는 것은 증상이 생길 때의 후보다.
+
 ## 미확정 [G]
 
+- `IMKInputSession` 의 marked range 산술과 hilite 배열(`kTSMHiliteCaretPosition` 유무), unreliable 판정 뒤의 쓰기 전략 — unexported code. 파지 않는다.
 - `showsInline` 의 초기값과 client 별 결정 — 그래서 Mail 받는 사람 칸에서 Apple 이 어느 경로인지 모른다.
 - focus·source 전환 직후 첫 key 를 조합하지 않는 조건(QTBUG-136128) — 분기 후보만 있다.
