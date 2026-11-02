@@ -6,6 +6,34 @@
 - 간헐 결함의 증거는 homi 의 기록이다 — 이상하면 주인이 곧바로 input menu 의 "최근 key 기록 저장" 을 누르고(`~/Library/Logs/homi/`), 그 file 로 가린다.
 - 원인에 🔶 가 붙은 것은 대응이 통했지만 원인은 추정이라는 뜻이다.
 
+## 물리 오른쪽 Control 이 Caps Lock 처럼 한/영을 바꾼다 (2026-11-03)
+
+- **증상**: 오른쪽 Control 이 있는 외장 keyboard(PN06)에서 오른쪽 Control 을 혼자 짧게 누르면 한/영이 바뀌고, 혼자 0.5초 누르면 대문자 고정이 됐다 (주인).
+- **원인**: homi 는 Caps Lock 을 HID 에서 오른쪽 Control 로 바꿔 받는다. 그 뒤로는 IMK·event tap 모두 둘을 같은 key(kc 62)로 본다.
+  code 는 "MacBook 에는 물리 오른쪽 Control 이 없다"고 전제했다. 처음(M3)부터 있던 부작용이다.
+- **대응** (주인 선택): homi route 동안 물리 오른쪽 Control 도 왼쪽 Control 로 바꿔 건다. 단축키는 Control 그대로이고, 혼자 눌러도 전환·대문자 고정이 없다.
+  Windows App·Emacs 전달과 homi 밖에서는 걸지 않는다. 다른 도구가 오른쪽 Control 을 바꿨으면 이미 구별되므로 덮지 않는다. 같은 값이 남아 있으면 homi 의 것으로 보고 해제 때 치운다.
+  물리 Caps Lock 을 HID 에서 직접 보는 방법은 입력 모니터링 권한과 Caps Lock 전환을 놓칠 새 위험이 있어 택하지 않았다.
+- **증거**: 교정 전 네 test 실패, 뒤 Debug·Release 각각 378개 test 에서 기존 known issue 1개 외 실패·warning 없음. 07:14 설치본(UUID `B18E61AB-3775-37FD-A039-23D2878AC9CB`)의 probe 에서
+  Caps Lock 은 kc 62, 물리 오른쪽 Control 은 kc 59 로 왔고 오른쪽 Control + A 는 줄 맨 앞 이동이었다. 주인이 Caps Lock 전환과 오른쪽 Control 의 무전환을 확인했다.
+- **한계**: homi route 동안 왼쪽·오른쪽 Control 의 구별이 없다. 사용자가 직접 건 같은 값(오른쪽 → 왼쪽 Control)은 homi 의 것과 구별하지 못해 해제 때 지운다.
+
+## 같은 route 라고 Caps Lock mapping 을 다시 확인하지 않는다 (2026-11-03)
+
+- **증상**: 주인 보고는 없었다 — [code review 의 반례](stability-review.md#caps-lock-전환-code-review-2026-10-29)다. homi 가 건 Caps Lock → 오른쪽 Control mapping 이 밖에서 지워지거나 바뀌어도,
+  같은 route 의 요청은 실제 값을 읽지 않고 성공을 돌려줬다. 그동안 Caps Lock 은 원래의 대문자 고정으로 돌아가 한/영 전환이 끊기고, 다음 route 변경이나 wake 까지 회복하지 않는다.
+- **원인**: `CapsLockMapping.apply` 의 `applied == route` 조기 반환. HID mapping 은 keyboard service 의 수명에 묶이고 다른 도구도 바꾸는데, cache 는 homi 가 마지막으로 쓴 기억일 뿐이다.
+- **증거**: 지워진 mapping·다른 도구의 교체·재시도·Emacs/Windows 전달의 네 test 가 교정 전 실패했다. 2026-11-03 07:01 주인이 `hidutil property --set '{"UserKeyMapping":[]}'` 로
+  mapping 을 비우자(keyboard service 240개 모두 항목 없음) app 을 한 번 바꾼 뒤 homi 가 240개 모두에 다시 걸었고, 주인이 Caps Lock 전환을 정상 확인했다. 교정 전 build 로 같은 순서를 돌린 비교는 하지 않았다.
+- **대응**: mapping 을 거는 route(homi·Windows App·Emacs)는 같은 route 라도 실제 값을 읽고, Caps Lock 항목이 우리 값 하나일 때만 믿는다. 빠졌으면 다시 걸고,
+  다른 도구가 Caps Lock 을 새로 바꿨으면 그 값을 해제 때의 복원값으로 삼는다(전달 route 는 소유 기록도 갱신). homi 밖(`.system`)은 cache 를 유지해 다른 도구와 다투지 않는다.
+  읽기는 app·source·설정 알림 때뿐이고 key 처리 경로에는 없다.
+- **한계**: `CopyProperty` 의 nil 은 무설정과 읽기 실패를 구별하지 못한다 — 같은 route 에서 읽기가 실패하면 빈 값으로 보고 우리 값만 다시 써 다른 도구의 항목을 잃을 수 있다.
+  첫 적용·wake 와 같은 기존 위험이며 실제 발생은 미확인이다. client 수준의 값을 읽으므로 새로 붙은 keyboard service 하나만 빠진 경우를 알아본다는 증거는 없다.
+- **검증**: Debug·Release 각각 372개 test 에서 기존 known issue 1개 외 실패·warning 없음 (`build/caps-mapping-20261103/`).
+  설치 06:59 KST, executable UUID `975C20FB-C420-3A19-AF0E-0AE13212E033`, CDHash `cbedcad835e87121f548ae0414b3187dfa45c866`, 새 PID `54170` 의 시작 UUID 일치.
+- **교훈**: process 밖 상태의 cache 는 마지막으로 쓴 값일 뿐이다. 밖에서 바뀔 수 있는 값이면 알림 때마다 읽어 확인한다 — 다시 쓸지의 판단은 읽은 값으로 한다.
+
 ## Mail recipient 의 자동완성이 대기 뒤 음절을 지운다 (2026-11-01)
 
 - **증상**: 빈 recipient 에서 `가나` 를 치고 기다리면 `가` 기준 추천이 `나` 를 지워, 이어 친 `다` 와 함께 `가다` 가 됐다.
@@ -14,7 +42,7 @@
   prefix 가 한 음절 짧아 대기 뒤 completion 이 그 prefix 로 채우거나 되돌리며 보이는 음절을 지웠다. Mail 구현을 직접 본 것이 아니라, 세 관측을 모두 재현한 모델과 교정 결과로 뒷받침한다.
 - **실패한 대응**: insert range 의 SDK sentinel 단독 변경과, idle 확정 음절을 다음 key 가 이어 가는 재개 규칙은 누락을 고치지 못해 원복했다.
 - **대응**: Mail 에서만 음절 경계에 두 음절을 함께 insert 하고 현재 음절만 그 자리에 다시 mark 한다 (`insertsWithComposing`, 결정 5 의 Mail 예외). text engine client 에서, 위치를 준비 단계에서 확인한 뒤에만.
-- **대응 중 생긴 결함**: 위치를 준 mark 뒤의 `markedRange` 가 한 음절 뒤로 와, 둘째 음절 경계에서 음절이 겹쳤다 (`가나다다`). Mail 이 아니라 [IMK 경로의 답](docs/macos-input.md#위치를-준-mark-뒤의-markedrange-응답-2026-11-03)이다 (2026-11-03 확인).
+- **대응 중 생긴 결함**: 위치를 준 mark 뒤의 `markedRange` 가 한 음절 뒤로 와, 둘째 음절 경계에서 음절이 겹쳤다 (`가나다다`). Mail 이 아니라 [IMK 경로의 답](macos-input.md#위치를-준-mark-뒤의-markedrange-응답-2026-11-03)이다 (2026-11-03 확인).
   위치·길이 숫자만 남기는 임시 진단으로 확인했고, 다시 mark 한 위치를 homi 가 기억해 같은 조합 동안 묻지 않게 고쳤다.
 - **증거·확인**: 문서 모델 test 가 교정 전 누락과 겹침을 재현하고 교정 뒤 음절을 보존한다. Debug·Release 각각 366개 test 통과.
   진단본에서 주인이 Mail recipient 의 네 경우를, 최종본 `059B2844-AD9E-379E-A8AF-CDDE755C3819` 에서 probe 와 Mail `최효주` 를 정상 확인했다. 자세한 것은 [Mail 원장](apps/mail.md#mail-의-markedrange-응답과-위치-기억-2026-11-01-1418-주인-확인).

@@ -16,13 +16,13 @@
 ## 후속 네 작업 (2026-11-01)
 
 주인이 아래 네 항목을 모두 처리할 작업으로 채택했다. **1 → 2 → 3 → 4 순서로 하나씩** 진행하며,
-현재는 1번의 반례와 [Mail recipient 자동완성의 음절 누락 보고](apps/mail.md)를 대조하는 단계다. 이 기록으로 제품 동작·설치본을 바꾸지는 않는다.
+1번은 실제 경로 실험으로, 2번은 교정·설치·주인 확인으로 마쳤다 (2026-11-03). 다음은 3번이다.
 재발 없이도 명시적인 코드 문제를 다루되, 실제 발생의 증거와 조건을 주입한 test를 구분한다.
 
 | 순서 | 작업 · 현재 상태 | 다음 행동과 교정 기준 |
 |---|---|---|
 | 1 | **일반 key 재진입 — 실제 경로 실험: homi 에 오지 않음 (2026-11-03)** | insert·mark 호출 중 같은 입력칸의 새 key 는 IMK 가 homi 에 넣지 않고 글자 그대로 넣거나 버렸다 ([실험](macos-input.md#client-호출-중-같은-입력칸의-새-key-2026-11-03)). homi 의 조합·client mark 불일치는 이 경로에서 생기지 않았고, 남은 위험은 homi 가 볼 수 없는 곳에 있다. homi 쪽 교정 대상이 없다. activate 의 layout 호출 중과 실제 app 의 전달 순서는 미확인이다. |
-| 2 | **Caps Lock mapping cache — 대기** | [CapsLockMapping](../Sources/homi/CapsLockMapping.swift)의 같은 route 조기 반환에 외부 mapping 소실·교체를 주입한다. 실제 상태와 cache를 대조할 경계를 정하고, 다른 도구의 mapping·복원값과 Windows App·Emacs 전달을 보존한다. 읽기 실패를 정상 빈 mapping으로 단정하지 않는다([HID 계약의 한계](macos-input.md#homi-process-와-hid-mapping-의-수명)). |
+| 2 | **Caps Lock mapping cache — 교정·설치·주인 확인 (2026-11-03)** | mapping 을 거는 route 는 같은 route 라도 실제 값을 읽어 빠지거나 바뀐 Caps Lock 을 다시 건다. homi 밖은 cache 를 유지하고 다른 도구의 새 값은 복원값으로 지킨다. 읽기 실패와 무설정의 구별은 여전히 못 한다 ([교훈](lessons.md#같은-route-라고-caps-lock-mapping-을-다시-확인하지-않는다-2026-11-03)). 같이 [물리 오른쪽 Control 을 왼쪽 Control 로](lessons.md#물리-오른쪽-control-이-caps-lock-처럼-한영을-바꾼다-2026-11-03) 보내도록 했다 (주인 선택). |
 | 3 | **source 종료 판단 — 대기** | unknown의 false fallback과 조회 뒤 최신 owner에게 종료를 보내는 경계를 제품 경로에서 검사한다. 조회 실패·owner 교체·종료 누락을 구분하고, 잘못된 확정·중복·필요한 종료 누락을 함께 평가한다. source·proxy identity만으로 client 확정·입력칸 소유권을 판정하지 않는다. [현재 판단](#유지보류기각하는-제안)을 출발점으로 삼는다. |
 | 4 | **첫 renderer 판별의 동기 file I/O — 대기** | [cold 조회](#3번-renderer-판별과-commit-정책-분리)를 입력 경로 밖에서 준비할 수 있는지 검토한다. 첫 callback과 cache 준비의 선후, 조회 실패·회복을 검사하고 기존 commit 정책을 보존한다. 준비 전 callback을 다른 정책으로 처리하는 단순 async 이동은 채택하지 않는다. |
 
@@ -168,6 +168,7 @@ unit test·비교 action 을 실제 입력 성공으로 확대하지 않는다.
    model 은 적용 후 mapping 을 비운 다음 같은 `.homi` 를 요청해도 성공을 반환했고 mapping 은 비어 있었다.
    [mapping 수명](macos-input.md#homi-process-와-hid-mapping-의-수명)과 cache 의 수명이 다르지만, `SourceWatcher` 의 invalidate 는 wake 에만 있다.
    이번 관측에는 오른쪽 Control 신호가 있었으므로 이 경로를 누락의 우선 원인으로 삼지 않는다. 다른 도구의 mapping 을 보존하는 기존 교훈도 지킨다.
+   **2026-11-03 교정** — [교훈](lessons.md#같은-route-라고-caps-lock-mapping-을-다시-확인하지-않는다-2026-11-03).
 
 **검증 공백**: `ToggleTests` 의 첫 key 검사는 이미 인정된 `.toggle` 을 직접 넣고, `ModifierKeysTests` 는 counter 증가가 누르는 동안의 입력이라고 전제한다.
 `HoldTimerTests` 는 owner 수명을 검사한다. 이 test 들의 통과는 위 시간 구간·전달 지연·좌우 구분의 반례를 배제하지 않는다.

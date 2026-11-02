@@ -499,6 +499,10 @@ Quartz 의 session event tap 은 별도 thread 에서 원본을 반환하고, IM
   SDK는 성공 외 NULL을 명시하지만 [TN2450](https://developer.apple.com/library/archive/technotes/tn2450/)의 `hidutil` 예제는 `(null)`을 활성 remap 없음으로 설명한다.
   CLI와 API의 두 경계를 같은 것으로 단정하지 않는다. 현재 `nil → []`를 무조건 오류로 바꾸면 정상 첫 remap도 막을 수 있어 유지한다.
   반대로 읽기 실패 뒤 빈 mapping을 쓰면 다른 항목을 잃을 수 있다는 조건부 위험은 남는다. 실제 발생은 미확인이다. (2026-11-01 계약 검토)
+- `hidutil property --set '{"UserKeyMapping":[]}'` 는 homi 가 건 mapping 을 모든 keyboard service(240개)에서 즉시 지운다. homi 의 client 수준 읽기도 그 소실을 보고 다시 걸었다. ✅ (2026-11-03,
+  [교훈](lessons.md#같은-route-라고-caps-lock-mapping-을-다시-확인하지-않는다-2026-11-03)) 새로 붙은 keyboard service 하나만 빠지는 경우가 client 수준 읽기에 보이는지는 미확인이다.
+- `UserKeyMapping` 은 이어서 적용되지 않는다. `Caps Lock → 오른쪽 Control` 과 `오른쪽 Control → 왼쪽 Control` 을 함께 걸어도 Caps Lock 은 오른쪽 Control(kc 62),
+  물리 오른쪽 Control 은 왼쪽 Control(kc 59)로 왔다. ✅ (2026-11-03 probe, PN06 — [교훈](lessons.md#물리-오른쪽-control-이-caps-lock-처럼-한영을-바꾼다-2026-11-03))
 
 ### mode 저장과 key 처리
 

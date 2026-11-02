@@ -273,3 +273,152 @@ func externalF18MappingSurvivesEmacs() {
     hid.caps.apply(.system)
     #expect(hid.destination(CapsLockMapping.capsLock) == 0x7_0000_006D)
 }
+
+// 같은 route 의 조기 반환 (docs/stability-review.md 후속 2번, 2026-11-03).
+// mapping 은 keyboard service 의 수명에 묶이고 다른 도구도 바꿀 수 있다 — cache 만 믿으면 Caps Lock 전환이 다음 route 변경·wake 까지 끊긴다.
+
+@Test("같은 route 라도 밖에서 지워진 homi mapping 을 다시 건다")
+func clearedMappingReapplied() {
+    let hid = HID()
+    hid.set(7, to: 9)
+    hid.caps.apply(.homi)
+    hid.mapping = []
+    let done = hid.caps.apply(.homi)
+    #expect(done)
+    #expect(hid.destination(CapsLockMapping.capsLock) == CapsLockMapping.rightControl)
+}
+
+@Test("같은 route 이고 mapping 이 그대로면 HID 에 다시 쓰지 않는다")
+func intactMappingNotRewritten() {
+    let hid = HID()
+    hid.caps.apply(.homi)
+    hid.caps.apply(.homi)
+    #expect(hid.writes == 1)
+}
+
+@Test("다른 도구가 homi 의 Caps Lock 을 바꾸면 다시 걸고, 해제 때는 그 새 값을 복원한다")
+func replacedMappingReappliedAndRestored() {
+    let hid = HID()
+    hid.set(CapsLockMapping.capsLock, to: 123)
+    hid.caps.apply(.homi)
+    hid.set(CapsLockMapping.capsLock, to: 456)
+    hid.caps.apply(.homi)
+    #expect(hid.destination(CapsLockMapping.capsLock) == CapsLockMapping.rightControl)
+    hid.caps.apply(.system)
+    #expect(hid.destination(CapsLockMapping.capsLock) == 456)
+}
+
+@Test("다시 걸기가 실패하면 성공으로 cache 하지 않고 다음 알림에 재시도한다")
+func reapplyFailureRetries() {
+    let hid = HID()
+    hid.caps.apply(.homi)
+    hid.mapping = []
+    hid.succeeds = false
+    let failed = hid.caps.apply(.homi)
+    #expect(!failed)
+    hid.succeeds = true
+    let done = hid.caps.apply(.homi)
+    #expect(done)
+    #expect(hid.destination(CapsLockMapping.capsLock) == CapsLockMapping.rightControl)
+}
+
+@Test("homi 밖의 같은 route 는 다시 읽지 않는다 — 다른 도구의 오른쪽 Control mapping 과 다투지 않는다")
+func systemRouteDoesNotFightOtherTools() {
+    let hid = HID()
+    hid.caps.apply(.system)
+    hid.set(CapsLockMapping.capsLock, to: CapsLockMapping.rightControl)
+    hid.caps.apply(.system)
+    #expect(hid.destination(CapsLockMapping.capsLock) == CapsLockMapping.rightControl)
+}
+
+@Test("Emacs·Windows 전달도 지워지거나 바뀐 mapping 을 다시 걸고 복원값을 지킨다")
+func forwardedMappingReapplied() {
+    let emacs = HID()
+    emacs.set(CapsLockMapping.capsLock, to: 123)
+    emacs.caps.apply(.emacs)
+    emacs.mapping = []
+    emacs.caps.apply(.emacs)
+    #expect(emacs.destination(CapsLockMapping.capsLock) == CapsLockMapping.f18)
+    emacs.caps.apply(.system)
+    #expect(emacs.destination(CapsLockMapping.capsLock) == 123)
+    #expect(emacs.forwardedOriginal == nil)
+
+    let windows = HID()
+    windows.caps.apply(.windows(.hangul))
+    windows.set(CapsLockMapping.capsLock, to: 456)
+    windows.caps.apply(.windows(.hangul))
+    #expect(windows.destination(CapsLockMapping.capsLock) == CapsLockMapping.language1)
+    #expect(windows.forwardedOriginal?.count == 1)
+    let next = HID(forwardedOriginal: windows.forwardedOriginal)
+    next.mapping = windows.mapping
+    next.caps.apply(.system)
+    #expect(next.destination(CapsLockMapping.capsLock) == 456)
+}
+
+// 물리 오른쪽 Control (2026-11-03 주인). Caps Lock 을 오른쪽 Control 로 받으므로, 오른쪽 Control 이 있는 keyboard 에서는
+// homi route 동안 그 key 를 왼쪽 Control 로 보내 Caps Lock 과 섞이지 않게 한다.
+
+private let leftControl: UInt64 = 0x7_0000_00E0
+
+@Test("homi route 에서는 물리 오른쪽 Control 을 왼쪽 Control 로 보낸다")
+func homiRouteSendsRightControlAsLeft() {
+    let hid = HID()
+    hid.caps.apply(.homi)
+    #expect(hid.destination(CapsLockMapping.capsLock) == CapsLockMapping.rightControl)
+    #expect(hid.destination(CapsLockMapping.rightControl) == leftControl)
+}
+
+@Test("homi route 를 풀면 오른쪽 Control mapping 도 풀고 다른 key 를 보존한다")
+func systemRouteRemovesRightControlMapping() {
+    let hid = HID()
+    hid.set(7, to: 9)
+    hid.caps.apply(.homi)
+    hid.caps.apply(.system)
+    #expect(hid.destination(CapsLockMapping.rightControl) == nil)
+    #expect(hid.destination(CapsLockMapping.capsLock) == nil)
+    #expect(hid.destination(7) == 9)
+}
+
+@Test("다른 도구의 오른쪽 Control mapping 은 덮지도 지우지도 않는다")
+func otherRightControlMappingSurvives() {
+    let hid = HID()
+    hid.set(CapsLockMapping.rightControl, to: 0x7_0000_00E7)
+    hid.caps.apply(.homi)
+    #expect(hid.destination(CapsLockMapping.rightControl) == 0x7_0000_00E7)
+    hid.caps.apply(.homi)
+    #expect(hid.writes == 1)
+    hid.caps.apply(.system)
+    #expect(hid.destination(CapsLockMapping.rightControl) == 0x7_0000_00E7)
+}
+
+@Test("Windows App·Emacs 전달에서는 오른쪽 Control 을 바꾸지 않고, homi 로 돌아오면 다시 건다")
+func forwardedRoutesLeaveRightControl() {
+    let hid = HID()
+    hid.caps.apply(.homi)
+    hid.caps.apply(.emacs)
+    #expect(hid.destination(CapsLockMapping.rightControl) == nil)
+    hid.caps.apply(.windows(.rightAlt))
+    #expect(hid.destination(CapsLockMapping.rightControl) == nil)
+    hid.caps.apply(.homi)
+    #expect(hid.destination(CapsLockMapping.rightControl) == leftControl)
+}
+
+@Test("같은 route 에서 오른쪽 Control mapping 만 빠져도 다시 건다")
+func missingRightControlMappingReapplied() {
+    let hid = HID()
+    hid.caps.apply(.homi)
+    hid.mapping = hid.mapping.filter { ($0[CapsLockMapping.source] as? UInt64) != CapsLockMapping.rightControl }
+    hid.caps.apply(.homi)
+    #expect(hid.destination(CapsLockMapping.rightControl) == leftControl)
+    #expect(hid.destination(CapsLockMapping.capsLock) == CapsLockMapping.rightControl)
+}
+
+@Test("새 process 는 이전 homi 가 남긴 오른쪽 Control mapping 도 치운다")
+func staleRightControlMappingCleared() {
+    let hid = HID()
+    hid.set(CapsLockMapping.capsLock, to: CapsLockMapping.rightControl)
+    hid.set(CapsLockMapping.rightControl, to: leftControl)
+    hid.caps.apply(.system)
+    #expect(hid.destination(CapsLockMapping.capsLock) == nil)
+    #expect(hid.destination(CapsLockMapping.rightControl) == nil)
+}

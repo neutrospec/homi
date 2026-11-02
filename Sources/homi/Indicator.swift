@@ -106,7 +106,7 @@ final class SourceWatcher: NSObject {
 
 /// Caps Lock 을 오른쪽 Control 로 바꾼다 — 누름·뗌이 flagsChanged 로 오고, 수식키라 어느 app 에도 글자가 새지 않는다.
 /// (F18 로 바꿨을 때는 Ghostty·iTerm2 가 입력기가 먹은 F18 을 terminal 로 보냈다 — docs/macos-input.md.)
-/// MacBook 에는 물리 오른쪽 Control 이 없어 헷갈릴 key 도 없다. 관리자 권한이 필요 없다 (macOS 27 에서 확인).
+/// 물리 오른쪽 Control 이 있는 keyboard 에서는 그 key 를 왼쪽 Control 로 보내 Caps Lock 과 구별한다 (2026-11-03 주인). 관리자 권한이 필요 없다 (macOS 27 에서 확인).
 /// Windows App 전달 옵션에서는 LANG1 또는 오른쪽 Option 으로 바꾼다. 원격 검증 범위는 docs/apps/windows-app.md.
 /// Emacs 전달 옵션에서는 F18 로 바꾼다 (docs/apps/emacs.md).
 /// 다른 도구가 건 mapping 은 보존한다.
