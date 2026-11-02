@@ -21,6 +21,9 @@ enum HomiApp {
         }
         log.info("started, executable UUID: \(executableUUID, privacy: .public), process: \(processID, privacy: .public)")
         ModifierActivityObserver.shared.start()
+        // 첫 renderer 판별(commitComposition 안)의 cold 비용은 directory 읽기(~1ms)가 아니라 NSWorkspace 의 실행 app 목록 첫 구성(5–9ms)이었다.
+        // 시작 때 한 번 미리 만들어 둔다 — 판별 시점·정책은 그대로다 (docs/stability-review.md 후속 4번, 2026-11-03).
+        _ = NSWorkspace.shared.runningApplications
         let watcher = SourceWatcher()
         withExtendedLifetime((server, watcher)) { app.run() }
     }

@@ -16,7 +16,7 @@
 ## 후속 네 작업 (2026-11-01)
 
 주인이 아래 네 항목을 모두 처리할 작업으로 채택했다. **1 → 2 → 3 → 4 순서로 하나씩** 진행하며,
-1번은 실제 경로 실험으로, 2번은 교정·설치·주인 확인으로, 3번은 판단 고정·관측 보강으로 마쳤다 (2026-11-03). 다음은 4번이다.
+네 작업을 모두 마쳤다 (2026-11-03): 1번 실제 경로 실험, 2번 교정·설치·주인 확인, 3번 판단 고정·관측 보강, 4번 측정·시작 때 준비.
 재발 없이도 명시적인 코드 문제를 다루되, 실제 발생의 증거와 조건을 주입한 test를 구분한다.
 
 | 순서 | 작업 · 현재 상태 | 다음 행동과 교정 기준 |
@@ -24,7 +24,7 @@
 | 1 | **일반 key 재진입 — 실제 경로 실험: homi 에 오지 않음 (2026-11-03)** | insert·mark 호출 중 같은 입력칸의 새 key 는 IMK 가 homi 에 넣지 않고 글자 그대로 넣거나 버렸다 ([실험](macos-input.md#client-호출-중-같은-입력칸의-새-key-2026-11-03)). homi 의 조합·client mark 불일치는 이 경로에서 생기지 않았고, 남은 위험은 homi 가 볼 수 없는 곳에 있다. homi 쪽 교정 대상이 없다. activate 의 layout 호출 중과 실제 app 의 전달 순서는 미확인이다. |
 | 2 | **Caps Lock mapping cache — 교정·설치·주인 확인 (2026-11-03)** | mapping 을 거는 route 는 같은 route 라도 실제 값을 읽어 빠지거나 바뀐 Caps Lock 을 다시 건다. homi 밖은 cache 를 유지하고 다른 도구의 새 값은 복원값으로 지킨다. 읽기 실패와 무설정의 구별은 여전히 못 한다 ([교훈](lessons.md#같은-route-라고-caps-lock-mapping-을-다시-확인하지-않는다-2026-11-03)). 같이 [물리 오른쪽 Control 을 왼쪽 Control 로](lessons.md#물리-오른쪽-control-이-caps-lock-처럼-한영을-바꾼다-2026-11-03) 보내도록 했다 (주인 선택). |
 | 3 | **source 종료 판단 — 검증·관측 보강, 정책 유지 (2026-11-03)** | 알림의 판단을 순수 `SourceNotice` 로 분리해 test 로 고정했다: TIS 변경·설정·wake 에서 비선택이면 마지막 owner 의 조합을 끝내고, app 활성화에서는 끝내지 않으며, unknown 은 네 이유 모두 비선택으로 다룬다(기존 false fallback). 조회 전후의 owner 가 다르면 info log 에 남긴다 — 종료는 기존대로 조회 뒤의 owner 에게. 정책을 바꿀 기준은 [두 세계](#source-종료-판단의-두-세계-2026-11-03)에 둔다. |
-| 4 | **첫 renderer 판별의 동기 file I/O — 대기** | [cold 조회](#3번-renderer-판별과-commit-정책-분리)를 입력 경로 밖에서 준비할 수 있는지 검토한다. 첫 callback과 cache 준비의 선후, 조회 실패·회복을 검사하고 기존 commit 정책을 보존한다. 준비 전 callback을 다른 정책으로 처리하는 단순 async 이동은 채택하지 않는다. |
+| 4 | **첫 renderer 판별의 동기 file I/O — 측정·시작 때 준비 (2026-11-03)** | cold 비용을 나눠 재니 directory 읽기는 app 당 1ms 안팎이고, 5–9ms 는 NSWorkspace 의 실행 app 목록 첫 구성이었다. 그 준비만 시작 때로 옮겼고 판별 시점·cache·실패 회복·commit 정책은 그대로다 ([측정](#3번-renderer-판별과-commit-정책-분리)). 남은 ~1ms 의 읽기는 첫 commitComposition 에 둔다 — click·focus 이동 때라 입력 지연이 아니다. |
 
 교정 후보는 기본 입력·Backspace·내부 한/영·focus 이동을 먼저 보호한다. 코드 변경은 실패 test → 교정 → 필요한 전체 검사 → 설치·해당 app 확인으로 진행한다.
 안전한 해법의 근거가 부족하면 남은 반례와 보류 이유를 기록한다. 네 작업의 완료를 Telegram 첫 key 오류·input menu 누락의 해결로 자동 확대하지 않는다.
@@ -306,6 +306,13 @@ modifier 한자 질의·resend 권한·두 controller 의 mode 공유를 추가�
 NSWorkspace 초기화를 포함할 수 있고 실제 IMK callback 지연·상한을 측정한 것은 아니다.
 `build/RendererPolicyReview20261031.swift`·`build/renderer-policy-installed-bundles-20261031.log`에 실행 근거가 있다.
 typing 경로의 file I/O 제거는 첫 판별을 미리 확보할 근거가 필요하므로 남긴다.
+
+**2026-11-03 측정 (후속 4번)**: 별도 process 에서 cold 비용을 단계별로 쟀다 (`build/renderer-cold-20261103/`, 읽기 전용).
+homi 와 같은 순서(`frontmostApplication` 먼저)에서 첫 `runningApplications` 2.4–9.2ms, 첫 `urlForApplication` 2.5–6.3ms, 두 번째 `runningApplications` 0.08–0.49ms.
+directory 읽기는 Chrome(Frameworks 1 + Helpers 1) 0.4–1.0ms, VS Code·Orca(Frameworks 8 + Helpers 4) 0.2–1.1ms, TextEdit 0.03–0.3ms — file cache 가 따뜻한 조건이다.
+즉 21ms 로 보였던 첫 판별의 대부분은 NSWorkspace 의 실행 app 목록 첫 구성이다. 시작 때 `NSWorkspace.shared.runningApplications` 를 한 번 만들어 그 비용을 입력 경로 밖으로 옮겼다(`HomiApp.main`).
+판별은 여전히 첫 commitComposition 안에서 동기로 하며 cache·실패 회복·정책은 바뀌지 않았다. async 사전 판별은 1ms 를 위해 thread·선후 관계를 들이는 일이라 하지 않는다.
+첫 commit 의 실제 지연을 재지는 않았다 — click·focus 이동 때의 callback 이라 key 입력 지연이 아니다. 측정 뒤 실제 stall 이 보이면 그때 다시 잰다.
 
 `swift build`와 Debug·Release 각각 **237개 test**가 통과했다. 2026-10-31 **14:29:08 KST** 에 자체 서명본을 설치했고
 (CDHash `f62d321ce294ee5595f66cb282c62eed879ea508`), 새 PID `38121`의 시작·modifier observer 준비를 확인했다.
