@@ -58,20 +58,25 @@ final class SourceWatcher: NSObject {
             self, selector: #selector(sourceChanged(_:)), name: .homiPreferencesChanged, object: nil)
         NotificationCenter.default.addObserver(
             self, selector: #selector(terminating(_:)), name: NSApplication.willTerminateNotification, object: nil)
-        update()
+        update(trigger: .appActivated)
     }
 
     @objc func sourceChanged(_ note: Notification) {
-        let selection = update()
-        let selected = selection.compatibilitySelected
-        let controllerID = ActiveInputSession.controller?.traceID ?? "none"
-        log.info("source notification, homi selected: \(selection.diagnostic, privacy: .public), active controller: \(ActiveInputSession.controller != nil), controller: \(controllerID, privacy: .public)")
-        ActiveInputSession.controller?.sourceChanged(selected: selected)
+        // 조회 전의 owner 를 기억해 조회·remap·표시 사이에 owner 가 바뀌는지 관측한다 (docs/stability-review.md 후속 3번). 종료는 그때의 owner 에게 간다.
+        let ownerBefore = ActiveInputSession.controller
+        let (selection, effects) = update(trigger: .sourceChanged)
+        let owner = ActiveInputSession.controller
+        let controllerID = owner?.traceID ?? "none"
+        log.info("source notification, homi selected: \(selection.diagnostic, privacy: .public), active controller: \(owner != nil), controller: \(controllerID, privacy: .public)")
+        if owner !== ownerBefore {
+            log.info("source notification owner changed during update, before: \(ownerBefore?.traceID ?? "none", privacy: .public), after: \(controllerID, privacy: .public)")
+        }
+        if effects.endsComposition { owner?.sourceChanged(selected: false) }
     }
 
     @objc func appActivated(_ note: Notification) {
         let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-        update(front: app?.bundleIdentifier)
+        update(front: app?.bundleIdentifier, trigger: .appActivated)
     }
 
     /// 잠에서 깨면 key mapping 이 풀렸을 수 있다 — 다시 건다.
@@ -85,22 +90,21 @@ final class SourceWatcher: NSObject {
         CapsLockRemap.apply(.system)
     }
 
+    /// 관측 → 판단(`SourceNotice`) → 효과. 판단은 순수하고 test 가 고정한다. 이 값은 실제 source 해제의 증거가 아니다.
     @discardableResult
-    private func update(front: String? = nil) -> SourceSelection {
+    private func update(front: String? = nil, trigger: SourceNotice.Trigger) -> (SourceSelection, SourceNotice.Effects) {
         let selection = CurrentSource.read()
         if case .unknown(let reason) = selection, reportedUnknown.insert(reason).inserted {
             log.warning("source lookup unknown: \(reason.rawValue, privacy: .public); using not-selected fallback")
         }
-        // property nil·빈 ID 의 기존 false 를 유지한다. copy nil·타입 오류는 새 방어적 fallback 이다.
-        // 이 값은 실제 source 해제의 증거가 아니다.
-        let selected = selection.compatibilitySelected
+        let effects = SourceNotice.effects(of: selection, trigger: trigger)
         let settings = preferences.withLock { $0 }
         let app = front ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
-        let route = CapsLockRoute.resolve(homiSelected: selected, app: app, preferences: settings)
+        let route = CapsLockRoute.resolve(homiSelected: effects.homiSelected, app: app, preferences: settings)
         CapsLockRemap.apply(route)
-        ModifierActivityObserver.shared.setContext(app: selected ? app : nil)
-        Indicator.shared.setVisible(selected)
-        return selection
+        ModifierActivityObserver.shared.setContext(app: effects.homiSelected ? app : nil)
+        Indicator.shared.setVisible(effects.homiSelected)
+        return (selection, effects)
     }
 }
 

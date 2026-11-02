@@ -125,6 +125,7 @@ macOS 가 focus 전환 때 다른 source 를 복원하는 경로까지 없애지
   2026-11-01 `CurrentSource`가 nil·CF 타입 불일치·빈 ID를 이유별 unknown으로 구분하도록 바꿨다([교훈](lessons.md#source-id-의-앞부분만-비교해-다른-입력기를-homi-로-본다-2026-11-01)).
   관측과 행동은 별개다. property nil·빈 ID의 기존 false fallback은 유지하고 Copy nil·타입 오류에도 방어적으로 false를 쓴다.
   종료 생략·Caps remap 유지·Chromium commit은 손실 조건이 서로 달라 새 방침을 채택하지 않았다. [source 종료의 정보 경계](stability-review.md#유지보류기각하는-제안)를 따른다.
+  2026-11-03: 알림의 판단은 `SourceNotice` 로 분리해 test 로 고정했고, 바꿀 기준은 [두 세계](stability-review.md#source-종료-판단의-두-세계-2026-11-03)에 있다. 경고를 넣은 뒤 persisted log 에 unknown 은 없다.
 
 이 관찰을 typing 경로에 넣거나 system 상태를 바꾸지 않는다. 관찰 중 `imklaunchagent` 를 종료하지 않는다.
 

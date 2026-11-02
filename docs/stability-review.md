@@ -16,14 +16,14 @@
 ## 후속 네 작업 (2026-11-01)
 
 주인이 아래 네 항목을 모두 처리할 작업으로 채택했다. **1 → 2 → 3 → 4 순서로 하나씩** 진행하며,
-1번은 실제 경로 실험으로, 2번은 교정·설치·주인 확인으로 마쳤다 (2026-11-03). 다음은 3번이다.
+1번은 실제 경로 실험으로, 2번은 교정·설치·주인 확인으로, 3번은 판단 고정·관측 보강으로 마쳤다 (2026-11-03). 다음은 4번이다.
 재발 없이도 명시적인 코드 문제를 다루되, 실제 발생의 증거와 조건을 주입한 test를 구분한다.
 
 | 순서 | 작업 · 현재 상태 | 다음 행동과 교정 기준 |
 |---|---|---|
 | 1 | **일반 key 재진입 — 실제 경로 실험: homi 에 오지 않음 (2026-11-03)** | insert·mark 호출 중 같은 입력칸의 새 key 는 IMK 가 homi 에 넣지 않고 글자 그대로 넣거나 버렸다 ([실험](macos-input.md#client-호출-중-같은-입력칸의-새-key-2026-11-03)). homi 의 조합·client mark 불일치는 이 경로에서 생기지 않았고, 남은 위험은 homi 가 볼 수 없는 곳에 있다. homi 쪽 교정 대상이 없다. activate 의 layout 호출 중과 실제 app 의 전달 순서는 미확인이다. |
 | 2 | **Caps Lock mapping cache — 교정·설치·주인 확인 (2026-11-03)** | mapping 을 거는 route 는 같은 route 라도 실제 값을 읽어 빠지거나 바뀐 Caps Lock 을 다시 건다. homi 밖은 cache 를 유지하고 다른 도구의 새 값은 복원값으로 지킨다. 읽기 실패와 무설정의 구별은 여전히 못 한다 ([교훈](lessons.md#같은-route-라고-caps-lock-mapping-을-다시-확인하지-않는다-2026-11-03)). 같이 [물리 오른쪽 Control 을 왼쪽 Control 로](lessons.md#물리-오른쪽-control-이-caps-lock-처럼-한영을-바꾼다-2026-11-03) 보내도록 했다 (주인 선택). |
-| 3 | **source 종료 판단 — 대기** | unknown의 false fallback과 조회 뒤 최신 owner에게 종료를 보내는 경계를 제품 경로에서 검사한다. 조회 실패·owner 교체·종료 누락을 구분하고, 잘못된 확정·중복·필요한 종료 누락을 함께 평가한다. source·proxy identity만으로 client 확정·입력칸 소유권을 판정하지 않는다. [현재 판단](#유지보류기각하는-제안)을 출발점으로 삼는다. |
+| 3 | **source 종료 판단 — 검증·관측 보강, 정책 유지 (2026-11-03)** | 알림의 판단을 순수 `SourceNotice` 로 분리해 test 로 고정했다: TIS 변경·설정·wake 에서 비선택이면 마지막 owner 의 조합을 끝내고, app 활성화에서는 끝내지 않으며, unknown 은 네 이유 모두 비선택으로 다룬다(기존 false fallback). 조회 전후의 owner 가 다르면 info log 에 남긴다 — 종료는 기존대로 조회 뒤의 owner 에게. 정책을 바꿀 기준은 [두 세계](#source-종료-판단의-두-세계-2026-11-03)에 둔다. |
 | 4 | **첫 renderer 판별의 동기 file I/O — 대기** | [cold 조회](#3번-renderer-판별과-commit-정책-분리)를 입력 경로 밖에서 준비할 수 있는지 검토한다. 첫 callback과 cache 준비의 선후, 조회 실패·회복을 검사하고 기존 commit 정책을 보존한다. 준비 전 callback을 다른 정책으로 처리하는 단순 async 이동은 채택하지 않는다. |
 
 교정 후보는 기본 입력·Backspace·내부 한/영·focus 이동을 먼저 보호한다. 코드 변경은 실패 test → 교정 → 필요한 전체 검사 → 설치·해당 app 확인으로 진행한다.
@@ -36,6 +36,23 @@
 Mail의 재현 조건은 일반 key 중첩과 외부 자동완성의 mark·selection 변경을 구분할 실제 사례로 조사했고, [재개 규칙](apps/mail.md#idle-확정-음절의-재개-2026-11-01-주인-확인에서-부족원복)은 주인 확인에서 부족해 원복했다. 얼린 prefix 해석에 따른 [함께 넣기 규칙](apps/mail.md#함께-넣고-다시-mark-2026-11-01-1346)과 다시 mark 위치의 기억을 Mail 에만 설치했고 주인이 확인했다. 겉모양만으로 같은 결함으로 묶지 않는다.
 주인 요청의 [공통 mark 확장 실험](apps/mail.md#공통-mark-확장-후보의-격리-실험-2026-11-01-제품-적용-보류)은 **제품 적용 보류**다.
 삭제 보완 뒤 문자열 대조는 통과했지만 추천 시점·한자 target·key 처리 계약이 달라져 단순한 공통 보정으로 보지 않는다. 기존 기본 입력을 유지한다.
+
+### source 종료 판단의 두 세계 (2026-11-03)
+
+조회가 `unknown` 일 때 homi 는 비선택으로 다룬다. 실제가 어느 세계인지에 따라 손실이 다르다.
+
+| 실제 | 비선택으로 다룸 (현재) | 마지막 선택을 유지 (후보) |
+|---|---|---|
+| homi 가 여전히 선택 (조회만 실패) | 조합 중이면 즉시 확정돼 음절이 갈라진다 (`하`+`ㄴ`). Caps remap·표시가 다음 알림까지 풀린다 | 손실 없음 |
+| homi 가 해제됐고 deactivate 도 빠짐 (이중 결함) | 정상 종료 | 이전 app 에 marked text 가 남고, Caps Lock 이 다음 알림까지 오른쪽 Control 로 간다 |
+
+- 첫 세계의 손실은 즉시이고 되돌릴 수 없으며 기본 입력(자모 풀림 모양)이다. 둘째 세계는 두 결함의 동시 발생이 필요하고 다음 알림에 회복한다.
+  그래서 **unknown 이 한 번이라도 실제로 관측되면 마지막 선택 유지로 바꾼다** — `SourceNotice.effects` 한 곳과 이 표가 기준이다. 시작 직후(이전 선택 없음)의 unknown 은 어느 정책에서도 비선택이다.
+- 지금 바꾸지 않는 이유: 2026-11-01 경고를 넣은 뒤 persisted log(2026-10-23 부터 보존, homi 의 error 급 기록 없음)에 `source lookup unknown` 이 없다. 발생 없는 결함의 정책을 추측으로 바꾸지 않는다.
+- owner 교체: `SourceWatcher.sourceChanged` 는 조회·remap·표시 뒤 그때의 owner 에게 종료를 보낸다. 그 사이는 동기 code 뿐이라 IMK callback 이 끼어들 길이 보이지 않지만,
+  조회 전후의 owner 가 다르면 info log 에 남겨 실제 발생을 관측한다. 종료 대상의 변경은 그 뒤에 판단한다.
+- 종료 누락: app 활성화 알림은 조합을 끝내지 않는다 — 입력칸 이동은 deactivate·commitComposition 이 맡는다. 다른 process 의 전환에 deactivate 가 빠지는 경우만 TIS 알림이 메운다.
+  `SourceNoticeTests` 가 네 판단을 고정한다. 실제 unknown·owner 교체의 발생은 이 test 가 증명하지 않는다.
 
 ## IMK 이론 검증 범위 (2026-11-01)
 
@@ -98,7 +115,7 @@ insert 또는 skip만 선택할 수 있다고 가정하면, insert는 전자에�
 activation layout은 [제품 경계 검사](#4-activation의-layout-호출--제품-경계-검증정책-유지)로 넓혔으며 중복 억제 정책은 채택하지 않았다.
 두 controller의 SourceWatcher 순서는 정적 검토와 추상 모델 단계다. watcher는 notification payload가 아니라
 그때의 TIS 선택을 재조회한다. [source ID 비교와 unknown 진단](lessons.md#source-id-의-앞부분만-비교해-다른-입력기를-homi-로-본다-2026-11-01)은 별도로 교정했다.
-owner 모델은 실제 SourceWatcher 메서드·OS 검증이 아니며, 종료 대상과 unknown의 false fallback 변경은 보류한다.
+owner 모델은 실제 SourceWatcher 메서드·OS 검증이 아니며, 종료 대상과 unknown의 false fallback 변경은 보류한다. 2026-11-03 판단을 test 로 고정하고 owner 교체를 관측한다 ([두 세계](#source-종료-판단의-두-세계-2026-11-03)).
 재발을 기다리는 것만이 다음 행동은 아니다. 기본 입력 보호와 실제 OS 관측의 경계는 유지한다.
 
 **재발 없는 후속 교정 (2026-11-01)**: 위 일반 `insert → mark` 반례는 남겨 두고, 별도의
