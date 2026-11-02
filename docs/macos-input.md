@@ -289,6 +289,7 @@ keyDown return     → insertText "글" repl={1,1} → doCommand insertNewline: 
 - 입력기가 client 에게 묻는 것은 `selectedRange`(key 마다 여러 번)·`hasMarkedText`·`validAttributesForMarkedText` 뿐이다.
   문서 내용은 묻지 않고 조합 중인 음절의 위치를 cursor 위치로 계산한다. ✅ (run 2)
   이 입력기는 app 의 text 를 cache 하는 비공개 IMK class 위에 있고 `unreliableApps` 같은 목록을 둔다 (조사 → `docs/research/app-compat-and-hangul.md` §3).
+  2026-11-02 binary 분석의 내부 경로·자모 풀림 후보와, 이 관측(문서 내용 질의 없음)과의 어긋남은 [Apple 입력기 내부 조사](research/apple-korean-ime-internals.md)에 있다.
 - 낱자모는 호환 자모(U+3131–318E), 음절은 완성형(U+AC00–D7A3)이다. Backspace 도 자모 단위의 바꿔치기이고 마지막 자모는 app 이 지운다(`deleteBackward:`).
   도깨비불은 `insertText` 두 번(`일`+ㅓ → `이` 바꿔치기 + `러`). Return 은 조합 중인 글자를 같은 자리에 다시 넣어 확정하고 먹지 않는다 → app 이 `insertNewline:`. ✅ (run 2)
 - **입력기 내부의 조합과 client의 marked text는 별개다.** 2026-11-01 기본 `NSTokenField`에서 실제 Apple 두벌식은 첫 `가`부터 hasMark=false로

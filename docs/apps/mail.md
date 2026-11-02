@@ -165,6 +165,7 @@ Mail이 그 시점의 prefix를 저장하고 새 mark 뒤에도 유지한다는 
 조합·확정 단위가 다르면 중간 prefix가 노출되는 시점도 다르므로, 이 조건의 결함이 모든 CJK 입력기에서 똑같이 나타나야 하는 것은 아니다.
 
 조사한 공개 IMK API에서는 insert와 다음 mark를 하나의 client transaction으로 묶거나 Mail 추천을 억제하는 수단을 찾지 못했다.
+2026-11-02 binary 분석에서도 framework 내부에 그런 경로가 없었고, Mail 칸에서 Apple 입력기가 어느 경로인지는 미확정이다 ([Apple 입력기 내부 조사](../research/apple-korean-ime-internals.md)).
 [NSTextStorage의 batch editing](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/TextEditing/Tasks/BatchEditing.html)은 client 측 제어이며 외부 입력기의 권한으로 일반화하지 않는다.
 기본 입력을 Apple식 replacement로 전환하거나 조합 전체를 무조건 오래 유지하는 것은 확정·편집·focus 경계를 바꾼다.
 따라서 새 비교는 **해법 부재나 Mail 단독 결함의 근거가 아니라, 두 입력기의 반영 방식과 자동완성의 접점을 더 좁힐 근거**로 둔다.

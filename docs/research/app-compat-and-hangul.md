@@ -57,6 +57,7 @@ gt=ghostty, PT=`ghostface2232/PriType-Swift`(`Meapri/PriType-Swift` 의 fork, 20
   - macOS 27 의 Apple 한국어 입력기(KIM_Extension)는 비공개 IMK class `IMKTextDocumentTextInputAdaptor` 위의 `KIMController` 다. 그 class 는 **app 의 text 를 cache 하고**
     `showsComposingTextAsMarkedText`, `unreliableApps`, `recomposeCharacters:`, `modelessUnsupportedApps` 같은 member 를 가진다. ✅ (strings·runtime dump)
     text 질의에 비동기로 답하는 app 과 cache 가 어긋난다는 것은 추론. 🔶 → probe run 1·2 에서 본 "marked text 없이 바꿔치기" 와 맞아떨어진다.
+    2026-11-02 binary 분석의 후보 경로(`inlineInconsistent` → 조합기 reset)는 [Apple 입력기 내부 조사](apple-korean-ime-internals.md)에 있다 — 재현 전이라 🔶 그대로다.
   - 별개 결함: 조합이 선택 영역을 대체한 뒤 Backspace 가 U+0008 을 넣는다 (vscode#148356). ✅
 - **(b) 첫 key 가 이전 언어로 — 확인. 원인은 느림이 아니라 활성화 실패**:
   - 다른 process 의 `TISSelectInputSource` 로 keyboard layout → 입력기 전환이 82% 실패(Apple 병음도 36%), 2초 기다려도 소용없음. native 단축키는 50번 중 0번 실패 (sq#1162, az#340 macOS 27). ✅
