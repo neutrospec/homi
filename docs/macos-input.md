@@ -94,7 +94,39 @@ macOS 가 focus 전환 때 다른 source 를 복원하는 경로까지 없애지
   **Apple 의 확인·공식 원인 설명이 아니며, 현재 macOS 27.2·homi 에서 재현한 결과도 아니다.**
   `⌃Space` 후 선택 유지 실패를 조사할 별도 후보로 두고, menu 누락·focus 문제·Caps Lock 결함 전체와 합치지 않는다.
 
+### input source 가 homi 에서 벗어나는 구간 (2026-11-03)
+
+주인 보고: Telegram 에서 Caps Lock 이 한/영 전환이 아니라 caps lock 이 되어 보니 소스가 ABC·Apple 두벌식으로 가 있었고, 커서 옆 HUD 목록에 homi 가 없었다.
+조금 뒤 Orca 에서도 같았다. 주인은 그때 ⌃Space 를 눌렀지만 **그것은 돌아오려는 조작이고, 먼저 homi 가 아닌 상태가 되어 있었다**. 아래는 그 전제로 맞춘 기록이다
+(`build/availability-20261103-telegram/`).
+
+| 시각 | homi 가 아니게 된 첫 흔적 | 그 직전 |
+|---|---|---|
+| 15:33:58 | ABC 선택 (TextInputSwitcher 의 큰 창 + 기본 ASCII layout 읽기) | 15:33:20–36 Caps Lock 네 번이 homi 에 도착해 한→영→한→영 |
+| 15:35:34.95 | Telegram 에서 전환 시작 | 15:35:32.75 Telegram 새 context 활성화 → :34.38 homi 가 첫 key 를 받음 |
+| 15:52:30.57 | Telegram 에서 전환 시작 → Apple 두벌식에 멈춤 | 15:52:29.35 Telegram 새 context 활성화, TIS=homi. 그 1.2초 사이 homi 에 온 key·수식키 없음 |
+
+- 세 번 모두 **Telegram 이 앞이고 그 text context 가 새로 시작된 직후 0–2초**였다. homi process 는 살아서 알림마다 응답했고 remap 도 걸려 있었다 ✅.
+- 빠진 동안 그 app 에서 homi 를 고르려는 시도는 ABC·Apple 두벌식 사이만 돌았다(15:34:28–44 네 번). **회복은 두 번 다 그 app 이 homi 의 IMK endpoint 를 새로 받은 직후**였다
+  (Orca 15:35:19 재요청 → :21 선택, Telegram 15:57:07.9 재요청 → :09 선택) ✅.
+- 전환의 서명: 앞 app process 의 `TUINSCursorUIController showTextInputMenuHUD: → move → commit → hide` 와 TextInputSwitcher 의 `order window: 3000`.
+  menu bar 에서 mouse 로 고른 전환(16:10)에는 이 HUD 가 없고, ⌃Space 에는 있다 ✅. 즉 keyboard 단축키 경로 또는 system 이 스스로 넘긴 전환이다 — 어느 쪽인지 log 로는 못 가른다 🔶.
+- 지운 것 ✅: 보안 입력 꺼짐, 문서별 자동 전환 0, system 의 Caps Lock 전환 꺼짐(ABC 에서 Caps 를 눌러도 아무 일 없음), Telegram 13.1.0 은 input source 를 고르거나 제한하는 API 를 참조하지 않음,
+  Telegram 이 쓴 TSM pasteboard 는 앞 process 의 반영 기록, HID mapping 은 event service 모두에 걸려 있었음(device 수준 객체에는 원래 없다), keyboard 재연결 기록 없음, RunningBoard 의 homi 중단 없음.
+- **homi 를 3초 멈춰도 빠지지 않았다** ✅ (17:16:46–49, 주인 승인 실험): 선택 변화·HUD·endpoint 요청 없음. 풀리는 순간 Telegram 이 `commitComposition` 을 보내 조합만 확정됐다.
+  "응답 없음 → 제외" 는 적어도 3초 규모에서는 아니다.
+- **LaunchServices 에 homi 가 둘 등록돼 있었다** — [교훈](lessons.md#launchservices-에-homi-가-둘-등록돼-있었다-2026-11-03). 지운 뒤에도 아래 거부 log 는 남았다.
+- **imklaunchagent 의 `Refusing connection name for bundle: unrecognized 'InputMethodConnectionName' value`** 는 오늘 69번, 지난 30일에는 0번이다. homi 를 처음 쓰는 app 마다
+  이 줄 → LaunchServices 에서 `homi.app` 경로 조회 → endpoint 전달의 순서로 성공했고, homi 가 꺼져 있던 16:48:01 에는 "NO Endpoint, Bail" 뒤 CoreServicesUIAgent 로 homi 를 띄웠다.
+  오늘 05:10:44 가 첫 발생이며 그때 바뀐 것은 Apple 두벌식의 추가뿐이다(아직 input source 에 있다). 거부가 제외의 원인이라는 증거는 없다 🔶 — Apple 두벌식을 뺀 뒤 사라지는지 본다.
+- Telegram 에서 채팅방을 1분간 바꾸는 재현(17:19–17:21)에서는 새 context 15개가 생겼지만 빠지지 않았다.
+- 진단의 한계: info 급 system log 는 1시간 안에 사라지고, homi 의 ring buffer 는 1000줄 ≈ 12분이라 사건 20분 뒤의 저장에 남지 않았다 → 8000줄로 늘렸다(16:47 설치).
+  `tis snapshot` 은 회복 50초 뒤였다. 다음에는 **전환 조작 전에** menu bar menu 로 homi 를 고르고 기록을 저장하며, `tis watch`(enabled 변화 포함)와 homi debug 를 받는 관찰기를 먼저 켠다.
+  keystroke 를 모으는 관찰은 두지 않는다.
+
 ### input menu 의 비활성·누락 (2026-10-09, 미해결)
+
+> 2026-11-03 의 Telegram 보고는 [homi 에서 벗어나는 구간](#input-source-가-homi-에서-벗어나는-구간-2026-11-03)으로 기록했다 — 같은 증상일 수 있으나 원인은 미확정이다.
 
 - 주인: homi 가 흐려져 선택되지 않거나 menu bar 의 input menu 에서 사라졌다. 모든 app 에서 이상한 때도,
   app 을 옮기면 회복되는 때도 있었고, 잠금화면을 다녀오면 회복되기도 했다. ✅ (사용 관측)

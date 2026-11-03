@@ -41,6 +41,12 @@ fi
 # 인증서 조회·서명·검증·교환 중 하나라도 실패하면 실행 중인 입력기를 종료하지 않는다.
 pkill -x homi || true
 echo "installed: $dest"
+# 같은 bundle ID 의 다른 사본이 disk 에 남아 있으면 LaunchServices 가 둘 다 등록해 imklaunchagent 의 연결 이름 해석이 흔들린다
+# (2026-11-03: 9월의 build/homi.app 사본이 10-29 OS update 때 등록돼 "Refusing connection name" 오류가 났다). 경고만 하고 설치는 막지 않는다.
+for copy in "${(@f)$(mdfind "kMDItemCFBundleIdentifier == '$id'" 2>/dev/null)}"; do
+  [[ -z "$copy" || "$copy" == "$dest" ]] && continue
+  echo "warning: another bundle with $id is on disk and may be registered: $copy — unregister with lsregister -u and delete it"
+done
 if [[ $uuid_valid == true && -n "$uuid_report" ]]; then
   printf '%s' "$uuid_report"
 else

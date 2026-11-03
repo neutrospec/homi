@@ -145,6 +145,7 @@ Caps 를 누르지 않은 복귀 후 첫 key 문제나 조합·전송 전체를 
 
 | 날짜 | version | 내용 |
 |---|---|---|
+| 2026-11-03 | 13.1.0 | "homi 선택 불가·갑자기 Apple 입력기" 보고 — [homi 에서 벗어나는 구간](../macos-input.md#input-source-가-homi-에서-벗어나는-구간-2026-11-03). 세 번 모두 Telegram 의 새 text context 직후였으나 원인 미확정. Telegram 이 쓴 TSM pasteboard 는 앞 process 의 반영 기록이고, 채팅방 전환 1분 재현은 무반응 |
 | 2026-10-31 | 조사 시 설치본 13.1.0 | 문서별 source 자동 복원 해제 후에도 ⌘Tab·Caps 없이 첫 초성 누락 보고. 정확한 음절은 불확실. 각 key 의 modifier 를 직접 읽는 경로와 주변 controller 교체 기록을 확인했으나 실패 event 와의 대응은 미확인 |
 | 2026-10-30 | 조사 시 설치본 13.1.0 | Caps 없이 창 전환 직후 `당 → ㅏㅇ` 보고. 합성 조건 7개를 비교하고 조합 중 controller 교체 metadata 확보. 실제 실패 순간과의 대응은 미확인 |
 | 2026-10-29 | 조사 시 설치본 13.1.0 | 창 전환 뒤 Caps 없이 첫 key 만 영문이라는 주인 보고. 실제 event 미확보, activation·app 식별 경계의 model 검토 |

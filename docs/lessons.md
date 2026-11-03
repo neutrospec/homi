@@ -6,6 +6,16 @@
 - 간헐 결함의 증거는 homi 의 기록이다 — 이상하면 주인이 곧바로 input menu 의 "최근 key 기록 저장" 을 누르고(`~/Library/Logs/homi/`), 그 file 로 가린다.
 - 원인에 🔶 가 붙은 것은 대응이 통했지만 원인은 추정이라는 뜻이다.
 
+## LaunchServices 에 homi 가 둘 등록돼 있었다 (2026-11-03)
+
+- **증상**: [입력 소스가 homi 에서 벗어나 목록에도 없는 구간](macos-input.md#input-source-가-homi-에서-벗어나는-구간-2026-11-03)을 조사하다 발견했다. 이 결함이 그 구간의 원인이라는 증거는 없다 🔶.
+- **원인**: 9월 26일 옛 설치 흐름이 남긴 `build/homi.app`(같은 bundle ID·같은 `InputMethodConnectionName`, ad-hoc 서명)을 2026-10-29 06:34 — macOS 27.2 update 뒤 첫 부팅 — 에 LaunchServices 가 함께 등록했다.
+  `lsregister -dump` 에 `com.unocult.inputmethod.homi` 가 둘, Spotlight 도 두 bundle 을 찾았다. 10-09 교훈은 사본을 새로 만들지 않기로 했을 뿐 남은 것을 지우지 않았다.
+- **대응**: `lsregister -u` 로 등록을 지우고 directory 를 삭제했다(주인 승인). 등록은 하나만 남았고 실행 중인 homi 는 그대로다.
+  `scripts/install.sh` 는 설치 뒤 같은 bundle ID 의 다른 사본이 disk 에 있으면 경고한다(`mdfind`). 설치를 막지는 않는다.
+- **한계**: 지운 뒤에도 imklaunchagent 의 `Refusing connection name … unrecognized 'InputMethodConnectionName' value` 는 homi 를 처음 쓰는 app 마다 남았다(17:28 TextEdit) — 그 줄은 중복 때문이 아니다.
+  옛 사본이 실행된 기록은 없다. 이 정리가 벗어나는 구간을 줄이는지는 일상 사용으로 본다.
+
 ## 물리 오른쪽 Control 이 Caps Lock 처럼 한/영을 바꾼다 (2026-11-03)
 
 - **증상**: 오른쪽 Control 이 있는 외장 keyboard(PN06)에서 오른쪽 Control 을 혼자 짧게 누르면 한/영이 바뀌고, 혼자 0.5초 누르면 대문자 고정이 됐다 (주인).

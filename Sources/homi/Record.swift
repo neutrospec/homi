@@ -8,7 +8,8 @@ import os
 nonisolated let log = Logger(subsystem: "com.unocult.inputmethod.homi", category: "lifecycle")
 
 /// 최근 일의 기록 — memory 에만. input menu 의 "최근 key 기록 저장" 으로만 file 이 된다.
-nonisolated let recorder = Mutex(Recorder())
+/// 1000줄은 오늘 입력 속도로 12분이었다 — 사건 20분 뒤의 저장에 남지 않았다 (2026-11-03). 8000줄 ≈ 1시간 남짓, memory 1MB 안쪽. file 저장은 여전히 주인 요청 때만.
+nonisolated let recorder = Mutex(Recorder(capacity: 8000))
 
 nonisolated func record(_ event: String) {
     recorder.withLock { $0.record(event) }
