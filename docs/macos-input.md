@@ -404,8 +404,7 @@ homi 로 돌아왔다 ✅. 옮기기 전에도 저절로 돌아오던 모양(깨
   `TISCopyInputSourceRefForInputSourceID` 도 NULL 을 준다. 시험 source 는 `build/system-location-20261115/sandbox-probe/` 에 있다.
 - 옮기기 전부터 떠 있던 sandbox app(Safari·Telegram·KakaoTalk·Mail·Notes, 11-15 14:21 시작)은 memory 의 목록으로 계속 동작한다. sandbox 밖의 app(Ghostty·T3 Code·Orca·Finder)은 바로 새 위치를 썼다.
 
-입력기를 `/Library/Input Methods` 에 처음 놓으면 logout 하라는 관례가 여기서 나온다 — sandbox app 은 그 위치를 스스로 훑지 않고 login 때 만들어지는 정보에 기대는 듯하다 🔶.
-logout·재시동 뒤에 새로 뜬 sandbox app 이 homi 를 찾는지는 아직 확인하지 않았다 🔶. 아니라면 user 위치로 되돌린다.
+입력기를 `/Library/Input Methods` 에 처음 놓으면 logout 하라는 관례가 여기서 나온다 — [재시동 뒤](#재시동-뒤에는-sandbox-process-가-homi-를-찾는다-2026-11-17)에는 찾는다.
 
 **이 상태에서 TextEdit 이 죽었다** (16:31:57, 주인의 `tis secure hold 20` 실험 중 — 보안 입력이 원인은 아니다). 입력 소스 전환 HUD 를 띄우라는 message 가 TextEdit 에 왔다 ✅ (log):
 `-[TUINSCursorUIController showTextInputMenuHUD:]`, `tsmEnabledInputSourceIDs = (ABC, homi.korean)`, `tsmSelection = 1`.
@@ -417,6 +416,23 @@ homi 는 죽지 않았고 TextEdit 의 문서에서 activate 된 적도 없다. 
 같은 실험에서 **보안 입력 중의 문서 활성화는 homi 를 유지했다** ✅ — 켜진 21초(16:31:49.677–16:32:10.679) 동안 Ghostty 2번·UserNotificationCenter 1번의 활성화에서
 선택된 source 는 줄곧 `homi.korean` 이었다 (`tis watch`, homi 의 lifecycle log). 옮기기 전에는 이런 활성화마다 4 ms 뒤 ABC 가 됐다. sandbox app 에서의 확인은 logout 뒤로 남는다.
 그 구간에 homi 가 받은 key 는 없어, 보안 입력 중의 기록 제외는 실제 app 에서 아직 보지 못했다.
+
+#### 재시동 뒤에는 sandbox process 가 homi 를 찾는다 (2026-11-17)
+
+01:24 에 재시동하고 01:26 에 login 했다. 같은 시험 process 가 sandbox 안에서도 source 333개를 읽고, 입력 소스 HUD 가 쓰는 조회(ID 로 거른 enabled 목록)로
+`homi.korean` 을 찾는다 ✅ — TextEdit 을 죽인 NULL 이 더는 나오지 않는다.
+
+바뀐 것은 root 만 쓰는 system cache 다 ✅: `/System/Library/Caches/com.apple.IntlDataCache.le.kbdx` 가 login 때(01:26:49) 새로 만들어졌고 `/Library/Input Methods/homi.app` 을 적는다.
+같은 순간 sandbox 된 agent(MenuBarAgent·SSMenuAgent)가 그 cache 를 쓰려다 kernel 에 거부당했다 (log 의 `deny(1) file-write-data`).
+재시동 뒤에 자기 container 의 cache 를 쓴 process 17개는 `.le` 만 두고 `.le.kbdx` 는 두지 않는다.
+
+그래서 이렇게 읽는다 🔶: sandbox process 는 `/System`·`/Library` 의 입력기를 login 때 만들어지는 system cache 로 알고, 자기 container 의 `.le.kbdx` 는 user 위치의 입력기가 있을 때만 만든다.
+옮긴 날의 system cache 는 옮기기 전 login(11-15 14:20)의 것이었고 user 위치는 비어 있었다 — 그날 그 cache 의 내용은 읽어 두지 않았다.
+
+- logout 만으로 되는지는 보지 않았다.
+- 같은 자리의 교체(재설치)는 경로가 같아 낡은 cache 로도 맞을 것이다 🔶 — 다음 설치 직후에 시험 process 로 확인한다.
+- 손쉬운 사용 허가는 재시동 뒤에도 그대로다 ✅ — tccd 가 homi 의 `kTCCServiceListenEvent` 조회에 허가(`authValue=2`)로 답했고 event tap 이 걸려 있다.
+- 실제 sandbox app(TextEdit)의 입력과 보안 입력 중의 유지는 주인의 확인이 남았다.
 
 ### input menu 의 비활성·누락 (2026-10-09, 미해결)
 

@@ -3,13 +3,15 @@
 **homi** (`com.unocult.inputmethod.homi`) — macOS 한글 입력기. 주인 한 사람이 매일 쓰는 도구이고,
 목표는 **두벌식 한글 입력이 완벽하게 동작하는 것** 하나다. 기능을 늘리는 프로젝트가 아니다 — 잡다한 기능·옵션·변죽은 만들지 않는다.
 
-> **현재 (2026-11-16)**: M0–M4·M6·M7 을 주인이 확인했다. 지금은 M5 — 일상 사용과 app 호환성.
+> **현재 (2026-11-17)**: M0–M4·M6·M7 을 주인이 확인했다. 지금은 M5 — 일상 사용과 app 호환성.
 > - **설치본**: 2026-11-16 16:25 KST, `/Library/Input Methods/homi.app` (root 소유). executable UUID `4AE30F64-BF20-3376-93EB-0131380E3939`,
 >   서명 `homi code signing`, commit `d9e2723`. 11-03 16:47 build(UUID `72DB0109-2D65-3F5E-A511-3DEEC2426231`)에 [보안 입력 중의 기록 제외](#작업-규칙)만 더했다.
 >   Debug·Release 각각 389개 test 에서 known issue 1개 외 실패·warning 없음.
 > - **보안 입력 중에 ABC 로 밀려나던 증상**: 원인은 [설치 위치](docs/macos-input.md#보안-입력-문서의-secure-source-와-입력기의-설치-위치-2026-11-13-확인)였고 2026-11-15 에 옮겼다 — homi 가 secure 로 읽힌다.
->   sandbox 밖의 app 에서는 보안 입력 중에도 유지된다 (11-16 Ghostty). **옮긴 뒤 logout 을 아직 하지 않아, 새로 뜨는 sandbox app 은 homi 를 찾지 못한다** —
->   그 app 에서 입력 소스 HUD(⌃Space·🌐)를 띄우면 app 이 죽는다 ([11-16 TextEdit](docs/macos-input.md#sandbox-된-app-은-옮긴-위치를-logout-전에는-알지-못한다-2026-11-16)). logout·재시동부터 한다 ([다음 작업](#다음-작업) 3번).
+>   sandbox 밖의 app 에서는 보안 입력 중에도 유지된다 (11-16 Ghostty). 옮긴 뒤 재시동 전까지는 새로 뜨는 sandbox app 이 homi 를 찾지 못했고,
+>   그 app 에서 입력 소스 HUD(⌃Space·🌐)를 띄우면 app 이 죽었다 ([11-16 TextEdit](docs/macos-input.md#sandbox-된-app-은-옮긴-위치를-logout-전에는-알지-못한다-2026-11-16)).
+>   2026-11-17 재시동 뒤에는 sandbox process 가 homi 를 [찾는다](docs/macos-input.md#재시동-뒤에는-sandbox-process-가-homi-를-찾는다-2026-11-17).
+>   **남은 것은 주인의 확인이다** — sandbox app(TextEdit)의 입력과 보안 입력 중의 유지 ([다음 작업](#다음-작업) 3번).
 > - **미확정**: Telegram 의 [창 전환 뒤 첫 key 영문](docs/apps/telegram.md#창-전환-뒤-첫-key-가-영문-2026-10-29-미해결)·[초성 누락](docs/apps/telegram.md#창-전환-뒤-초성-누락-2026-10-30-미해결),
 >   [후보 뜻 표시 누락](docs/apps/engines/appkit.md#후보-뜻의-첫-표시-누락-보고-2026-10-31-미해결) — 재발 때 조사한다.
 > - 고친 결함은 [lessons](docs/lessons.md), 개선 안건의 채택·보류는 [안정성 검토](docs/stability-review.md), 남은 작업은 [다음 작업](#다음-작업)에 있다.
@@ -334,10 +336,11 @@ Mail 의 누락은 [재개 규칙](docs/apps/mail.md#idle-확정-음절의-재�
    (IORegistry 의 pid 는 앞 app 이다 — `tis watch` 는 `front` 로 적는다). 10:29 에는 input menu 에 homi 가 보였다 — 켜짐이 짧아 주인이 볼 때는 꺼져 있었다.
    **2026-11-13: homi 만 밀려나는 까닭은 설치 위치다** ([기전](docs/macos-input.md#보안-입력-문서의-secure-source-와-입력기의-설치-위치-2026-11-13-확인)) — 11-05 의 "남은 일은 homi 밖"은 틀렸다.
    2026-11-15 15:52 에 `scripts/install.sh --system` 으로 옮겼다 — enabled 상태와 손쉬운 사용 허가는 유지됐다 ([읽은 값](docs/macos-input.md#옮긴-뒤-읽은-값-2026-11-15)).
-   **logout 은 아직 하지 않았다** — sandbox 밖의 app 은 바로 새 위치를 썼지만, 새로 뜨는 sandbox app 은 homi 를 찾지 못하고 그 app 에서 입력 소스 HUD 를 띄우면 죽는다
-   ([11-16 TextEdit 과 그 근거](docs/macos-input.md#sandbox-된-app-은-옮긴-위치를-logout-전에는-알지-못한다-2026-11-16)). 먼저 logout·재시동하고, 새로 뜬 TextEdit 에서 homi 가 activate 되는지와
-   sandbox app 의 cache(`$DARWIN_USER_CACHE_DIR/com.apple.TextEdit/com.apple.IntlDataCache.le.kbdx`)가 새 위치를 적는지부터 본다. 아니면 user 위치로 되돌린다.
-   ① `tis secure sources` 가 homi 를 secure 로 읽는다 ✅. ② 는 sandbox 밖에서 확인했다 ✅ (11-16 Ghostty — 켜진 21초 동안 활성화 3번, 줄곧 homi). logout 뒤에 sandbox app 에서 다시 본다:
+   sandbox 밖의 app 은 바로 새 위치를 썼지만, 새로 뜨는 sandbox app 은 재시동 전까지 homi 를 찾지 못했고 그 app 에서 입력 소스 HUD 를 띄우면 죽었다
+   ([11-16 TextEdit 과 그 근거](docs/macos-input.md#sandbox-된-app-은-옮긴-위치를-logout-전에는-알지-못한다-2026-11-16)). 2026-11-17 01:24 에 재시동했고, 그 뒤로는 sandbox 시험 process 가 homi 를
+   [찾는다](docs/macos-input.md#재시동-뒤에는-sandbox-process-가-homi-를-찾는다-2026-11-17) — 새 위치는 container 의 cache 가 아니라 login 때 만들어지는 system cache 에 적힌다.
+   남은 확인: 새로 뜬 TextEdit 에서 한글이 쳐지는가(주인), 그리고 재설치(같은 자리 교체) 직후에도 sandbox process 가 homi 를 찾는가(다음 설치 때 시험 process 로). 안 되면 user 위치로 되돌린다.
+   ① `tis secure sources` 가 homi 를 secure 로 읽는다 ✅. ② 는 sandbox 밖에서 확인했다 ✅ (11-16 Ghostty — 켜진 21초 동안 활성화 3번, 줄곧 homi). sandbox app 에서 다시 본다:
    ② `tis secure hold 20` 동안 새로 연 TextEdit 을 활성화해도 homi 가 유지된다 (11-05 실험 B 의 반대 결과) ③ 비밀번호 칸 안은 여전히 ABC 이고, 다녀온 뒤 homi 로 돌아온다 (11-16 T3 Code 에서 한 번 관측)
    ④ 보안 입력 중의 Caps Lock 전환(event tap 이 keyboard 를 못 보므로 counter 판정)과 terminal·Telegram 의 조합 중 Enter 다시 보내기.
    아래 (a)–(d) 는 11-05 의 정리이고, 옮긴 뒤에도 남는 것만 다시 본다.
