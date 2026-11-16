@@ -387,8 +387,9 @@ macOS 27.2 (26B123) HIToolbox 의 disassembly 에서 세 곳이 맞물린다 ✅
 | 손쉬운 사용 허가 | 그대로다. 서명의 designated requirement 는 identifier 와 인증서뿐이고 경로가 없다 — 새 process 가 허가를 확인한 뒤에만 만드는 session event tap 이 요청한 mask 그대로 걸려 있다 | `codesign -d -r-`, `CGGetEventTapList` |
 | 사본·등록 | disk 와 LaunchServices 에 하나씩 | `mdfind`, `lsregister -dump` |
 
-아직 보지 않은 것 🔶 — 보안 입력을 켜야 해서 주인이 본다 (AGENTS.md 다음 작업 3번): 켜진 동안 새로 활성화한 문서에서 homi 가 유지되는가,
-비밀번호 칸 안은 여전히 ABC 이고 나온 뒤 homi 로 돌아오는가, 그동안의 Caps Lock 전환과 조합 중 Enter 다시 보내기.
+보안 입력을 켜야 해서 주인이 본 것 ✅ — 켜진 동안 새로 활성화한 문서에서 homi 가 유지되고 Caps Lock 전환도 된다
+([11-17](#주인-확인-보안-입력-중에도-sandbox-app-에서-homi-가-유지된다-2026-11-17)).
+아직 보지 않은 것 🔶 — 비밀번호 칸을 나온 뒤 homi 로 돌아오는가(아래의 한 번뿐이다), 보안 입력 중의 조합 중 Enter 다시 보내기.
 
 비밀번호 칸의 관측 하나 (2026-11-16, 주인이 T3 Code 의 암호 입력 card 를 쓰는 동안 `tis watch` 와 homi 의 lifecycle log): 칸이 보안 입력을 켜자(16:24:59.927)
 homi 가 activate 됐다가 3 ms 뒤 deactivate 되고 ABC 가 됐다(16:25:00.126) — 칸 안은 ABC 다 ✅. card 가 닫히고 보안 입력이 꺼진 직후의 첫 문서 활성화(16:25:19.046)에서
@@ -432,7 +433,23 @@ homi 는 죽지 않았고 TextEdit 의 문서에서 activate 된 적도 없다. 
 - logout 만으로 되는지는 보지 않았다.
 - 같은 자리의 교체(재설치)는 경로가 같아 낡은 cache 로도 맞을 것이다 🔶 — 다음 설치 직후에 시험 process 로 확인한다.
 - 손쉬운 사용 허가는 재시동 뒤에도 그대로다 ✅ — tccd 가 homi 의 `kTCCServiceListenEvent` 조회에 허가(`authValue=2`)로 답했고 event tap 이 걸려 있다.
-- 실제 sandbox app(TextEdit)의 입력과 보안 입력 중의 유지는 주인의 확인이 남았다.
+- 실제 sandbox app 의 입력과 보안 입력 중의 유지는 같은 날 주인이 [확인했다](#주인-확인-보안-입력-중에도-sandbox-app-에서-homi-가-유지된다-2026-11-17).
+
+#### 주인 확인: 보안 입력 중에도 sandbox app 에서 homi 가 유지된다 (2026-11-17)
+
+재시동 뒤에 주인이 TextEdit 에서 한글을 치고, Ghostty 에서 `tis secure hold 30` 을 건 채 다시 쳤다. `tis watch`·homi 의 lifecycle log·주인이 저장한 기록으로 본 것 ✅:
+
+- 보안 입력 없이: 재시동 뒤에 뜬 sandbox app 인 Safari(01:40:50)와 TextEdit(01:49:42)이 homi 를 activate 하고 key 를 보냈다.
+- 켜진 31.5초(01:50:08.312–01:50:39.815) 동안 문서 활성화가 7번 있었다 — TextEdit 3·T3 Code 2·Ghostty 1·Finder 1. 선택된 source 는 줄곧 `homi.korean` 이다.
+  [11-05 의 실험](#보안-입력이-켜진-동안-문서-활성화는-homi-대신-abc-를-고른다-2026-11-05-확인)에서는 같은 활성화마다 ABC 가 됐다.
+- 그동안 TextEdit 에서 homi 가 key 37개를 받아 20개를 조합하고(mark·insert 각 20) 17개를 넘겼다. Caps Lock tap 10번이 모두 mode 를 바꿨다 (`modifier kc=62 → toggle`).
+- 기록에는 그 구간의 key·mark·insert 77줄이 `(secure input)` 으로만 남았고 구간 밖의 159줄에는 내용이 있다 — 어긋난 줄이 없다 (`Recorder.line`).
+
+같은 시간에 입력 소스 단축키가 두 번 쓰였다 — Safari 에서 ⌃⌥Space(01:42:19, ABC 로), TextEdit 에서 ⌃Space(01:49:42, homi 로). system log 에는 수식키와 시각만 남아,
+key 는 단축키 설정(symbolic hotkey 60·61)과 맞춰 본 것이다 🔶. 둘 다 짧게 눌러 HUD 는 뜨지 않았다 (`showTextInputMenuHUD:` 가 없다) —
+HUD 를 띄운 채의 선택은 실제 app 에서 아직 보지 않았다. 시험 process 의 조회는 NULL 을 주지 않는다.
+
+남은 것 🔶: 비밀번호 칸을 나온 뒤의 복귀, 보안 입력 중의 조합 중 Enter 다시 보내기, 같은 자리 재설치 뒤의 sandbox process.
 
 ### input menu 의 비활성·누락 (2026-10-09, 미해결)
 

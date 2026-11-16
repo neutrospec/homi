@@ -25,7 +25,8 @@ homi is built so those races cannot happen, and the design is pinned by tests.
 
 - **Scope**: standard 2-set layout only. No 3-set, no archaic Hangul, no autocomplete. Hanja conversion with ⌥↩ (dictionary from libhangul).
 - **Requirements**: macOS 27+, current Xcode (Swift 6.4), and a self-signed code-signing certificate named `homi code signing` in your login keychain.
-- **Install**: `git clone https://github.com/neutrospec/homi.git && cd homi && scripts/install.sh --register`, log out once, then add *Korean › homi*
+- **Install**: `git clone https://github.com/neutrospec/homi.git && cd homi && scripts/install.sh --register` (asks for your password — it installs to
+  `/Library/Input Methods`, the only place macOS keeps an input method selected while Secure Input is on), log out once, then add *Korean › homi*
   in System Settings › Keyboard › Input Sources. Keep `ABC` in the list as an escape hatch. Grant Accessibility to homi if you want Enter/ESC
   re-sent correctly in terminals and Telegram while composing.
 - **Personal project**: built for one person's daily use and installed from source — not an App Store app. MIT licensed. The rest of this README
@@ -94,8 +95,10 @@ cd homi
 scripts/install.sh --register
 ```
 
-`install.sh --register` 는 release build → `.app` bundle 조립·서명·검증 → `~/Library/Input Methods/homi.app` 설치 → TIS 등록·활성화까지 한다.
-처음 등록이면 **logout 한 번**이 필요하다. 다시 로그인한 뒤 시스템 설정 › 키보드 › 입력 소스 › 편집… 에서 **한국어 › homi** 를 추가한다.
+`install.sh --register` 는 release build → `.app` bundle 조립·서명·검증 → `/Library/Input Methods/homi.app` 설치 → TIS 등록·활성화까지 한다.
+설치 위치가 system 쪽이라 마지막 교환에서 **sudo 암호**를 묻는다. `~/Library/Input Methods` 에 두면 암호 입력 등으로 보안 입력이 켜진 동안
+다른 창으로 옮길 때마다 ABC 로 밀려난다 ([까닭](docs/macos-input.md#보안-입력-문서의-secure-source-와-입력기의-설치-위치-2026-11-13-확인)).
+처음 등록이면 **logout 한 번**이 필요하다 — 그 전에는 새로 여는 app 들이 homi 를 찾지 못한다. 다시 로그인한 뒤 시스템 설정 › 키보드 › 입력 소스 › 편집… 에서 **한국어 › homi** 를 추가한다.
 input menu 에는 `호` icon 으로 보인다.
 
 ### 4. 손쉬운 사용 허가 (권장)
@@ -114,10 +117,10 @@ input menu 에는 `호` icon 으로 보인다.
 ### 업데이트 · 제거
 
 ```sh
-git pull && scripts/install.sh      # 이미 등록돼 있으면 --register 없이. 실행 중인 homi 를 교체하고 다음 입력 때 새 binary 가 뜬다
+git pull && scripts/install.sh      # 이미 등록돼 있으면 --register 없이 (sudo 암호). 실행 중인 homi 를 교체하고 다음 입력 때 새 binary 가 뜬다
 ```
 
-제거는 입력 소스 목록에서 homi 를 빼고 `~/Library/Input Methods/homi.app` 을 지운 뒤 logout 한다.
+제거는 입력 소스 목록에서 homi 를 빼고 `sudo rm -rf "/Library/Input Methods/homi.app"` 로 지운 뒤 logout 한다.
 
 ## 사용법
 
@@ -166,7 +169,7 @@ menu bar 의 **한/A 를 눌러 "homi 설정…"**, 또는 input menu 의 **"설
 ### 비상 탈출
 
 입력기가 고장나면 타이핑 자체가 막힌다. **menu bar 의 input menu 에서 `ABC` 로 바꾸면** 바로 빠져나온다. 그래서 `ABC` 를 목록에서 빼지 않는다.
-그래도 안 되면 `~/Library/Input Methods/homi.app` 을 지우고 logout 한다. `imklaunchagent` 는 죽이지 않는다 — 실행 중인 모든 app 이 입력기를 잃는다.
+그래도 안 되면 `sudo rm -rf "/Library/Input Methods/homi.app"` 로 지우고 logout 한다. `imklaunchagent` 는 죽이지 않는다 — 실행 중인 모든 app 이 입력기를 잃는다.
 
 ### 이상할 때
 
@@ -202,7 +205,7 @@ IMK 층은 test client 창(`scripts/probe.sh`)과 실제 app 에서 확인한다
 
 ```sh
 swift build && swift test               # 모든 변경의 최소 관문
-scripts/install.sh                      # release build → 서명 → 설치 → 실행 중인 homi 교체
+scripts/install.sh                      # release build → 서명 → 설치(sudo 암호) → 실행 중인 homi 교체
 scripts/probe.sh                        # test client 창 — key event, 입력기의 호출, input source 변화를 시간순으로
 swift run tis list|current|watch        # input source 조회·관찰 (register·enable·select 도 있다)
 swift run caps-probe --seconds 90       # Caps Lock 의 물리 HID 와 remap 뒤 신호를 읽기 전용으로 관찰

@@ -6,6 +6,28 @@
 - 간헐 결함의 증거는 homi 의 기록이다 — 이상하면 주인이 곧바로 input menu 의 "최근 key 기록 저장" 을 누르고(`~/Library/Logs/homi/`), 그 file 로 가린다.
 - 원인에 🔶 가 붙은 것은 대응이 통했지만 원인은 추정이라는 뜻이다.
 
+## 보안 입력이 켜지면 homi 가 ABC 로 밀려난다 (2026-11-17 확인)
+
+- **증상**: 암호를 넣는 순간이 끼면 homi 가 ABC 로 바뀌어 있고 input menu 에서도 빠져 보였다 (10-09 부터, 주인이 가장 힘들어 한 증상).
+  보안 입력이 꺼진 뒤에도 그 문서는 다시 활성화될 때까지 ABC 였다.
+- **원인**: macOS 27.2 는 보안 입력이 켜진 채 활성화된 문서에서 secure 로 분류한 source 만 쓰고, 입력기의 분류는 설치 위치로 정한다 —
+  `/System`·`/Library/Input Methods` 만 secure 다. homi 는 `~/Library/Input Methods` 에 있었다 ([기전](macos-input.md#보안-입력-문서의-secure-source-와-입력기의-설치-위치-2026-11-13-확인)).
+  켜는 쪽은 거의 다 (11-05 의 122번 중 118번) 주인의 다른 agent 가 10–15분마다 돌리는 [Playwright 의 비밀번호 칸](macos-input.md#켠-process-는-다른-agent-의-playwright-headless-chromium-2026-11-05-확인)이었다 — 주인이 암호를 넣지 않을 때에도 켜졌다.
+- **증거**: HIToolbox 의 disassembly(`islGetInputSourceIsSecureCandidate`), `tis secure sources` 가 읽은 분류, 옮기기 전후의 `tis secure hold` 실험 —
+  11-05 에는 켜진 동안의 문서 활성화마다 ABC 였고, 11-17 에는 7번 모두 homi 였다 ([기록](macos-input.md#주인-확인-보안-입력-중에도-sandbox-app-에서-homi-가-유지된다-2026-11-17)).
+- **대응**: `/Library/Input Methods` 로 옮겼다 (11-15). `install.sh` 는 그 위치에만 설치한다. 이제 보안 입력 중에도 key 를 받으므로 그동안에는 최근 기록에 key 와 글자를 담지 않는다.
+- **늦어진 까닭**: 이 사실은 9-25 조사에 있었다. 10-09 에 "두 위치 모두에서 발생"이라는 관측 하나로 기각했는데 그때의 설치 방법과 보안 입력 상태는 적어 두지 않았다.
+  11-05 에는 기전을 확인하고도 대응을 homi 밖(켜는 쪽을 줄이기)에서만 찾았다. 기각의 근거가 되는 관측은 조건까지 적고, 기전을 새로 알면 기각했던 안건부터 다시 본다.
+
+## 설치 위치를 옮긴 뒤 "logout 없이 반영됐다"고 적었다 (2026-11-16)
+
+- **증상**: 옮긴 다음 날 주인의 실험 중에 TextEdit 이 죽었다. 옮긴 뒤 새로 뜬 sandbox app 에서는 homi 가 동작하지 않았다.
+- **원인**: sandbox app 은 `/Library` 의 입력기를 login 때 만들어지는 system cache 로 안다 🔶 — 옮긴 위치를 재시동 전에는 몰랐다 ([근거](macos-input.md#sandbox-된-app-은-옮긴-위치를-logout-전에는-알지-못한다-2026-11-16)).
+  그 상태에서 입력 소스 HUD 가 homi 를 고르라고 하자 Apple 의 code 가 NULL 을 검사 없이 해제했다.
+  "반영됐다"는 sandbox 밖의 process(Ghostty·T3 Code)만 보고 적은 결론이었다.
+- **대응**: 재시동으로 풀렸다 ([11-17](macos-input.md#재시동-뒤에는-sandbox-process-가-homi-를-찾는다-2026-11-17)). `install.sh` 는 위치를 옮긴 설치 끝에 logout 이 필요하다고 알린다.
+  입력기의 등록·위치를 바꾼 뒤에는 sandbox app 을 새로 띄워서도 확인한다 — sandbox 밖의 app 만 보고 "된다"고 하지 않는다.
+
 ## LaunchServices 에 homi 가 둘 등록돼 있었다 (2026-11-03)
 
 - **증상**: [입력 소스가 homi 에서 벗어나 목록에도 없는 구간](macos-input.md#input-source-가-homi-에서-벗어나는-구간-2026-11-03)을 조사하다 발견했다. 이 결함이 그 구간의 원인이라는 증거는 없다 🔶.
@@ -524,7 +546,7 @@ controller 가 사라진 뒤 주소가 재사용돼도 이전 수명의 ID 와 �
   IORegistry 의 pid 는 켠 process 가 아니라 앞 app 이라 Orca·Telegram·KakaoTalk 을 의심하게 만든다 —
   켜진 구간과 조용한 구간에 살아 있는 process 의 log 를 대조해야 보인다. 켜짐 자체는 그 agent 의 test 를 손봐야 준다.
   **2026-11-13 정정**: 11-05 에는 대응을 homi 밖으로만 보았다. homi 만 밀려나는 까닭은 [설치 위치](macos-input.md#보안-입력-문서의-secure-source-와-입력기의-설치-위치-2026-11-13-확인)다 —
-  보안 입력 문서는 `/System`·`/Library/Input Methods` 의 입력기만 쓰고 homi 는 `~/Library` 에 있다. 이 항목은 "결함이 아니었던 것"이 아니다. 2026-11-15 에 옮겼다 — 주인이 보안 입력 중의 동작을 확인하면 교훈으로 옮겨 적는다.
+  보안 입력 문서는 `/System`·`/Library/Input Methods` 의 입력기만 쓰고 homi 는 `~/Library` 에 있다. 이 항목은 "결함이 아니었던 것"이 아니다. 2026-11-15 에 옮겼고 11-17 에 주인이 확인했다 — [맨 위의 교훈](#보안-입력이-켜지면-homi-가-abc-로-밀려난다-2026-11-17-확인)으로 옮겨 적었다.
   돌아오는 길: 그 app 에서 ⌃Space·🌐 로 되돌리려 하지 말고 input menu 에서 homi 를 고르거나 다른 app 으로 옮긴다 — 강제된 문서에서의 key 전환 시도는 듣지 않았고 그 뒤의 다른 app 활성화도 ABC 로 갔다 (15:50·18:28·18:47). 고정된 뒤에는 app 이동으로 안 돌아온다 — input menu, 또는 강제되지 않은 문서에서의 key 전환(18:48 Orca)으로 돌아온다.
   고정은 homi 를 깨우지 않고 ABC 로 간 강제(비밀번호 칸·다시 활성화되지 않은 문서, 18:44·18:27)와 tap 뒤(15:50)에서 났고, homi 를 깨웠다 재운 보통의 강제 17번은 저절로 돌아왔다 🔶
   ([15:50 🔶](macos-input.md#강제된-문서에서-key-전환을-시도한-뒤에는-다른-app-의-활성화도-abc-였다-2026-11-05-1550-🔶)).

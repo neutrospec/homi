@@ -7,11 +7,9 @@
 > - **설치본**: 2026-11-16 16:25 KST, `/Library/Input Methods/homi.app` (root 소유). executable UUID `4AE30F64-BF20-3376-93EB-0131380E3939`,
 >   서명 `homi code signing`, commit `d9e2723`. 11-03 16:47 build(UUID `72DB0109-2D65-3F5E-A511-3DEEC2426231`)에 [보안 입력 중의 기록 제외](#작업-규칙)만 더했다.
 >   Debug·Release 각각 389개 test 에서 known issue 1개 외 실패·warning 없음.
-> - **보안 입력 중에 ABC 로 밀려나던 증상**: 원인은 [설치 위치](docs/macos-input.md#보안-입력-문서의-secure-source-와-입력기의-설치-위치-2026-11-13-확인)였고 2026-11-15 에 옮겼다 — homi 가 secure 로 읽힌다.
->   sandbox 밖의 app 에서는 보안 입력 중에도 유지된다 (11-16 Ghostty). 옮긴 뒤 재시동 전까지는 새로 뜨는 sandbox app 이 homi 를 찾지 못했고,
->   그 app 에서 입력 소스 HUD(⌃Space·🌐)를 띄우면 app 이 죽었다 ([11-16 TextEdit](docs/macos-input.md#sandbox-된-app-은-옮긴-위치를-logout-전에는-알지-못한다-2026-11-16)).
->   2026-11-17 재시동 뒤에는 sandbox process 가 homi 를 [찾는다](docs/macos-input.md#재시동-뒤에는-sandbox-process-가-homi-를-찾는다-2026-11-17).
->   **남은 것은 주인의 확인이다** — sandbox app(TextEdit)의 입력과 보안 입력 중의 유지 ([다음 작업](#다음-작업) 3번).
+> - **보안 입력 중에 ABC 로 밀려나던 증상**: 원인은 [설치 위치](docs/macos-input.md#보안-입력-문서의-secure-source-와-입력기의-설치-위치-2026-11-13-확인)였고 2026-11-15 에 `/Library/Input Methods` 로 옮겼다 (함정 14).
+>   재시동 뒤인 11-17 에 주인이 확인했다 — 보안 입력이 켜진 동안 새로 활성화한 문서(sandbox app 인 TextEdit 포함)에서 homi 가 유지되고 한글과 Caps Lock 전환이 된다
+>   ([기록](docs/macos-input.md#주인-확인-보안-입력-중에도-sandbox-app-에서-homi-가-유지된다-2026-11-17)). 남은 관찰은 [다음 작업](#다음-작업) 3번에 있다.
 > - **미확정**: Telegram 의 [창 전환 뒤 첫 key 영문](docs/apps/telegram.md#창-전환-뒤-첫-key-가-영문-2026-10-29-미해결)·[초성 누락](docs/apps/telegram.md#창-전환-뒤-초성-누락-2026-10-30-미해결),
 >   [후보 뜻 표시 누락](docs/apps/engines/appkit.md#후보-뜻의-첫-표시-누락-보고-2026-10-31-미해결) — 재발 때 조사한다.
 > - 고친 결함은 [lessons](docs/lessons.md), 개선 안건의 채택·보류는 [안정성 검토](docs/stability-review.md), 남은 작업은 [다음 작업](#다음-작업)에 있다.
@@ -198,12 +196,13 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 12. **입력기가 먹는 key 는 marked text 가 있는 채로 와야 한다** — 그래야 app 이 그 key 를 입력기의 것으로 본다 (JBR·Chromium, 10 과 같은 이야기).
     그래서 선택 영역도 ⌥↩ 때 marked text 로 만든다.
 13. **확정한 글자를 되돌리는 재변환(`replacementRange`)은 app 마다 다르게 깨진다** — 결정 5 의 예외가 좁은 이유.
+14. **설치 위치가 입력기의 자격을 정한다.** macOS 27.2 는 보안 입력이 켜진 채 활성화된 문서에서 `/System`·`/Library/Input Methods` 의 입력기만 쓴다 —
+    `~/Library/Input Methods` 의 입력기는 그때마다 ABC 로 밀려난다 ([기전](docs/macos-input.md#보안-입력-문서의-secure-source-와-입력기의-설치-위치-2026-11-13-확인)). 그래서 homi 는 `/Library/Input Methods` 에만 둔다. 값은 설치마다 드는 sudo 다.
+    위치를 옮기면 재시동(logout) 전까지 새로 뜨는 sandbox app 이 homi 를 찾지 못하고, 그 app 에서 입력 소스 HUD 를 띄우면 app 이 죽는다 ([11-16 TextEdit](docs/macos-input.md#sandbox-된-app-은-옮긴-위치를-logout-전에는-알지-못한다-2026-11-16)).
 
 ## 열린 결정
 
-| 결정 | 선택지 | 근거 · 할 실험 | 때 |
-|---|---|---|---|
-| 설치 위치 | `~/Library/Input Methods` · `/Library/Input Methods` | macOS 27.2 는 보안 입력이 켜진 채 활성화된 문서에서 `/System`·`/Library/Input Methods` 의 입력기만 쓴다 — binary 와 읽은 값으로 확인했다 ([기전](docs/macos-input.md#보안-입력-문서의-secure-source-와-입력기의-설치-위치-2026-11-13-확인), 2026-11-13). user 위치의 homi 가 ABC 로 밀려나는 까닭이다. 10-09 의 "두 위치 모두에서 발생" 관측은 당시의 설치 방법과 보안 입력 상태 기록이 없다. 2026-11-15 에 `/Library/Input Methods` 로 옮겼고 homi 가 secure 로 읽힌다 ([읽은 값](docs/macos-input.md#옮긴-뒤-읽은-값-2026-11-15)). 주인이 보안 입력 중의 동작을 확인하면 닫는다 ([다음 작업](#다음-작업) 3번). 값은 설치마다 드는 sudo 다 | M5 |
+지금은 없다. 설치 위치는 2026-11-17 에 `/Library/Input Methods` 로 닫았다 — 주인이 보안 입력 중의 동작을 [확인했다](docs/macos-input.md#주인-확인-보안-입력-중에도-sandbox-app-에서-homi-가-유지된다-2026-11-17) (함정 14).
 
 ## 선행 사례
 
@@ -218,14 +217,12 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 - `swift build`, `swift test` — 모든 변경의 최소 관문. HangulCore(spec 의 예, Apple `2SetHangul` layout 대조, 무작위 불변식)와 InputSession(key 순서 → 할 일).
   TIS 를 부르는 test 는 `@MainActor` 여야 한다 (병렬 test 에서 다른 thread 로 부르면 abort).
   Swift Testing 의 `#expect(...)` 안에서는 mutating method 를 부를 수 없다 — 결과를 변수에 먼저 받는다.
-- `scripts/install.sh [--system] [--register]` — release build → 설치 위치와 같은 volume 에 bundle 조립·서명·검증(`scripts/app.sh`) →
-  `~/Library/Input Methods/homi.app` 과 atomic 교환 → 실행 중인 homi 종료. 교환 전 실패하면 기존 app·process 는 그대로 남는다.
-  `--system` 은 `/Library/Input Methods/homi.app` 에 놓는다 — 교환 한 번에만 sudo 를 쓰고, terminal 이 아니면 stdin 의 암호를 넘긴다.
-  두 위치에 함께 두지 않는다 — user 위치에 설치본이 있으면 교환 뒤 그 사본과 LaunchServices 등록을 지우고 새 위치를 등록하며, system 위치에 있으면 user 위치 설치는 멈춘다.
+- `scripts/install.sh [--register]` — release build → 설치 위치와 같은 volume 에 bundle 조립·서명·검증(`scripts/app.sh`) →
+  `/Library/Input Methods/homi.app` 과 atomic 교환 → 실행 중인 homi 종료. 교환 전 실패하면 기존 app·process 는 그대로 남는다.
+  설치 위치는 이곳 하나다 (함정 14). 교환 한 번에만 sudo 를 쓴다 — 암호는 주인이 넣고, terminal 이 아니면 stdin 의 암호를 넘긴다.
+  `~/Library/Input Methods` 에 옛 설치본이 남아 있으면 교환 뒤 그 사본과 LaunchServices 등록을 지우고 새 위치를 등록하며, logout 이 필요하다고 알린다.
   `homi code signing` 인증서 조회·서명이 실패하면 중단한다. ad-hoc 대체 서명은 개발용 probe 의 `app.sh --allow-ad-hoc`에서만 명시한다.
   다음 입력 때 system 이 새 binary 로 띄운다. `--register` 는 처음 한 번 (TIS 등록 + enable).
-  지금 설치본은 system 위치다 (2026-11-15) — `--system` 으로 설치하고 sudo 암호는 주인이 넣는다.
-  설치 위치를 옮긴 뒤에는 logout 이 필요하다 — 그 전까지 새로 뜨는 sandbox app 은 homi 를 찾지 못한다 (2026-11-16).
 - 개발 도구 (`tools/`, 제품 아님):
   - `swift run caps-probe --seconds 90` — Caps Lock 의 물리 HID·remap 뒤 modifier 와 인접 입력의 시각·counter 를 읽기 전용으로 관찰한다.
     일반 key code·문자는 수집하지 않으며, 수집 종료 뒤 출력한다. [관측 범위와 제한](docs/macos-input.md#caps-lock-전환-누락-관측-2026-10-29).
@@ -328,32 +325,16 @@ Mail 의 누락은 [재개 규칙](docs/apps/mail.md#idle-확정-음절의-재�
    probe 실제 입력은 주인이 확인했다. [activation layout의 제품 경계 검사](docs/stability-review.md#4-activation의-layout-호출--제품-경계-검증정책-유지)는 보강했으며 중복 억제는 보류한다. ChatGPT commit 정책·실제 layout 재진입은 별도 검증 후 판단한다. 최근 증상의 원인 확정은 아니다.
    후보 뜻 표시·resend·Caps 종료 등 남은 안건은 영향과 증거에 따라 검증한다. 기본 입력이 다른 source 왕복보다 먼저다.
    [일본어 입력기의 recipe](docs/research/japanese-ime-recipes.md)는 외부 근거이며 실제 homi 검증과 구분한다.
-3. [비활성·누락](docs/macos-input.md#input-menu-의-비활성누락-2026-10-09-미해결): 기전은 2026-11-05 에 [보안 입력 중의 문서 활성화](docs/macos-input.md#보안-입력이-켜진-동안-문서-활성화는-homi-대신-abc-를-고른다-2026-11-05-확인)로 확인했다 —
-   등록·enabled·process 가 아니라 TSM 의 선택 정책이고, 꺼진 뒤 다음 문서 활성화에서 돌아온다. 주인이 Terminal.app 의 Secure Keyboard Entry 로 재현했다 (Orca 로 옮기니 목록에 ABC 만 남음).
-   11-03 의 [벗어나는 구간](docs/macos-input.md#input-source-가-homi-에서-벗어나는-구간-2026-11-03)도 같은 모양이다 (당시 켠 app 은 미관측).
-   켠 쪽은 찾았다 (11-05 10:5x): 주인의 다른 agent 가 돌리는 [Playwright 의 headless Chromium](docs/macos-input.md#켠-process-는-다른-agent-의-playwright-headless-chromium-2026-11-05-확인) —
-   로그인 test 가 비밀번호 칸을 잡는 동안(36초 안무·10초 기다림) session 전역으로 켜지고, 그 사이 주인이 app 을 옮기면 ABC 로 강제된다. 07:13 의 Orca·10:29 의 Telegram/KakaoTalk 은 앞 app 일 뿐이다
-   (IORegistry 의 pid 는 앞 app 이다 — `tis watch` 는 `front` 로 적는다). 10:29 에는 input menu 에 homi 가 보였다 — 켜짐이 짧아 주인이 볼 때는 꺼져 있었다.
-   **2026-11-13: homi 만 밀려나는 까닭은 설치 위치다** ([기전](docs/macos-input.md#보안-입력-문서의-secure-source-와-입력기의-설치-위치-2026-11-13-확인)) — 11-05 의 "남은 일은 homi 밖"은 틀렸다.
-   2026-11-15 15:52 에 `scripts/install.sh --system` 으로 옮겼다 — enabled 상태와 손쉬운 사용 허가는 유지됐다 ([읽은 값](docs/macos-input.md#옮긴-뒤-읽은-값-2026-11-15)).
-   sandbox 밖의 app 은 바로 새 위치를 썼지만, 새로 뜨는 sandbox app 은 재시동 전까지 homi 를 찾지 못했고 그 app 에서 입력 소스 HUD 를 띄우면 죽었다
-   ([11-16 TextEdit 과 그 근거](docs/macos-input.md#sandbox-된-app-은-옮긴-위치를-logout-전에는-알지-못한다-2026-11-16)). 2026-11-17 01:24 에 재시동했고, 그 뒤로는 sandbox 시험 process 가 homi 를
-   [찾는다](docs/macos-input.md#재시동-뒤에는-sandbox-process-가-homi-를-찾는다-2026-11-17) — 새 위치는 container 의 cache 가 아니라 login 때 만들어지는 system cache 에 적힌다.
-   남은 확인: 새로 뜬 TextEdit 에서 한글이 쳐지는가(주인), 그리고 재설치(같은 자리 교체) 직후에도 sandbox process 가 homi 를 찾는가(다음 설치 때 시험 process 로). 안 되면 user 위치로 되돌린다.
-   ① `tis secure sources` 가 homi 를 secure 로 읽는다 ✅. ② 는 sandbox 밖에서 확인했다 ✅ (11-16 Ghostty — 켜진 21초 동안 활성화 3번, 줄곧 homi). sandbox app 에서 다시 본다:
-   ② `tis secure hold 20` 동안 새로 연 TextEdit 을 활성화해도 homi 가 유지된다 (11-05 실험 B 의 반대 결과) ③ 비밀번호 칸 안은 여전히 ABC 이고, 다녀온 뒤 homi 로 돌아온다 (11-16 T3 Code 에서 한 번 관측)
-   ④ 보안 입력 중의 Caps Lock 전환(event tap 이 keyboard 를 못 보므로 counter 판정)과 terminal·Telegram 의 조합 중 Enter 다시 보내기.
-   아래 (a)–(d) 는 11-05 의 정리이고, 옮긴 뒤에도 남는 것만 다시 본다.
-   (a) 주인이 그 agent 의 test 를 손본다 — 로그인 한 번 뒤 `storageState` 재사용, 10초 기다리는 test 정리, 또는 Linux container 실행. 켜짐 자체를 줄인다.
-   (b) "Caps Lock 키로 ABC 입력 소스 전환" 은 지금 구성(ABC + homi)에서 설정 창에 나오지 않는다 (11-05 주인; 11-03 의 "켤 수 없다"도 이 뜻). 켜진 입력기가 `TICapsLockLanguageSwitchCapable` 을 선언해야 생기는 항목이고 homi 는 Caps Lock 을 직접 다루므로 일부러 선언하지 않는다 — 이 길은 없다. [대응](docs/macos-input.md#보안-입력이-켜진-동안-문서-활성화는-homi-대신-abc-를-고른다-2026-11-05-확인).
-   (c) 계보는 직접 확인했다 (11-05 12:37–14:28, `build/availability-20261103-telegram/secure-poller.log`): T3 Code (Beta) 안의 **codex** session 이 worktree `~/.t3/worktrees/<project>/<id>` 에서
-   `npm run test:web tests/<spec>.spec.ts --project=chromium` 으로 돌리는 Playwright 다 — 36초 안무는 `A.spec`, 10초 켜짐은 `B.spec`. 켜짐 122번 중 118번이 이것이고 4번은 Safari 의 비밀번호 칸이었다.
-   14:09:00 에 Telegram → Safari 로 옮기다 또 ABC 로 갔고(40초, 꺼진 뒤 다음 문서 활성화에서 복귀) 기록 저장은 없었다. (c) 는 닫는다.
-   (d) 고정되는 경우 ([사례](docs/macos-input.md#강제된-문서에서-key-전환을-시도한-뒤에는-다른-app-의-활성화도-abc-였다-2026-11-05-1550-🔶)): 강제에는 모양이 둘 있다 — homi 를 깨웠다 재우는 override(오늘 19번, 꺼진 뒤 첫 활성화에서 복귀 17번 확인)와
-   **homi 를 깨우지 않고 ABC 로 가는 것**(C 의 TextEdit 18:27:49, 주인의 Safari 비밀번호 칸 18:44:27 — 둘 다 고정). 고정되면 app 이동으로는 안 돌아오고 input menu 나 강제되지 않은 문서에서의 key 전환으로 돌아온다.
-   15:50 Telegram 은 override 모양인데 고정됐다 — 그 뒤의 ⌃Space tap 4번이 남은 가설 🔶. 17:36 Terminal A/B 는 무효(앞에 있을 때만 켠다), `tis secure hold` 실험은 A·B·E·F 복귀, C 고정, D 강제 없음.
-   가르는 실험: `hold 20` → TextEdit → 켜진 동안 ⌘N 새 문서 → 알림음 → Safari (새 문서가 둘째 모양이면 ABC). poller 는 TIS 공유 pasteboard 변화도 적지만 그것은 현재 source 뿐이다.
-   homi 가 스스로 돌아오는 timer·재선택은 넣지 않는다. 3초 응답 정지로는 재현되지 않았고 LS 중복 등록은 지웠으며, 거부 log 는 무관하다.
+3. [비활성·누락](docs/macos-input.md#input-menu-의-비활성누락-2026-10-09-미해결) — 보안 입력 중에 ABC 로 밀려나던 증상: 기전은 [보안 입력 중의 문서 활성화](docs/macos-input.md#보안-입력이-켜진-동안-문서-활성화는-homi-대신-abc-를-고른다-2026-11-05-확인)였고(11-05),
+   homi 만 밀려난 까닭은 [설치 위치](docs/macos-input.md#보안-입력-문서의-secure-source-와-입력기의-설치-위치-2026-11-13-확인)였다(11-13, 함정 14). 11-15 에 `/Library/Input Methods` 로 옮겼고,
+   재시동 뒤인 11-17 에 주인이 [확인했다](docs/macos-input.md#주인-확인-보안-입력-중에도-sandbox-app-에서-homi-가-유지된다-2026-11-17) — 켜진 31초 동안 문서 활성화 7번(TextEdit·T3 Code·Ghostty·Finder)에서 줄곧 homi 였다.
+   켜는 쪽은 주인의 다른 agent 가 돌리는 [Playwright](docs/macos-input.md#켠-process-는-다른-agent-의-playwright-headless-chromium-2026-11-05-확인)다 — 이제는 켜져 있어도 밀려나지 않는다. 남은 관찰:
+   - 비밀번호 칸을 다녀온 뒤 homi 로 돌아오는가. 칸 안이 ABC 인 것은 맞다 (함정 7). 11-16 T3 Code 의 암호 card 에서는 돌아왔고,
+     옮기기 전에는 Safari 의 비밀번호 칸 뒤에 [ABC 로 고정](docs/macos-input.md#강제된-문서에서-key-전환을-시도한-뒤에는-다른-app-의-활성화도-abc-였다-2026-11-05-1550-🔶)된 적이 있다. 안 돌아오면 주인이 곧바로 "최근 key 기록 저장" 을 누른다.
+   - 같은 자리 재설치 직후에도 sandbox process 가 homi 를 [찾는가](docs/macos-input.md#재시동-뒤에는-sandbox-process-가-homi-를-찾는다-2026-11-17) — 다음 설치 때 시험 process(`build/system-location-20261115/sandbox-probe/`)로 본다.
+   - 보안 입력 중의 조합 중 Enter 다시 보내기(terminal·Telegram), sandbox app 에서 HUD 를 띄운 채의 입력 소스 선택 — 일상 사용에서 지켜본다.
+
+   11-05 의 조사 경과(켠 process 의 계보, 강제의 두 모양, hold 실험 A–F)는 위 문서에 있다. homi 가 스스로 돌아오는 timer·재선택은 넣지 않는다.
 
 다른 source 왕복의 교정은 [Chrome 원장](docs/apps/chrome.md#다음-작업)에 남겨 후순위로 둔다.
 기본 동작의 복구를 확인하기 전에는 새 Chrome 우회를 얹지 않는다. unit test 에서 client 호출을 받았다는 것과 실제 app 이 조합을 끝냈다는 것을 구분한다.

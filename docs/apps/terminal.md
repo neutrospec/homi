@@ -19,7 +19,7 @@
 
 - 조합 중 ESC·Enter → 확정된 뒤 key 도 간다. 잃으면 다시 보내기 규칙이 필요하다.
 - Caps Lock·오른쪽 ⌘ 전환 때 글자가 새지 않는다.
-- Secure Keyboard Entry 를 켜도 homi 가 동작하는가 (AGENTS.md 열린 결정 "설치 위치").
+- Secure Keyboard Entry 를 켜도 homi 가 동작하는가 — 설치 위치를 옮긴 뒤 Terminal 에서는 아직 보지 않았다. 다른 app 의 문서 활성화는 [유지된다](../macos-input.md#주인-확인-보안-입력-중에도-sandbox-app-에서-homi-가-유지된다-2026-11-17).
 
 ## 기록
 
