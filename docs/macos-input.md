@@ -331,6 +331,8 @@ T3 Code (Beta) [39954] → codex [67577] → fnm → node → npm run test:web t
 | 12:53 · 13:16 · 13:41 · 14:02 · 14:22 | `B.spec.ts` | 0.25초 뒤 9.4–10.8초 (12:53 은 16.8초) — 아침의 "10초 켜짐" 이 이것이다 |
 | 14:26 · 14:28 | `C.spec.ts` · `D.spec.ts` | 0.7–0.8초 ×5 뒤 11.7초 · (읽은 시점에 진행 중) |
 
+그 프로젝트의 이름·worktree id 와 spec 이름은 자리표시(`<project>/<id>`, A–D)로 적는다 — 이 저장소는 공개이고, homi 가 남길 사실이 아니다.
+
 codex 의 pid 가 내내 같다 — 한 agent session 이 같은 suite 를 10–15분마다 돌린다. 나머지 4번(12:34:16–12:35:10, Safari 앞)은 그 순간 headless·Playwright process 가 없었고,
 Safari 가 앞일 때 켜지고 주인이 Ghostty 로 옮기자 같은 ms 에 꺼졌다 — Safari 의 비밀번호 칸으로 본다 🔶. 모든 켜짐이 Playwright 는 아니라는 직접 증거다.
 
