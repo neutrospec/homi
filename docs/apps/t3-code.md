@@ -51,3 +51,9 @@
 
 근거: 주인 답변, 설치 bundle 의 Info.plist·codesign, `ps`, `tis`, homi unified log.
 입력 내용 없는 lifecycle 발췌는 로컬 `build/t3-input-availability-20261030.log`에 보관했다.
+
+2026-11-05: [보안 입력 중의 문서 활성화](../macos-input.md#보안-입력이-켜진-동안-문서-활성화는-homi-대신-abc-를-고른다-2026-11-05-확인)가 같은 모양의 누락을 만든다는 것을 확인했다.
+이날 06:06:54 Safari 에서 시작한 ABC 상태를 주인이 06:45 t3 에서 알아챘고, 06:08:06·06:08:47 의 t3 방문도 활성화 → ABC 였다.
+10-30 의 당시 보안 입력 상태는 미관측이라 그 사례의 원인으로 확정하지는 않는다. T3 전용 우회는 없다.
+09:52:46–09:53:23 (T3 앞, 11번)·10:24:45–55 (T3 앞, 10초) 의 보안 입력은 [다른 agent 의 Playwright 실행](../macos-input.md#켠-process-는-다른-agent-의-playwright-headless-chromium-2026-11-05-확인)이었다 — T3 는 앞 app 일 뿐이다.
+다만 그 Playwright 를 돌리는 codex session 의 host 가 T3 Code (Beta) 다 (poller 계보 12:37–14:28: `T3 Code (Beta)` → `codex` → … → `chrome-headless-shell`, worktree `~/.t3/worktrees/<project>/<id>`). T3 의 입력칸과는 무관하다.

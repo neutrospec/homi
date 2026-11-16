@@ -96,6 +96,9 @@ macOS 가 focus 전환 때 다른 source 를 복원하는 경로까지 없애지
 
 ### input source 가 homi 에서 벗어나는 구간 (2026-11-03)
 
+> 2026-11-05: 이 구간을 만드는 기전은 [보안 입력 중의 문서 활성화](#보안-입력이-켜진-동안-문서-활성화는-homi-대신-abc-를-고른다-2026-11-05-확인)로 확인했다.
+> 이날 Telegram 쪽의 보안 입력 상태·켠 app 은 미관측이다.
+
 주인 보고: Telegram 에서 Caps Lock 이 한/영 전환이 아니라 caps lock 이 되어 보니 소스가 ABC·Apple 두벌식으로 가 있었고, 커서 옆 HUD 목록에 homi 가 없었다.
 조금 뒤 Orca 에서도 같았다. 주인은 그때 ⌃Space 를 눌렀지만 **그것은 돌아오려는 조작이고, 먼저 homi 가 아닌 상태가 되어 있었다**. 아래는 그 전제로 맞춘 기록이다
 (`build/availability-20261103-telegram/`).
@@ -111,26 +114,293 @@ macOS 가 focus 전환 때 다른 source 를 복원하는 경로까지 없애지
   (Orca 15:35:19 재요청 → :21 선택, Telegram 15:57:07.9 재요청 → :09 선택) ✅.
 - 전환의 서명: 앞 app process 의 `TUINSCursorUIController showTextInputMenuHUD: → move → commit → hide` 와 TextInputSwitcher 의 `order window: 3000`.
   menu bar 에서 mouse 로 고른 전환(16:10)에는 이 HUD 가 없고, ⌃Space 에는 있다 ✅. 즉 keyboard 단축키 경로 또는 system 이 스스로 넘긴 전환이다 — 어느 쪽인지 log 로는 못 가른다 🔶.
-- 지운 것 ✅: 보안 입력 꺼짐, 문서별 자동 전환 0, system 의 Caps Lock 전환 꺼짐(ABC 에서 Caps 를 눌러도 아무 일 없음), Telegram 13.1.0 은 input source 를 고르거나 제한하는 API 를 참조하지 않음,
+- 지운 것 ✅: 보안 입력 꺼짐(단 회복 50초 뒤의 값이라 당시를 말하지 않는다 — 11-05 에 바로 이것이 기전으로 확인됐다), 문서별 자동 전환 0, system 의 Caps Lock 전환 꺼짐(ABC 에서 Caps 를 눌러도 아무 일 없음), Telegram 13.1.0 은 input source 를 고르거나 제한하는 API 를 참조하지 않음,
   Telegram 이 쓴 TSM pasteboard 는 앞 process 의 반영 기록, HID mapping 은 event service 모두에 걸려 있었음(device 수준 객체에는 원래 없다), keyboard 재연결 기록 없음, RunningBoard 의 homi 중단 없음.
 - **homi 를 3초 멈춰도 빠지지 않았다** ✅ (17:16:46–49, 주인 승인 실험): 선택 변화·HUD·endpoint 요청 없음. 풀리는 순간 Telegram 이 `commitComposition` 을 보내 조합만 확정됐다.
   "응답 없음 → 제외" 는 적어도 3초 규모에서는 아니다.
 - **LaunchServices 에 homi 가 둘 등록돼 있었다** — [교훈](lessons.md#launchservices-에-homi-가-둘-등록돼-있었다-2026-11-03). 지운 뒤에도 아래 거부 log 는 남았다.
 - **imklaunchagent 의 `Refusing connection name for bundle: unrecognized 'InputMethodConnectionName' value`** 는 오늘 69번, 지난 30일에는 0번이다. homi 를 처음 쓰는 app 마다
   이 줄 → LaunchServices 에서 `homi.app` 경로 조회 → endpoint 전달의 순서로 성공했고, homi 가 꺼져 있던 16:48:01 에는 "NO Endpoint, Bail" 뒤 CoreServicesUIAgent 로 homi 를 띄웠다.
-  오늘 05:10:44 가 첫 발생이며 그때 바뀐 것은 Apple 두벌식의 추가뿐이다(아직 input source 에 있다). 거부가 제외의 원인이라는 증거는 없다 🔶 — Apple 두벌식을 뺀 뒤 사라지는지 본다.
+  첫 발생은 05:46:43 이다. 거부가 제외의 원인이라는 증거는 없고, Apple 두벌식을 뺀 뒤(19:47)에도 11-05 07:02 의 TextEdit 새 process 에서 같은 줄 → `homi.app` 경로 조회 → endpoint 전달 →
+  `activate com.apple.TextEdit` 로 성공했다 ✅. Apple 두벌식과 무관하고 해롭지 않은 log 로 둔다.
 - Telegram 에서 채팅방을 1분간 바꾸는 재현(17:19–17:21)에서는 새 context 15개가 생겼지만 빠지지 않았다.
 - 진단의 한계: info 급 system log 는 1시간 안에 사라지고, homi 의 ring buffer 는 1000줄 ≈ 12분이라 사건 20분 뒤의 저장에 남지 않았다 → 8000줄로 늘렸다(16:47 설치).
   `tis snapshot` 은 회복 50초 뒤였다. 다음에는 **전환 조작 전에** menu bar menu 로 homi 를 고르고 기록을 저장하며, `tis watch`(enabled 변화 포함)와 homi debug 를 받는 관찰기를 먼저 켠다.
   keystroke 를 모으는 관찰은 두지 않는다.
 
+### 보안 입력이 켜진 동안 문서 활성화는 homi 대신 ABC 를 고른다 (2026-11-05, 확인)
+
+Secure Event Input(보안 입력)은 비밀번호 칸·잠금 화면·terminal 의 Secure Keyboard Entry 같은 곳이 `EnableSecureEventInput()` 으로 켜는 **session 전역** 상태다.
+켜져 있는 동안 TSM 은 text context(문서)를 활성화할 때 homi 를 고르지 않고 ASCII-capable source(ABC)를 고른다 — 어느 process 가 켰든, 그 process 가 앞 app 이 아니어도.
+꺼진 뒤에는 **다음 문서 활성화**(app·입력칸 이동)에서 homi 가 돌아온다 — 주인 확인 ✅. 활성화가 없으면 그때까지 ABC 다 (아래 실험).
+단 강제된 문서에서 key 로 되돌리려 한 뒤에는 돌아오지 않았다 ([15:50 의 사례](#강제된-문서에서-key-전환을-시도한-뒤에는-다른-app-의-활성화도-abc-였다-2026-11-05-1550-🔶)).
+이 절과 아래 절들이 근거로 드는 저장 기록(`~/Library/Logs/homi/record-2026-11-05T….txt`)은 분석을 마치고 2026-11-16 에 지웠다 — 친 key 와 글자가 든 file 이다.
+
+> **2026-11-13**: 이 절의 관측은 그대로다. 다만 밀려나는 것은 "외부 입력기"가 아니라 **secure 가 아닌 source** 이고, 그것을 가르는 것은 설치 위치다 —
+> [보안 입력 문서의 secure source 와 입력기의 설치 위치](#보안-입력-문서의-secure-source-와-입력기의-설치-위치-2026-11-13-확인). 아래의 "대응은 homi 밖" 은 그래서 틀렸다.
+
+실험 (`tis watch`·homi lifecycle·imklaunchagent, `build/availability-20261103-telegram/trap*.log`):
+
+| | 보안 입력 | TextEdit 을 새로 열었을 때 (문서 활성화) |
+|---|---|---|
+| A 07:02:13 | 꺼짐 | homi endpoint 요청 → `activate com.apple.TextEdit` → homi 선택 유지 |
+| B 07:02:24 | background CLI 가 07:02:22 부터 12초 켬 | endpoint 요청은 같았지만 activateServer 없이 **ABC 선택** (`homi selected: no`). TextEdit 을 닫고 앞 app 으로 돌아가도 ABC |
+| 07:02:34 | 끔 | 활성화가 없는 28초 동안 선택은 ABC 그대로. 같은 CLI 가 곧바로 부른 `TISSelectInputSource(homi)` 는 noErr 이지만 전역에 반영되지 않았고, 새 process 의 `tis select` 는 반영됐다 |
+
+- 켜진 동안에도 TIS 의 enabled 목록·`AppleInputSourcesInUIOrderPasteboard`(⌃Space 가 도는 공유 목록)·`TISCopyCurrentKeyboardInputSource` 는 바뀌지 않았다 ✅.
+  "homi 가 빠졌다"는 등록·enabled 의 문제가 아니라 **문서 활성화 때의 선택 정책**이다. 그동안 HUD·input menu 가 homi 를 어떻게 보이는지는 주인이 본다 (아래 확인법).
+- IORegistry root 의 `IOConsoleUsers` → `kCGSSessionSecureInputPID` 는 **켠 process 가 아니라 그때의 앞 app** 이다 ✅ — background CLI(07:02, 앞 app Calendar 가 적힘)와
+  WindowServer 연결을 가진 background accessory app(10:52:00, 자기 pid 44610 대신 앞 app Safari 1317 이 적힘) 둘 다로 확인했다. `tis secure`·`watch` 는 그래서 `front` 로 적는다.
+  unified log 에는 켜고 끄는 기록이 없다 (11-05 06:00–06:50·11-03 두 구간 검색 ✅). 켠 쪽은 켜진 구간과 조용한 구간에 살아 있는 process 의 log 를 대조해 찾는다
+  ([켠 process](#켠-process-는-다른-agent-의-playwright-headless-chromium-2026-11-05-확인)).
+  → `tis watch` 가 0.25초마다 `IsSecureEventInputEnabled()` 를 읽어 변화만 적고, 선택 알림 줄에도 그때의 값을 붙인다. 0.25초보다 짧은 켜짐은 놓친다.
+- `IsSecureEventInputEnabled()` 는 켠 process 가 끄기 전까지만 true 다. 회복 뒤 읽은 false(10-30 T3 Code·10-31 Orca·11-03 Telegram)는 사건 당시의 값이 아니다.
+
+**2026-11-05 06:06:54 의 실제 사례** (주인 보고 "t3 에서 비슷한 현상", 기록 저장 06:45:50 → `~/Library/Logs/homi/record-2026-11-05T064550.txt`):
+
+| 시각 | 일어난 일 |
+|---|---|
+| 06:06:52.36 | Safari 의 새 context 가 homi 를 활성화 (english). 06:06:53.45–54.80 일반 key 8개가 homi 를 지나감 |
+| 06:06:54.86 | Safari 의 TSM 이 ABC 를 선택 (`AppleKeyboardInputMethodsPasteboard` 기록). Safari 의 HUD 기록은 없고, TextInputSwitcher 는 52.4 에 창 하나를 다루다 56.3 에 숨겼다 (내용 비공개) 🔶 |
+| 06:06:56.58 | Safari 가 homi 를 다시 활성화 → 2 ms 안에 ABC (선택 기록 둘) |
+| 06:08:01 Mail · 06:08:06 t3 · 06:08:25 Ghostty · 06:08:47 t3 · 06:15:07 LaunchBar | app 을 옮길 때마다 그 문서가 homi 를 활성화하고 6–88 ms 뒤 ABC 로 돌아감 — 실험 B 와 같은 모양 |
+| 06:45:08 | t3 의 활성화에서 homi 가 돌아옴. 그 전에 보안 입력이 꺼진 것으로 본다 🔶 |
+
+Safari 에서 보안 입력을 켜는 것은 보통 비밀번호 칸이다 🔶 — 주인에게 그때 무엇을 하고 있었는지 물어 확정한다.
+11-03 의 [벗어나는 구간](#input-source-가-homi-에서-벗어나는-구간-2026-11-03)도 같은 모양이다: 새 context 직후의 전환, 되돌리려는 ⌃Space 가 ABC·Apple 두벌식만 도는 것
+(Apple 입력기는 `/System/` 아래라 secure 다 — [11-13](#보안-입력-문서의-secure-source-와-입력기의-설치-위치-2026-11-13-확인) ✅), 그 뒤 문서 활성화로 회복. 다만 그때의 보안 입력 상태와 켠 app 은 관측하지 못했다.
+
+**주인 확인 (07:2x)**: Terminal.app 의 menu "Terminal > Secure Keyboard Entry" 를 켜자 Terminal 자신은 homi 그대로였고(이미 활성화된 문서), Orca 로 옮기니 목록에 ABC 만 남고 homi 가 없었다.
+그 상태에서는 homi 를 고를 수 없었다. Terminal 에서 끄고 돌아오니 저절로 homi 로 돌아왔다 ✅ — 주인이 보던 "목록에 없음" 의 재현이다.
+
+`tis watch` 는 같은 실험을 이렇게 적었다 (`secure` 줄은 0.25초 polling, `secure=` 는 선택 알림 때 읽은 값):
+
+| 시각 | 기록 | 뜻 |
+|---|---|---|
+| 07:16:20.7 | `secure on pid 92539 Terminal` | Terminal 에서 Secure Keyboard Entry 를 켬 |
+| 07:16:29.1 / .2 | `selected homi` · `secure off` | 다른 app 으로 가자 Terminal 이 보안 입력을 끔 — **Terminal.app 은 앞에 있을 때만 켠다** ✅. 이 활성화는 homi 유지 |
+| 07:16:32.5 | `secure on … Terminal` | Terminal 로 돌아옴 |
+| 07:16:40.8 / 41.0 | `selected ABC` ×3 · `secure off` | Orca 로 옮김. Orca 의 문서 활성화가 Terminal 의 해제보다 먼저라 ABC 로 강제됨 |
+| 07:16:41–07:19:56 | (보안 입력 꺼짐) | 주인: Orca 에서 homi 를 고를 수 없었다 — **강제된 문서는 보안 입력이 꺼진 뒤에도 다시 활성화될 때까지 ABC** |
+| 07:19:56.5 / .7 | `selected ABC` · `secure on … Terminal` | Terminal 로 돌아감 (이번엔 Terminal 의 문서도 ABC) |
+| 07:20:02.3 / .5 | `selected homi` · `secure off` | Terminal 에서 끄자 그 자리에서 homi 로 돌아옴. 07:20:04 Orca 로 돌아와도 homi |
+
+그래서 겉모양이 때마다 다르다: 활성화와 해제의 순서(수십 ms 차이)에 따라 강제되기도 안 되기도 하고, 강제된 문서는 다시 활성화돼야 돌아온다. 기전은 하나다.
+같은 log 의 다른 두 구간 — **07:13:12–07:13:49 에 Orca 가 앞에 있는 동안 보안 입력이 12번 켜졌다 꺼졌다** (처음엔 5초 간격으로 0.25초씩, 뒤에는 1–2.75초씩)
+와 07:25:00–10 의 10초 켜짐(Safari 앞)은 둘 다 다른 agent 의 Playwright 실행이었다 ([켠 process](#켠-process-는-다른-agent-의-playwright-headless-chromium-2026-11-05-확인)) — Orca·Safari 는 그때의 앞 app 일 뿐이다.
+평소의 "갑자기 빠짐" 은 이런 켜짐 중에 다른 app 의 문서가 활성화될 때 생긴다.
+
+#### 강제된 문서에서 key 전환을 시도한 뒤에는 다른 app 의 활성화도 ABC 였다 (2026-11-05 15:50 🔶)
+
+주인 보고 "Telegram 에서 homi 가 풀려 있었고, 다시 선택해도 Caps Lock 은 Caps Lock 으로 동작했고, 반복됐다" (기록 저장 15:51:12 → `record-2026-11-05T155112.txt`).
+`tis watch`·poller·IMK 의 Activate/Deactivate log·WindowServer 의 Caps Lock 상태 log 로 맞춘 순서:
+
+| 시각 | 일어난 일 |
+|---|---|
+| 15:49:43–15:50:20 | 다른 agent 의 `A.spec` 실행 (36초 안무, Telegram 앞) |
+| 15:50:01.30 | 주인이 Safari 로 → homi 유지 (그 순간은 꺼짐) |
+| 15:50:02.30–05.05 | 켜짐. 그 안의 15:50:02.96 에 Telegram 으로 돌아옴 → 활성화 4 ms 뒤 deactivate → ABC. homi 는 source 종료를 보고 Caps Lock remap 을 풀었다 |
+| 15:50:20.37 | 실행 끝, 꺼짐 — 15:53 까지 다시 켜진 적 없음 (20 ms polling) |
+| 15:50:23.98 | Caps Lock → **진짜 Caps Lock 켜짐** (주인이 알아챈 순간) |
+| 15:50:27–50 | TextInputMenuAgent 가 TextInputSwitcher 를 띄움 (`_InputSwitcherStart`) — 전환 HUD 가 30.1·33.4·42.5·50.8 에 4번. **선택 알림도 homi 활성화도 없었다**. 사이사이 Caps Lock 은 26.4·37.3·45.0·47.4·53.9·56.1 에 진짜 Caps Lock 으로 토글 |
+| 15:51:01.77 | Orca 로 옮김 → 활성화 → 3 ms 뒤 deactivate → ABC. **꺼진 지 41초** |
+| 15:51:08.70 | input menu 에서 homi 선택 → 활성화·유지. 이후 Caps Lock 정상 (말풍선 15:51:21–), 15:51:25 에 Caps Lock 끔 |
+
+14:09 의 사례(Safari 에서 강제 → 40초 뒤 Telegram 활성화에서 저절로 복귀)와 구조가 같은데 결과가 다르다. 그 사이에 있었던 것은 key 전환 시도 4번뿐이다.
+해석 🔶: 강제된 문서에서 key 전환기(주인: ⌃Space 였다)는 허용 목록(ABC 뿐)만 돌며 ABC 를 **사용자 선택으로 다시 고른다**. 그 뒤 다른 문서의 활성화는
+문서가 기억한 homi 를 활성화했다가 사용자 선택(ABC)을 적용해 끝난다. 07:16 의 Orca(3분간 menu 에 ABC 뿐, key 시도 없음)와 14:09 는 사용자 선택이 homi 로 남아 재활성화에서 돌아왔다.
+여기서 "기억" 은 설정 "문서의 입력 소스로 자동 전환" 이 아니다 — 그 설정은 [10-31 에 껐고](#문서별-input-source-복원-재확인-2026-10-31) 11-05 에도 `com.apple.HIToolbox` 의 `AppleGlobalTextInputProperties.TextInputGlobalPropertyPerContextInput = 0` 이다. 꺼진 채로도 TSM 은 문서마다 마지막에 연결한 입력기를 두고, 활성화 때 그 입력기를 먼저 깨운 뒤 session 의 선택 하나에 맞춘다 🔶 —
+마지막이 homi 였던 문서만 Activate → 2–13 ms → Deactivate 를 보이고, 마지막이 ABC 였던 문서(17:38:08 Terminal·17:38:29 Safari)는 homi 를 깨우지 않았다. 설정은 이 장부를 복원할지(켬) session 선택에 맞출지(끔)의 방향이다.
+이 절의 가설과 실험은 모두 꺼진 상태의 것이다.
+11-03 의 "⌃Space 가 ABC·Apple 두벌식만 돈다" 도 같은 자리다.
+
+**17:36–17:38 의 A/B 는 무효였다** (주인 실행, 기록 `record-2026-11-05T173902.txt`). 계획은 "Terminal 의 Secure Keyboard Entry 켬 → TextEdit (ABC 강제) → ⌃Space → 끔 → Safari" 였는데,
+Terminal.app 은 [앞에 있을 때만 켠다](#보안-입력이-켜진-동안-문서-활성화는-homi-대신-abc-를-고른다-2026-11-05-확인) — poller 는 TextEdit·Orca 로 옮긴 20 ms 안의 꺼짐을 6번 다 적었고 07:16 같은 순서 역전은 없었다.
+그래서 TextEdit 는 한 번도 강제되지 않았고(활성화마다 homi), 17:37:46.55 의 ⌃Space 는 보통 문서의 보통 전환이었다(→ ABC, HUD 없이 즉시 선택 알림). 그 뒤 Safari 가 ABC 인 것은 두 가설 모두의 예측이라 가르지 못한다.
+이 실행이 대신 더해 준 것:
+
+- 대조군 4번 ✅ — Secure Keyboard Entry 를 켠 Terminal 로 **돌아올 때**는 Terminal 자신의 문서가 강제됐고(17:36:39.95·59.84, 17:37:26.00·32.39·34.63 — 활성화 → 2–8 ms 뒤 deactivate → ABC),
+  key 시도 없이 Orca·TextEdit 로 옮기자 그 활성화에서 매번 homi 로 돌아왔다 (17:36:43.4, 17:37:27.9·34.1·42.3).
+- "활성화 → 몇 ms 뒤 deactivate → ABC" 는 보안 입력의 표식이 아니라 **사용자 선택이 homi 가 아닐 때 TSM 이 문서를 거기에 맞추는 모양**이다 — 주인이 ABC 를 고른 뒤의 Safari(17:37:59.72, 꺼진 지 7초)·Orca(17:38:11.94)도 같았다.
+  15:51:01.77 Orca 의 모양이 이것이다.
+- key 전환의 겉모양이 달랐다: 15:50 의 강제된 Telegram 에서는 TextInputSwitcher 의 HUD 가 4번(0.8–1.8초) 뜨고 선택 알림이 없었다. 17:37:46 TextEdit·17:38:39 Orca(보통 문서)에서는 HUD 없이 바로 선택됐다(ABC·homi).
+  누른 길이의 차이일 수도 있다 🔶.
+
+확정 실험은 Terminal 로는 안 된다 — 보안 입력을 **앞 app 과 무관하게** 들고 있을 process 가 필요하다 (다른 agent 의 headless Chromium 이 그랬다). 그래서 `tis secure hold <초>` 를 만들었다.
+
+**`tis secure hold 20` 네 번** (주인, 18:22–18:31, 기록 `record-2026-11-05T182905.txt`) — 결과는 한 가지가 아니었다:
+
+| 실행 (켜짐 21초) | TextEdit 강제 | 꺼진 뒤 TextEdit 에서 | 다음 app |
+|---|---|---|---|
+| A 18:22:48 | ✓ 18:22:53.58 활성화 → 3 ms → deactivate → ABC | 18:23:12.98–19.18 전환 목록 6.2초 (A 뿐, TextInputSwitcher log 있음), 선택 알림 없음 | Safari 18:23:25 → **homi** |
+| B 18:27:01 | ✓ 18:27:04.37 같은 모양 | 없음 | Safari 18:27:27 → **homi** |
+| C 18:27:46 | ✓ 18:27:49.1 — homi 활성화 없이 `selected ABC` ×2 (A·B 와 다른 모양, 까닭 미확인) | 18:28:09.98 caret 옆 표시 1.5초, switcher log 없음, 선택 알림 없음 | Safari 18:28:12 → **ABC**, Orca 18:28:20 → ABC. Orca 에서 ⌃Space 2번(HUD 29.0·35.5) → 둘째에 homi 36.7 |
+| D 18:30:49 | ✗ 켜진 동안 앞 app 이 Ghostty 그대로 — 강제 없음 | — | Safari 18:31:15 → homi (정보 없음) |
+
+주인의 말: 첫 실행은 "소리 뒤 ⌃Space 를 눌러도 A 만 있었고 Safari 는 homi" (= A), 대조군은 "ABC 였고 Orca 로 와도 몇 번 만에 homi" (= C) 였다가 "실수, 다시" 한 뒤 "그냥 homi" (= D).
+그 사이에도 Playwright 가 돌아 Ghostty 를 두 번 강제했고(18:21:42·18:25:50) 둘 다 Orca 활성화에서 저절로 돌아왔다 (18:21:58·18:26:09).
+
+읽기: 단순한 "강제된 문서에서 ⌃Space 면 ABC 고정" 은 A 가 기각한다 — 목록을 6초 띄웠다 놓아도 Safari 는 homi 였다.
+14:09 부터의 강제 12번 중 꺼진 뒤 key 없이 app 을 옮긴 9번(14:09, Terminal 5, Ghostty 2, B)은 모두 다음 활성화에서 homi 로 돌아왔고, 목록을 띄웠다 놓은 A 도 돌아왔다.
+고정된 둘(15:50 Telegram·C)에는 둘 다 **꺼진 뒤 강제된 문서 안에서의 짧은 key 사건**이 있다 — 15:50 은 HUD 가 0.8–1.8초씩 4번(선택 알림 없음), C 는 1.5초 표시 1번(switcher log 없음).
+남은 가설 🔶: **⌃Space 를 짧게 tap** 하면 "이전 source 로" 경로가 허용되지 않은 homi 대신 ABC 를 사용자 선택으로 고르고(이미 ABC 라 알림은 없음), **누르고 있다 놓으면** 목록의 같은 항목이라 아무것도 고르지 않는다.
+C 의 1.5초가 무엇이었는지(⌃Space tap·🌐·다른 key)는 주인에게 물어 적는다. 무작위라기보다 가려지지 않은 변수일 가능성이 높지만, 두 번으로는 확정하지 않는다.
+가르는 실험(각 40초): hold 20 → TextEdit → 알림음 뒤 (T) ⌃Space **짧게 한 번** → Safari / (H) ⌃Space **1초 누르고 놓기** → Safari. 예측 T=ABC, H=homi. 다른 key 는 누르지 않는다.
+poller 는 18:43 부터 TIS 공유 pasteboard(선택된 input method·history·layout override·UI 순서)의 변화도 적는다 — "사용자 선택" 이 언제 바뀌는지 직접 보기 위해서다.
+그 사이 input menu 는 열지 않는다 — 닫힐 때 문서가 다시 활성화된다 (17:37:10 Terminal).
+
+**그 뒤의 두 실행과 자연 발생 한 번 (18:44–18:54, 기록 `record-2026-11-05T185448.txt`)** 이 그림을 바꿨다.
+
+| 때 | 강제된 문서 | 강제의 모양 | 꺼진 뒤 |
+|---|---|---|---|
+| E `hold 20` 18:53:35 | TextEdit 18:53:38.7 | homi 활성화 → 8 ms → deactivate → ABC | Safari 18:53:59.9 → **homi** |
+| F `hold 20` 18:54:12 | TextEdit 18:54:16.0, 켜진 채 옮긴 Safari 18:54:26.9 도 | 둘 다 같은 모양 | TextEdit 18:54:34.6 → **homi**, Safari 38.4 → homi |
+| 18:44:27 Safari 비밀번호 칸 (주인의 손, 보안 입력 0.16초) | Safari 의 그 문서 | **homi 활성화 없이** `deactivate unknown` 뒤 `selected ABC` | Safari 의 다른 문서 18:46:58.5 → ABC, Orca 18:47:04.8 → **ABC**. 진짜 Caps Lock 18:48:16–24. Orca 에서 ⌃Space(HUD 없음) 18:48:25.3 → homi |
+
+강제의 **모양이 둘**이다.
+
+- ① homi 를 깨웠다가 몇 ms 뒤 재우고 ABC 로 간다 (override). 오늘 19번 — 12:34 Safari 비밀번호 칸 4, 14:09, Terminal 5, Ghostty 2, A·B·E, F 의 둘, 15:50 — 중 17번이 꺼진 뒤 첫 활성화에서 homi 로 돌아왔고,
+  12:35:06 은 다음 활성화가 관측 창 밖이며, 고정된 것은 15:50 Telegram 하나다 (그 뒤 ⌃Space tap 4번).
+- ② **homi 를 깨우지 않고** ABC 를 고른다. C 의 TextEdit(18:27:49 — B 에서 강제된 뒤 보통 활성화를 거치지 않은 문서)과 18:44:27 Safari(비밀번호 칸으로 바뀌며 이전 context 는 `deactivate unknown`) 둘뿐이고, **둘 다 고정**됐다.
+
+해석 🔶: ①은 TSM 이 내려놓은 입력기를 기억해 두는 override 라 보안 입력이 꺼지면 다음 활성화에서 되살리고, ②는 깨운 입력기가 없어 ABC 를 보통 선택처럼 적는다 — 그래서 사용자 선택이 ABC 가 되고 app 을 옮겨도 돌아오지 않는다.
+②가 되는 문서는 보안 입력 중에 **새로 생기거나 이미 ASCII 표시가 남은** 문서로 보인다 (비밀번호 칸, 새 입력 context, 한 번 강제된 뒤 보통 활성화를 못 거친 문서). 12:34 의 비밀번호 칸들이 ①이었던 것과 18:44:27 이 ②인 차이는 미확인이다.
+15:50 의 고정은 ①이라 이것으로 설명되지 않는다 — tap 가설은 그대로 둔다. 두 길 모두 끝은 같다: **사용자 선택이 ABC**. 그래서 돌아오는 길도 같다 — input menu, 또는 강제되지 않은 문서에서의 key 전환(18:48:25 Orca, 18:28:36 Orca).
+IMK log 가 남지 않은 06:06:54 Safari(06:45 까지 고정)와 10:29:47 Telegram·10:30:16 KakaoTalk(10:34:43 menu 로 복귀)은 모양을 모른다.
+poller 가 적는 TIS pasteboard 는 현재 source 만 비췄다 (18:44:27 뒤 `KeyboardInputMethods = ( )`, homi 복귀 때 다시 homi) — TSM 이 기억하는 사용자 선택은 거기 없다.
+
+가르는 실험 하나(40초): `hold 20` → TextEdit → 켜진 동안 **⌘N 으로 새 문서** → 알림음 → Safari. 새 문서가 ②라면 Safari 는 ABC 다 (E 와의 차이는 ⌘N 뿐). 맞으면 "보안 입력 중에 새 입력칸을 만들면 고정" 으로 적는다.
+
+**돌아오는 길**: 그 app 에서 ⌃Space·🌐 를 누르지 말고 **input menu 에서 homi 를 고르거나**(10:34 Telegram·15:51 Orca 에서 됐다) **다른 app 으로 옮긴다**(14:09).
+menu 에 ABC 뿐이면 아직 켜져 있거나 그 문서가 강제된 채다 — app 을 옮겼다 돌아온다.
+
+**대응** (주인이 고른다): ① system 설정 "Caps Lock 키로 ABC 입력 소스 전환" 은 **지금 구성(ABC + homi)에서는 설정 창에 나오지 않는다** — 그 자리에 🌐 key 항목이 보인다 (11-05 주인).
+11-03 의 "켤 수 없다"도 이 뜻이었다. 이 항목은 켜진 입력기 중 Info.plist 에 `TICapsLockLanguageSwitchCapable` 을 선언한 것이 있을 때 생긴다 — Apple 입력기는 선언하고
+homi 는 **일부러 선언하지 않는다** ([연구 기록](research/imk-platform.md), homi 가 Caps Lock 을 직접 다루기 때문). 선언하면 system 의 Caps Lock 전환이 homi 의 Caps Lock 과 겹친다. 그래서 이 길은 없다.
+어차피 보안 입력이 켜진 동안은 어느 key 로도 homi 를 고를 수 없고, 꺼진 뒤에는 문서 재활성화(app 왕복)로 돌아온다.
+② 켠 쪽을 찾아 그쪽을 고친다 — 찾았다: 다른 agent 의 Playwright headless Chromium 이다 (아래). 고칠 곳은 homi 가 아니라 그 agent 의 test 이고 주인이 고른다.
+③ homi 가 보안 입력이 꺼지는 순간 스스로 돌아오는 것은 다른 process 의 `TISSelectInputSource` 라 믿을 수 없고 결정 4 의 정신과도 멀다 — 채택하지 않는다.
+
+#### 켠 process 는 다른 agent 의 Playwright headless Chromium (2026-11-05, 확인)
+
+10:29 에 주인이 Telegram 에서 ABC 를 다시 만났다 (기록 저장 10:34:48 → `record-2026-11-05T103448.txt`). 이번엔 **input menu 에 homi 가 보였다** — 켜짐이 짧아
+주인이 목록을 볼 때는 이미 꺼져 있었기 때문이다. 목록에서 빠짐은 "지금 켜져 있음", 목록에는 있는데 ABC 는 "활성화 순간에 켜져 있었음" 이다.
+
+| 시각 | 기록 (`tis watch` · homi 기록) |
+|---|---|
+| 10:29:38–10:29:48 | Telegram 이 앞인 채 보안 입력이 4번 켜졌다 꺼짐 (0.25–0.75초씩). 그 사이 homi 에 온 key·modifier·활성화는 없다 — 주인의 손이 아니다 ✅ |
+| 10:29:47.774–48.025 | 켜진 것으로 읽힌 0.25초 안에 10:29:47.965 KakaoTalk 활성화 → 47.982 deactivate → `selected ABC` 47.977 |
+| 10:29:53–10:30:15.8 | KakaoTalk 이 앞인 채 8번 더 (0.25–2.75초씩) |
+| 10:30:16.036 | Telegram 으로 돌아옴 → 활성화 2 ms 뒤 deactivate → ABC. polling 은 꺼짐으로 읽었다 — 0.25초보다 짧은 켜짐을 놓친 것으로 본다 🔶 |
+| 10:34:43.55 | 주인이 input menu 에서 homi 를 고름 (활성화, 유지) → 기록 저장 |
+
+켜고 끄는 **안무가 매번 같다**: 0.5–0.75초 → 4–5초 간격으로 0.25초 ×3 → 2초 간격으로 2.5–2.75초 ×3 → 0.5·1.25·1.25초, 모두 36초. 오늘 07:13(Orca 앞)·07:32(Orca→Safari)·
+08:01·08:17(Telegram)·09:52(T3)·10:12(Telegram→Safari)·10:29(Telegram→KakaoTalk) 에 같은 안무가 돌았고, 따로 **10초 켜짐**이 07:25·07:52·08:13·10:05·10:24 에 있었다. 앞 app 과 무관한 자동화다.
+unified log 의 process 활동과 대조하면 (`log show --style compact`, process 별 줄 수):
+
+| 구간 | `chrome-headless-shell` (Playwright 의 headless Chromium) |
+|---|---|
+| 안무 07:13 · 07:32 · 08:01 · 09:52 · 10:12 · 10:29 | 339 · 331 · 472 · 470 · 475 · 459 줄 |
+| 10초 켜짐 07:25 · 07:52 · 08:13 · 10:05 · 10:24 | 148 · 142 · 140 · 140 · 140 줄 |
+| 10:47 Messages 앞 · 10:48 Telegram 앞 (20 ms polling 으로 0.64–0.85초 pulse 관측) | 168 · 119 줄 |
+| 그 사이 조용한 8개 구간 (07:14·07:36·08:05·09:55·10:20·10:31·10:49) | 0 줄 |
+| 10:50:21 Safari 1.1초 (1Password 자동 채움 popover 뒤 — 주인의 로그인) | 0 줄 |
+
+켜진 구간마다 있고 조용한 구간엔 없으며 같은 안무는 같은 줄 수다 ✅. 주인 확인: "playwright 는 내 다른 agent 가 쓴거야" (10:5x). 10:50:54 에는 `Playwright` 라는 창(pid 40049, 곧 사라짐)도 떴다.
+기전 🔶: Chromium 은 page 의 비밀번호 칸이 focus 를 얻으면 `EnableSecureEventInput()` 을, 잃으면 해제를 부른다 — macOS 의 headless shell 도 Cocoa 의 view 층을 쓴다
+(같은 log 에 `CVDisplayLinkCreateWithCGDisplays` 오류). 로그인 test 가 비밀번호 칸을 잡는 동안(0.25–2.75초, 기다리는 test 는 10초) session 전역으로 켜지고, 그 사이 주인이 app 을 옮기면 ABC 로 강제된다.
+안무의 켜진 시간은 36초 중 약 12초라 app 을 두 번 옮긴 10:29 은 둘 다 걸렸다. 06:06:50–58·06:08 에는 headless 의 log 가 없다 — 그 Safari 사례는 Playwright 가 아니라
+Safari 의 로그인 칸으로 본다 🔶 (주인: 정확히 기억나지 않지만 로그인한 것 같다). 11-03 의 일곱 구간에도 headless 의 log 는 거의 없다 (15:33:50–15:34:40 에 3줄뿐, 나머지 0) —
+그날의 켠 쪽은 다른 것이고 기록이 없다. 모든 사례를 Playwright 로 돌리지 않는다.
+
+켜짐 자체를 줄이는 길은 그 agent 쪽에 있다: suite 가 로그인을 매 test 마다 하지 않게 하거나(Playwright 의 `storageState` 재사용 — 로그인 한 번), 10초 기다리는 test 를 손보거나,
+headless 실행을 Linux container 로 옮기면 macOS 의 보안 입력에 닿지 않는다. 당시에는 이것을 유일한 대응으로 보았다 ("대응은 homi 밖").
+켜져 있어도 homi 가 밀려나지 않게 하는 길은 homi 의 [설치 위치](#보안-입력-문서의-secure-source-와-입력기의-설치-위치-2026-11-13-확인)다 (2026-11-13).
+
+**계보의 직접 확인 (12:34–14:28)** — `build/availability-20261103-telegram/secure-poller.log` 가 20 ms polling 으로 켜짐·앞 app 과, 켜진 순간 살아 있는 headless process 의 계보를 적었다
+(scratchpad 의 `secpoll`, 입력 내용·창 제목은 읽지 않는다). 켜짐 122번 중 118번에 같은 계보가 있었다 ✅:
+
+```text
+T3 Code (Beta) [39954] → codex [67577] → fnm → node → npm run test:web tests/<spec>.spec.ts --project=chromium → node → node
+  → ~/.t3/worktrees/<project>/<id>/.artifacts/playwright-browsers/chromium_headless_shell-1248/chrome-headless-shell (+ 자식 2)
+```
+
+| 실행 (첫 켜짐) | spec | 모양 |
+|---|---|---|
+| 12:37 · 13:02 · 13:27 · 13:49 · 14:08 | `A.spec.ts` | 36초 안무 |
+| 12:53 · 13:16 · 13:41 · 14:02 · 14:22 | `B.spec.ts` | 0.25초 뒤 9.4–10.8초 (12:53 은 16.8초) — 아침의 "10초 켜짐" 이 이것이다 |
+| 14:26 · 14:28 | `C.spec.ts` · `D.spec.ts` | 0.7–0.8초 ×5 뒤 11.7초 · (읽은 시점에 진행 중) |
+
+codex 의 pid 가 내내 같다 — 한 agent session 이 같은 suite 를 10–15분마다 돌린다. 나머지 4번(12:34:16–12:35:10, Safari 앞)은 그 순간 headless·Playwright process 가 없었고,
+Safari 가 앞일 때 켜지고 주인이 Ghostty 로 옮기자 같은 ms 에 꺼졌다 — Safari 의 비밀번호 칸으로 본다 🔶. 모든 켜짐이 Playwright 는 아니라는 직접 증거다.
+
+그 사이 **14:09:00 에 또 ABC 로 갔다**: `A.spec` 실행의 켜짐(14:08:59.84–14:09:02.70) 안에서 주인이 Telegram → Safari 로 옮겼고(poller `front` 14:09:00.400),
+IMK 의 Activate Server 14:09:00.414 → Deactivate 00.418 (4 ms) → `selected ABC` 00.441. 02.017 의 Safari 재활성화도 ABC. 꺼진(14:09:13.9) 뒤 첫 문서 활성화인 14:09:39.98 의 Telegram 에서
+homi 로 돌아왔다 (`selected homi` 40.05) — ABC 는 40초였고 기록 저장은 없었다. 122번 켜짐 중 ABC 는 이 한 번뿐이다: 켜진 안에 문서 활성화가 끼어야 걸린다.
+
+### 보안 입력 문서의 secure source 와 입력기의 설치 위치 (2026-11-13, 확인)
+
+위 절의 "ABC 를 고른다"는 모든 입력기의 이야기가 아니다. TSM 은 보안 입력이 켜진 채 활성화된 문서에서 **secure 로 분류한 source 만** 쓰고,
+입력기의 분류는 **설치 위치**로 정해진다. `~/Library/Input Methods` 의 homi 는 secure 가 아니어서 밀려났다 — 2026-11-15 에 `/Library/Input Methods` 로 [옮겼다](#옮긴-뒤-읽은-값-2026-11-15).
+
+TSM document 는 app 의 입력칸(text context) 하나에 대응하는 TSM 쪽 객체다. 입력칸이 focus 를 얻으면 그 document 가 활성화되고, 그때 어떤 input source 를 쓸지가 정해진다.
+macOS 27.2 (26B123) HIToolbox 의 disassembly 에서 세 곳이 맞물린다 ✅ (dyld shared cache, lldb):
+
+| 단계 | 함수 | 하는 일 |
+|---|---|---|
+| 분류 | `islGetInputSourceIsSecureCandidate` | source 마다 `TSMInputSourcePropertyIsSecure` 를 정한다. true 는 keyboard layout, `/System/` 아래의 것, bundle 경로가 `/Library/Input Methods/` 로 시작하는 입력기. 나머지는 false 다 — 서명이나 plist 는 보지 않는다 |
+| 문서 활성화 | `MyActivateTSMDocument` | 그 순간의 `SLSIsSecureEventInputSet()` 을 **한 번** 읽어 문서에 적는다 (이 값을 쓰는 곳은 여기뿐이다). secure 문서가 고를 수 있는 것은 `TISCreateSecureKeyboardInputSourceList()` — 활성화된 source 중 secure 인 것 — 이고, 지금 source 가 거기 없으면 그 안에서 고른다 |
+| key 전달 | `-[IMKInputSession_Modern _postEvent:completionHandler:]` · `_Legacy` · `TSMEventToInputMethod_WithCompletionHandler` | secure 문서에서는 secure 가 아닌 입력기에 event 를 보내지 않는다 (오류 -9874) |
+
+옮기기 전에 읽은 값 ✅ — `tis secure sources` 가 private `TSMGetInputSourceProperty` 로 읽기만 한다 (Apple 두벌식은 11-13 에 목록 전체를 읽은 값):
+
+| source | secure | 입력기 bundle |
+|---|---|---|
+| `com.apple.keylayout.ABC` | true | (keyboard layout) |
+| `com.apple.inputmethod.Korean.2SetKorean` | true | `/System/Library/Input Methods/KoreanIM.app/Contents/PlugIns/KIM_Extension.appex` |
+| `com.unocult.inputmethod.homi.korean` | **false** | `~/Library/Input Methods/homi.app` |
+
+위 절의 관측이 여기서 나온다:
+
+- 켜진 순간에 문서 활성화가 끼어야 걸리고, 강제된 문서는 꺼진 뒤에도 다시 활성화될 때까지 ABC 다 — 문서의 secure 표시를 활성화 때만 적기 때문이다.
+- Secure Keyboard Entry 를 켠 Terminal 자신은 homi 그대로다 — 이미 활성화된 문서다.
+- 되돌리려는 ⌃Space 가 ABC·Apple 두벌식만 돈다 — secure 목록이다.
+
+외부 사례도 같다. macSKK 는 macOS 15.4.1 에서 같은 증상을 `/Library/Input Methods` 이동으로 풀었고 v2.0.0 부터 그 위치가 기본이다 (macskk#351, [조사](research/imk-platform.md)).
+이 사실은 9-25 조사에 있었지만 10-09 에 "두 위치 모두에서 발생"이라는 관측으로 [기각](stability-review.md)됐고, 11-05 의 실험 후보에도 들지 않았다.
+
+따로 남는 것:
+
+- 비밀번호 칸 자체가 ABC 인 것은 다른 제한이다 (AGENTS.md 함정 7). 옮긴 뒤에도 그런지는 아래의 남은 확인에 든다.
+- 옮기면 homi 가 보안 입력 중에도 동작한다 — 그동안 event tap 은 keyboard 를 보지 못하므로 수식키 tap 은 [기존 counter 판정](#quartz-와-imk-사이-modifier-event-의-연결-2026-10-29)으로 내려간다. 이미 활성화된 문서에서는 옮기기 전에도 그랬다.
+
+#### 옮긴 뒤 읽은 값 (2026-11-15)
+
+15:52 KST 에 주인이 `scripts/install.sh --system` 으로 같은 build 를 옮겼다. 읽기만 해서 확인한 것 ✅:
+
+| 무엇 | 값 | 읽은 방법 |
+|---|---|---|
+| 분류 | homi 의 두 source 모두 secure, 입력기 bundle 은 `/Library/Input Methods/homi.app` | `tis secure sources` |
+| secure 목록 | `com.apple.keylayout.ABC` 와 `com.unocult.inputmethod.homi.korean` | `TISCreateSecureKeyboardInputSourceList()` 직접 호출 |
+| 반영 | logout·재시작 없이 됐다 — 14:21 부터 돌던 imklaunchagent 가 15:52:48 에 새 위치의 homi 를 띄웠다 | `ps` |
+| enabled·선택 | 그대로다. third-party 입력기의 enabled 목록(`com.apple.inputsources` 의 `AppleEnabledThirdPartyInputSources`)은 bundle ID 로 적혀 있고 경로가 없다 | `tis list`, `defaults read` |
+| 손쉬운 사용 허가 | 그대로다. 서명의 designated requirement 는 identifier 와 인증서뿐이고 경로가 없다 — 새 process 가 허가를 확인한 뒤에만 만드는 session event tap 이 요청한 mask 그대로 걸려 있다 | `codesign -d -r-`, `CGGetEventTapList` |
+| 사본·등록 | disk 와 LaunchServices 에 하나씩 | `mdfind`, `lsregister -dump` |
+
+아직 보지 않은 것 🔶 — 보안 입력을 켜야 해서 주인이 본다 (AGENTS.md 다음 작업 3번): 켜진 동안 새로 활성화한 문서에서 homi 가 유지되는가,
+비밀번호 칸 안은 여전히 ABC 이고 나온 뒤 homi 로 돌아오는가, 그동안의 Caps Lock 전환과 조합 중 Enter 다시 보내기.
+
 ### input menu 의 비활성·누락 (2026-10-09, 미해결)
 
 > 2026-11-03 의 Telegram 보고는 [homi 에서 벗어나는 구간](#input-source-가-homi-에서-벗어나는-구간-2026-11-03)으로 기록했다 — 같은 증상일 수 있으나 원인은 미확정이다.
+> 2026-11-05 에 [보안 입력 중의 문서 활성화](#보안-입력이-켜진-동안-문서-활성화는-homi-대신-abc-를-고른다-2026-11-05-확인)가 같은 모양을 만드는 것을 확인했다.
+> 아래 과거 사례들의 당시 보안 입력 상태는 미관측이라 사례별 확정은 아니다.
 
 - 주인: homi 가 흐려져 선택되지 않거나 menu bar 의 input menu 에서 사라졌다. 모든 app 에서 이상한 때도,
   app 을 옮기면 회복되는 때도 있었고, 잠금화면을 다녀오면 회복되기도 했다. ✅ (사용 관측)
 - user·system 두 설치 위치에서도 같은 증상이 있었다. 설치 위치 변경은 해결의 증거가 아니다. ✅ (주인)
+  — 2026-11-13: 보안 입력의 배제는 [설치 위치로 갈린다](#보안-입력-문서의-secure-source-와-입력기의-설치-위치-2026-11-13-확인). 당시 system 위치에 어떻게 설치했는지와 보안 입력 상태는 기록이 없어,
+  이 관측이 다른 원인(문서별 자동 전환은 10-31 까지 켜져 있었다)의 것인지는 모른다 🔶.
 - System Settings 의 등록까지 사라졌는지는 확인하지 않았다. menu 의 가용성 변화와 등록 소실을 같은 현상으로 판단하지 않는다.
   당시 Secure Keyboard Entry 상태·TIS 속성·process 상태의 동시 관찰이 없어 원인은 아직 모른다.
 - 2026-10-30 [T3 Code 의 메시지 입력칸에서 항목 누락이 재발](apps/t3-code.md#input-menu-에서-homi-누락-2026-10-30-미해결)했다.
@@ -174,7 +444,7 @@ macOS 가 focus 전환 때 다른 source 를 복원하는 경로까지 없애지
 |---|---|
 | 앞뒤 front app의 bundle ID·PID·launchDate, 현재 source | 관측 사이의 변화를 비교한다. 앞뒤가 같아도 중간 전환·복귀를 배제하지 않는다. |
 | 현재 layout, 최근 ASCII-capable source·layout, homi parent·mode의 enabled/selected/static selectCapable | 서로 다른 TIS 속성이다. 등록·enabled만으로 특정 입력칸의 menu 표시나 선택 성공을 판단하지 않는다. |
-| Secure Event Input | system 전역 활성 여부이며 켠 app이나 제한 원인을 알려주지 않는다. |
+| Secure Event Input | system 전역 활성 여부. 켠 pid 는 `tis secure`·`tis watch` 가 IORegistry 에서 읽는다 — [기전과 한계](#보안-입력이-켜진-동안-문서-활성화는-homi-대신-abc-를-고른다-2026-11-05-확인). |
 | homi process 후보의 PID·시작 시각·실행 경로·종료 여부 | `NSRunningApplication`의 bundle ID 조회 결과다. 빈 목록은 이 API에서 찾지 못했다는 뜻이며, PID만으로 process 수명을 확정하지 않는다. |
 | user·system 설치 위치의 on-disk UUID·CDHash | 디스크의 파일만 식별한다. UUID는 architecture별, CDHash는 host native architecture의 display 결과이며 서명 검증 결과가 아니다. 실행 중인 loaded UUID는 `not_collected`로 남긴다. |
 | 현재 Caps Lock source의 HID mapping 목적지 | 현재 설정값만 읽는다. 물리 key 전달·mapping 적용 성공·설정 소유권은 확인하지 않는다. |
@@ -572,8 +842,8 @@ Quartz 의 session event tap 은 별도 thread 에서 원본을 반환하고, IM
   **새 event**(`CGEvent(keyboardEventSource:virtualKey:keyDown:)`, key code 와 수식키만 옮김)를 **원래 key 처리가 끝난 뒤**(`DispatchQueue.main.async`)
   HID 경로(`.cghidEventTap`)로 보내니 됐다. ✅ 복사본에 딸린 창·시각 정보 탓인지, 처리 도중이라는 시점 탓인지는 가르지 않았다 🔶.
 - 다시 보내려면 **손쉬운 사용** 허가가 있어야 한다(`CGPreflightPostEventAccess`). macOS 27 에서는 개인정보 보호 및 보안의 **Device & Data Access** 아래에 있다 (주인).
-  `x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility` 가 그 화면을 연다. homi 가 목록에 없으면 "+" 로 `~/Library/Input Methods/homi.app` 을 넣는다.
-- 허가는 서명 신원(bundle ID + 인증서)에 붙는다 — 자체 서명 인증서로 서명하니 다시 build·설치해도 유지됐다. ✅
+  `x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility` 가 그 화면을 연다. homi 가 목록에 없으면 "+" 로 설치 위치의 `homi.app` 을 넣는다.
+- 허가는 서명 신원(bundle ID + 인증서)에 붙는다 — 자체 서명 인증서로 서명하니 다시 build·설치해도, 설치 위치를 옮겨도([2026-11-15](#옮긴-뒤-읽은-값-2026-11-15)) 유지됐다. ✅
 - 2026-10-31 15:23 교정본은 현재 app 과 실제 client bundle ID 를 대조해 원래 process 를 잡고 down/up 을 미리 만든다.
   준비 실패면 key 를 넘기며, client 반영·종료 flush 뒤 main queue 에 예약해 `CGEvent.postToPid`로 보낸다.
   기존의 새 event·권한 확인은 유지한다. 주인은 Telegram 의 조합 중 Enter, 사용하는 Ghostty/iTerm2 의 Enter·ESC 확인 요청에 양쪽 모두 정상이라고 답했다.

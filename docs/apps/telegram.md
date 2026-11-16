@@ -145,6 +145,7 @@ Caps 를 누르지 않은 복귀 후 첫 key 문제나 조합·전송 전체를 
 
 | 날짜 | version | 내용 |
 |---|---|---|
+| 2026-11-05 | 13.1.0 | 11-03 의 벗어나는 구간을 설명하는 기전으로 [보안 입력 중의 문서 활성화](../macos-input.md#보안-입력이-켜진-동안-문서-활성화는-homi-대신-abc-를-고른다-2026-11-05-확인)를 확인했다 (Safari 사례·TextEdit 실험). 10:29 에 다시 만난 ABC — KakaoTalk 으로 옮긴 47.97 에 강제, 10:30:16 Telegram 복귀도 강제, 10:34:43 주인이 menu 에서 homi 선택 — 는 [다른 agent 의 Playwright 가 켠 보안 입력](../macos-input.md#켠-process-는-다른-agent-의-playwright-headless-chromium-2026-11-05-확인) 중의 활성화였다. Telegram 은 앞 app 일 뿐이다. 14:09:00 의 재발도 Telegram 에서 Safari 로 옮긴 활성화가 켜짐 안에 걸린 것이고(40초, 14:09:40 Telegram 활성화에서 복귀), 14:22 의 10초 켜짐은 Telegram 앞에서 활성화가 없어 걸리지 않았다. 15:50:02.96 에는 Safari 에서 Telegram 으로 돌아온 활성화가 `A.spec` 의 켜짐 안에 걸렸고, Telegram 안에서 ⌃Space 로 되돌리려 한 4번(주인 확인)이 듣지 않았다 — [15:50 사례](../macos-input.md#강제된-문서에서-key-전환을-시도한-뒤에는-다른-app-의-활성화도-abc-였다-2026-11-05-1550-🔶). 11-03 사례의 켠 쪽은 미관측 |
 | 2026-11-03 | 13.1.0 | "homi 선택 불가·갑자기 Apple 입력기" 보고 — [homi 에서 벗어나는 구간](../macos-input.md#input-source-가-homi-에서-벗어나는-구간-2026-11-03). 세 번 모두 Telegram 의 새 text context 직후였으나 원인 미확정. Telegram 이 쓴 TSM pasteboard 는 앞 process 의 반영 기록이고, 채팅방 전환 1분 재현은 무반응 |
 | 2026-10-31 | 조사 시 설치본 13.1.0 | 문서별 source 자동 복원 해제 후에도 ⌘Tab·Caps 없이 첫 초성 누락 보고. 정확한 음절은 불확실. 각 key 의 modifier 를 직접 읽는 경로와 주변 controller 교체 기록을 확인했으나 실패 event 와의 대응은 미확인 |
 | 2026-10-30 | 조사 시 설치본 13.1.0 | Caps 없이 창 전환 직후 `당 → ㅏㅇ` 보고. 합성 조건 7개를 비교하고 조합 중 controller 교체 metadata 확보. 실제 실패 순간과의 대응은 미확인 |

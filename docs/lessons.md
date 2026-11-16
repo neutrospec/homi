@@ -516,6 +516,18 @@ controller 가 사라진 뒤 주소가 재사용돼도 이전 수명의 ID 와 �
 - **IntelliJ 에서 선택 영역을 한자로 바꾸면 글자가 사라진다** — IdeaVim 은 mouse 선택을 Visual mode 로 받고, 조합을 시작하며 선택이 지워지면 Visual 을 나온다.
   Insert 로 돌아가지 않으면 고른 한자는 Normal mode 명령으로 읽혀 버려진다 (source: IdeaVim `IdeaSelectionControl` — 주인 관측과 맞다 🔶). 조합 중인 글자는 된다.
 - **Word 에서 선택만 있을 때 ⌥↩ 가 무시된다** — homi 기록에 그 key 가 없다. marked text 가 없으면 Word 가 key 를 먼저 가져가는 듯하다 🔶.
+- **homi 가 갑자기 ABC 로 바뀌어 있고 ⌃Space HUD·input menu 에 보이지 않는다** (주인은 Caps Lock 이 대문자 고정이 되는 것으로 알아챈다) —
+  어느 process 가 켠 Secure Event Input(보안 입력)이 살아 있는 동안 TSM 이 문서 활성화마다 homi 대신 ABC 를 고른다. 꺼진 뒤 다음 문서 활성화에서 돌아온다.
+  homi 의 등록·enabled·process 는 그대로다. [기전과 실험](macos-input.md#보안-입력이-켜진-동안-문서-활성화는-homi-대신-abc-를-고른다-2026-11-05-확인) ✅ (2026-11-05).
+  켠 쪽은 주인의 다른 agent 가 돌리는 Playwright 의 headless Chromium 이었다 — 로그인 test 가 비밀번호 칸을 잡을 때마다 session 전역으로 켜진다
+  ([대조](macos-input.md#켠-process-는-다른-agent-의-playwright-headless-chromium-2026-11-05-확인) ✅; 12:37–14:28 에는 poller 가 켜진 순간의 계보까지 직접 적었다 — T3 Code 안의 codex 가 돌리는 `npm run test:web`). 같은 날 Safari 의 비밀번호 칸이 켠 4번도 있었다 — 모든 켜짐이 Playwright 는 아니다.
+  IORegistry 의 pid 는 켠 process 가 아니라 앞 app 이라 Orca·Telegram·KakaoTalk 을 의심하게 만든다 —
+  켜진 구간과 조용한 구간에 살아 있는 process 의 log 를 대조해야 보인다. 켜짐 자체는 그 agent 의 test 를 손봐야 준다.
+  **2026-11-13 정정**: 11-05 에는 대응을 homi 밖으로만 보았다. homi 만 밀려나는 까닭은 [설치 위치](macos-input.md#보안-입력-문서의-secure-source-와-입력기의-설치-위치-2026-11-13-확인)다 —
+  보안 입력 문서는 `/System`·`/Library/Input Methods` 의 입력기만 쓰고 homi 는 `~/Library` 에 있다. 이 항목은 "결함이 아니었던 것"이 아니다. 2026-11-15 에 옮겼다 — 주인이 보안 입력 중의 동작을 확인하면 교훈으로 옮겨 적는다.
+  돌아오는 길: 그 app 에서 ⌃Space·🌐 로 되돌리려 하지 말고 input menu 에서 homi 를 고르거나 다른 app 으로 옮긴다 — 강제된 문서에서의 key 전환 시도는 듣지 않았고 그 뒤의 다른 app 활성화도 ABC 로 갔다 (15:50·18:28·18:47). 고정된 뒤에는 app 이동으로 안 돌아온다 — input menu, 또는 강제되지 않은 문서에서의 key 전환(18:48 Orca)으로 돌아온다.
+  고정은 homi 를 깨우지 않고 ABC 로 간 강제(비밀번호 칸·다시 활성화되지 않은 문서, 18:44·18:27)와 tap 뒤(15:50)에서 났고, homi 를 깨웠다 재운 보통의 강제 17번은 저절로 돌아왔다 🔶
+  ([15:50 🔶](macos-input.md#강제된-문서에서-key-전환을-시도한-뒤에는-다른-app-의-활성화도-abc-였다-2026-11-05-1550-🔶)).
 
 ## 개발 도구에서
 

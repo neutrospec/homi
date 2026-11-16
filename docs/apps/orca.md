@@ -68,6 +68,11 @@ homi 의 activation 중 layout 지정과 AppKit 의 상호작용까지 원인에
 관측 요약은 `build/input-availability-20261031-summary.json`, source 전이는 `build/input-availability-transition-20261031.log`,
 회복 주변 lifecycle 은 `build/input-availability-recovered-20261031.log`에 있다. 입력 내용·일반 key code 는 수집하지 않았다.
 
+2026-11-05: 같은 모양을 만드는 기전으로 [보안 입력 중의 문서 활성화](../macos-input.md#보안-입력이-켜진-동안-문서-활성화는-homi-대신-abc-를-고른다-2026-11-05-확인)를 확인했다.
+08:48:45 의 false 는 증상을 본 뒤의 값이라 켠 process 가 그 전에 껐을 수 있고, 꺼진 뒤 ABC 가 남는 것은 기전과 맞는다. 이 사례의 원인으로 확정하지는 않는다.
+같은 날 07:13:12–49 에 Orca 가 앞인 채 보안 입력이 12번 켜졌다 꺼진 것은 [다른 agent 의 Playwright 실행](../macos-input.md#켠-process-는-다른-agent-의-playwright-headless-chromium-2026-11-05-확인)이었다 —
+Orca 는 그때의 앞 app 일 뿐이고 켜지 않았다 (IORegistry 의 pid 는 앞 app 이다).
+
 ## Caps Lock 누락 관측 (2026-10-29)
 
 주인과 읽기 전용 관찰기로 PN06 의 물리 HID Caps Lock, Quartz 오른쪽 Control, homi 의 mode log 를 대조했다.

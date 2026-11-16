@@ -11,11 +11,20 @@ private struct SigningFixture {
         let repository = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let source = try String(contentsOf: repository.appending(path: "scripts/install.sh"), encoding: .utf8)
-        let destination = #"readonly dest="$HOME/Library/Input Methods/homi.app""#
-        // 경로 치환에 실패하면 실제 위치에 접근하기 전에 test 준비를 중단한다. HOME 은 바꾸지 않는다.
-        try #require(source.components(separatedBy: destination).count == 2)
-        try write("scripts/install.sh", source.replacingOccurrences(of: destination,
-            with: #"readonly dest="$HOMI_TEST_ROOT/installed/homi.app""#), executable: true)
+        // 두 설치 위치와 system 위치의 소유자를 fixture 의 것으로 바꾼다. 치환에 실패하면 실제 위치에 접근하기 전에
+        // test 준비를 중단한다. HOME 은 바꾸지 않는다.
+        var script = source
+        for (original, replacement) in [
+            (#"readonly user_dest="$HOME/Library/Input Methods/homi.app""#, #"readonly user_dest="$HOMI_TEST_ROOT/installed/homi.app""#),
+            (#"readonly system_dest="/Library/Input Methods/homi.app""#, #"readonly system_dest="$HOMI_TEST_ROOT/system/homi.app""#),
+            ("chown -R root:wheel", "chown -R \(getuid()):\(getgid())"),
+            ("readonly lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
+             #"readonly lsregister="$HOMI_TEST_ROOT/bin/lsregister""#),
+        ] {
+            try #require(script.components(separatedBy: original).count == 2)
+            script = script.replacingOccurrences(of: original, with: replacement)
+        }
+        try write("scripts/install.sh", script, executable: true)
         try write("scripts/app.sh", String(contentsOf: repository.appending(path: "scripts/app.sh"), encoding: .utf8), executable: true)
         try write("Sources/homi/Bundle/Info.plist",
             String(contentsOf: repository.appending(path: "Sources/homi/Bundle/Info.plist"), encoding: .utf8))
@@ -65,11 +74,36 @@ private struct SigningFixture {
         try write("bin/replace-app", #"""
         #!/bin/zsh
         set -eu
-        [[ "$2" == "$HOMI_TEST_ROOT/installed/homi.app" ]] || exit 90
+        [[ "$2" == "$HOMI_TEST_ROOT/installed/homi.app" || "$2" == "$HOMI_TEST_ROOT/system/homi.app" ]] || exit 90
         print replace >> "$HOMI_TEST_ROOT/trace"
         [[ "$HOMI_TEST_FAILURE" != replace ]] || exit 1
         /bin/rm -rf "$2"
         /bin/mv "$1" "$2"
+        """#, executable: true)
+        // install.sh 는 terminal 이 아니면 stdin 의 암호를 sudo -S 로 넘긴다. 암호가 맞을 때만 명령을 그대로 실행한다.
+        try write("bin/sudo", #"""
+        #!/bin/zsh
+        print sudo >> "$HOMI_TEST_ROOT/trace"
+        [[ "$1" == -S && "$2" == -p && -z "$3" ]] || exit 92
+        read -r password || exit 93
+        [[ "$password" == fixture-password ]] || { print 'Sorry, try again.' >&2; exit 1 }
+        shift 3
+        exec "$@"
+        """#, executable: true)
+        try FileManager.default.createDirectory(at: root.appending(path: "system"), withIntermediateDirectories: true)
+        try write("bin/lsregister", #"""
+        #!/bin/zsh
+        case "$1" in
+          -u) [[ "$2" == "$HOMI_TEST_ROOT/installed/homi.app" ]] || exit 94; print unregister >> "$HOMI_TEST_ROOT/trace" ;;
+          -f) [[ "$2" == "$HOMI_TEST_ROOT/system/homi.app" ]] || exit 95; print register >> "$HOMI_TEST_ROOT/trace" ;;
+          *) exit 96 ;;
+        esac
+        """#, executable: true)
+        try write("bin/tis", #"""
+        #!/bin/zsh
+        print -r -- "tis:$1" >> "$HOMI_TEST_ROOT/trace"
+        if [[ "$1" == register ]]; then [[ "$2" == "$HOMI_TEST_ROOT/system/homi.app" ]] || exit 97; fi
+        if [[ "$1" == list ]]; then print com.unocult.inputmethod.homi; fi
         """#, executable: true)
         try write("bin/pkill", #"""
         #!/bin/zsh
@@ -85,7 +119,7 @@ private struct SigningFixture {
         if executable { try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path) }
     }
 
-    func run(_ script: String = "scripts/install.sh", arguments: [String] = [],
+    func run(_ script: String = "scripts/install.sh", arguments: [String] = [], input: String = "",
              identity: String = "present", failure: String = "none", uuid: String = "valid") throws -> (status: Int32, output: String) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
@@ -101,7 +135,11 @@ private struct SigningFixture {
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = pipe
+        let stdin = Pipe()
+        process.standardInput = stdin
         try process.run()
+        stdin.fileHandleForWriting.write(Data(input.utf8))
+        try stdin.fileHandleForWriting.close()
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         return (process.terminationStatus, String(decoding: data, as: UTF8.self))
@@ -193,4 +231,66 @@ func installerUUIDNotPrintedWhenReplacementFails() throws {
     #expect(try fixture.read("installed/homi.app/Contents/MacOS/homi") == "old")
     #expect(try fixture.read("process-state") == "running")
     #expect(try fixture.trace() == ["identity", "sign:homi code signing", "verify", "uuid", "replace"])
+}
+
+@Test("system 위치 설치: 서명·검증 뒤 sudo 로 교환하고 stdin 의 암호는 sudo 만 읽는다")
+func systemInstallReplacesThroughSudo() throws {
+    let fixture = try SigningFixture()
+    defer { fixture.clean() }
+    try FileManager.default.removeItem(at: fixture.installed)
+    try fixture.write("system/homi.app/Contents/MacOS/homi", "system-old")
+    let result = try fixture.run(arguments: ["--system"], input: "fixture-password\n")
+    #expect(result.status == 0, "\(result.output)")
+    #expect(try fixture.trace() == ["identity", "sign:homi code signing", "verify", "uuid", "sudo", "replace", "stop"])
+    #expect(try fixture.read("system/homi.app/Contents/MacOS/homi") == "new")
+    #expect(try fixture.read("process-state") == "stopped")
+    #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.installed.deletingLastPathComponent().path).isEmpty)
+}
+
+@Test("설치 위치 이동: 교환에 성공한 뒤에만 user 위치의 사본과 등록을 지우고 새 위치를 등록한다")
+func systemInstallMovesFromUserLocation() throws {
+    let fixture = try SigningFixture()
+    defer { fixture.clean() }
+    let result = try fixture.run(arguments: ["--system"], input: "fixture-password\n")
+    #expect(result.status == 0, "\(result.output)")
+    #expect(try fixture.trace() == ["identity", "sign:homi code signing", "verify", "uuid", "sudo", "replace",
+        "unregister", "register", "stop", "tis:register", "tis:enable", "tis:enable", "tis:list"])
+    #expect(try fixture.read("system/homi.app/Contents/MacOS/homi") == "new")
+    #expect(try fixture.read("process-state") == "stopped")
+    #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.installed.deletingLastPathComponent().path).isEmpty)
+}
+
+@Test("system 위치 설치: sudo 가 암호를 거부하면 교환하거나 process 를 종료하지 않는다", arguments: ["wrong\n", ""])
+func systemInstallRefusedBySudoPreservesInstallation(input: String) throws {
+    let fixture = try SigningFixture()
+    defer { fixture.clean() }
+    try fixture.write("system/homi.app/Contents/MacOS/homi", "system-old")
+    let result = try fixture.run(arguments: ["--system"], input: input)
+    #expect(result.status != 0)
+    #expect(!result.output.contains("executable UUID"))
+    #expect(try fixture.read("system/homi.app/Contents/MacOS/homi") == "system-old")
+    #expect(try fixture.trace() == ["identity", "sign:homi code signing", "verify", "uuid", "sudo"])
+    try fixture.expectPreserved()
+}
+
+@Test("설치 위치: system 위치에 설치본이 있으면 user 위치 설치는 build 전에 멈춘다")
+func userInstallStopsWhenSystemCopyExists() throws {
+    let fixture = try SigningFixture()
+    defer { fixture.clean() }
+    try fixture.write("system/homi.app/Contents/MacOS/homi", "system-old")
+    let result = try fixture.run()
+    #expect(result.status != 0)
+    #expect(try fixture.trace().isEmpty)
+    #expect(try fixture.read("system/homi.app/Contents/MacOS/homi") == "system-old")
+    try fixture.expectPreserved()
+}
+
+@Test("설치 option: 모르는 option 은 아무것도 하지 않고 거부한다")
+func installerRejectsUnknownOption() throws {
+    let fixture = try SigningFixture()
+    defer { fixture.clean() }
+    let result = try fixture.run(arguments: ["--sytem"])
+    #expect(result.status == 2)
+    #expect(try fixture.trace().isEmpty)
+    try fixture.expectPreserved()
 }

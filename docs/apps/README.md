@@ -26,6 +26,7 @@ homi 를 바꿀 때(특히 `Sources/InputSession/AppRules.swift`) 그 app 의 �
 | [VS Code](vscode.md) | `com.microsoft.VSCode` · `com.microsoft.VSCodeInsiders` | Chromium | 1.139.0 | ESC → 영문 |
 | [Obsidian](obsidian.md) | `md.obsidian` | Chromium | 1.13.7 | ESC → 영문 |
 | [Chrome](chrome.md) | `com.google.Chrome` | Chromium | 154.0.8037.98 | — |
+| [Safari](safari.md) | `com.apple.Safari` | WebKit | 27.2 | — (비밀번호 칸의 보안 입력 관측) |
 | [Orca](orca.md) | `com.stablyai.orca` | Chromium | 1.4.210 | — |
 | [ChatGPT](chatgpt.md) | 현재 설치본 `com.openai.codex` | Codex Framework · 입력 구현 미검증 | 26.1027.30824 | 전용 우회 없음·helper 이름 판별 검토 |
 | [Wave](wave.md) | `dev.commandline.waveterm` | Chromium + xterm.js | 0.14.5 | ESC → 영문, 한자는 조합 중인 글자만 |
