@@ -6,7 +6,7 @@
 > **현재 (2026-11-17)**: M0–M4·M6·M7 을 주인이 확인했다. 지금은 M5 — 일상 사용과 app 호환성.
 > - **설치본**: 2026-11-17 02:07 KST, `/Library/Input Methods/homi.app` (root 소유). executable UUID `4AE30F64-BF20-3376-93EB-0131380E3939`,
 >   서명 `homi code signing`, commit `d471e0b`. 제품 code 는 11-16 설치본(`d9e2723`)과 같아 UUID 도 같다 — 11-03 16:47 build 에 [보안 입력 중의 기록 제외](#작업-규칙)만 더한 것이다.
->   system 위치 전용으로 고친 `install.sh` 로 같은 자리에 다시 놓았다. Debug·Release 각각 388개 test 에서 known issue 1개 외 실패·warning 없음.
+>   system 위치 전용으로 고친 `install.sh` 로 같은 자리에 다시 놓았다. Debug·Release 각각 389개 test 에서 known issue 1개 외 실패·warning 없음.
 > - **보안 입력 중에 ABC 로 밀려나던 증상**: 원인은 [설치 위치](docs/macos-input.md#보안-입력-문서의-secure-source-와-입력기의-설치-위치-2026-11-13-확인)였고 2026-11-15 에 `/Library/Input Methods` 로 옮겼다 (함정 14).
 >   재시동 뒤인 11-17 에 주인이 확인했다 — 보안 입력이 켜진 동안 새로 활성화한 문서(sandbox app 인 TextEdit 포함)에서 homi 가 유지되고 한글과 Caps Lock 전환이 된다
 >   ([기록](docs/macos-input.md#주인-확인-보안-입력-중에도-sandbox-app-에서-homi-가-유지된다-2026-11-17)). 남은 관찰은 [다음 작업](#다음-작업) 3번에 있다.
@@ -220,7 +220,8 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 - `scripts/install.sh [--register]` — release build → 설치 위치와 같은 volume 에 bundle 조립·서명·검증(`scripts/app.sh`) →
   `/Library/Input Methods/homi.app` 과 atomic 교환 → 실행 중인 homi 종료. 교환 전 실패하면 기존 app·process 는 그대로 남는다.
   설치 위치는 이곳 하나다 (함정 14). 교환 한 번에만 sudo 를 쓴다 — 암호는 주인이 넣고, terminal 이 아니면 stdin 의 암호를 넘긴다.
-  `~/Library/Input Methods` 에 옛 설치본이 남아 있으면 교환 뒤 그 사본과 LaunchServices 등록을 지우고 새 위치를 등록하며, logout 이 필요하다고 알린다.
+  `~/Library/Input Methods` 에 옛 설치본이 남아 있으면 교환 뒤 그 사본과 LaunchServices 등록을 지우고 새 위치를 등록한다.
+  설치 위치에 처음 놓았거나 옮겼으면 끝에 logout 이 필요하다고 알린다 (함정 8).
   `homi code signing` 인증서 조회·서명이 실패하면 중단한다. ad-hoc 대체 서명은 개발용 probe 의 `app.sh --allow-ad-hoc`에서만 명시한다.
   다음 입력 때 system 이 새 binary 로 띄운다. `--register` 는 처음 한 번 (TIS 등록 + enable).
 - 개발 도구 (`tools/`, 제품 아님):

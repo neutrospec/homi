@@ -255,6 +255,20 @@ func installMovesFromUserLocation() throws {
     #expect(fixture.leftovers.isEmpty)
 }
 
+@Test("첫 설치: 설치 위치에 아무것도 없으면 놓고 등록한 뒤 logout 이 필요하다고 알린다")
+func firstInstallAsksForLogout() throws {
+    let fixture = try SigningFixture()
+    defer { fixture.clean() }
+    try FileManager.default.removeItem(at: fixture.installed)
+    let result = try fixture.run(arguments: ["--register"])
+    #expect(result.status == 0, "\(result.output)")
+    #expect(try fixture.trace() == ["identity", "sign:homi code signing", "verify", "uuid", "sudo", "replace",
+        "stop", "tis:register", "tis:enable", "tis:enable", "tis:list"])
+    #expect(result.output.contains("logout"))  // 처음 놓은 위치도 sandbox 된 app 은 logout 전까지 모른다
+    #expect(try fixture.read("installed/homi.app/Contents/MacOS/homi") == "new")
+    #expect(fixture.leftovers.isEmpty)
+}
+
 @Test("설치 위치 이동: 교환이 실패하면 user 위치의 옛 설치본과 등록, process 를 그대로 둔다")
 func installKeepsUserCopyWhenReplacementFails() throws {
     let fixture = try SigningFixture()

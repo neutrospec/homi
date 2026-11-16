@@ -12,6 +12,7 @@
 #
 # --register  처음 한 번, 그리고 설치 위치를 옮긴 뒤: TIS 에 등록하고 input source 목록에 넣는다 (parent 먼저, 그다음 mode).
 #             처음 놓은 위치는 logout 뒤에야 모든 app 이 안다 — 그 전까지 새로 뜨는 sandbox app 은 homi 를 찾지 못한다 (docs/macos-input.md 2026-11-16).
+#             그래서 설치 위치에 처음 놓았거나 옮겼으면 끝에 logout 이 필요하다고 알린다.
 set -euo pipefail
 cd "${0:A:h}/.."
 
@@ -21,7 +22,7 @@ readonly user_dest="$HOME/Library/Input Methods/homi.app"
 readonly lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
 register=false
-moved=false
+needs_logout=false
 for option in "$@"; do
   case $option in
     --register) register=true ;;
@@ -60,6 +61,8 @@ if uuid_output=$(xcrun dwarfdump --uuid "$stage/homi.app/Contents/MacOS/homi" 2>
 else
   uuid_valid=false
 fi
+# 설치 위치에 처음 놓는가 — 처음 놓은 위치는 logout 전까지 sandbox 된 app 이 모른다.
+[[ -e $dest ]] || needs_logout=true
 # root 로는 교환, 소유자 변경, 교환으로 stage 에 온 옛 설치본의 삭제만 한다. 교환이 실패하면 뒤의 둘은 하지 않는다.
 # sudo 를 함수로 감싸지 않는다 — zsh 는 함수 안의 실패로 끝날 때 위의 EXIT trap 을 돌리지 않아 stage 가 남는다.
 sudo "${sudo_options[@]}" /bin/sh -c '"$1" "$2" "$3" && /usr/sbin/chown -R root:wheel "$3" && /bin/rm -rf "$2"' \
@@ -71,7 +74,7 @@ if [[ -e $user_dest ]]; then
   rm -rf "$user_dest" || echo "warning: could not remove $user_dest" >&2
   "$lsregister" -f "$dest" || true
   register=true
-  moved=true
+  needs_logout=true
 fi
 pkill -x homi || true
 echo "installed: $dest"
@@ -96,6 +99,6 @@ if [[ $register == true ]]; then
   "$tis" enable "$id.korean"
   "$tis" list --all | grep -F "$id" || echo "homi 가 아직 TIS 목록에 없다 — logout 후 다시 확인"
 fi
-if [[ $moved == true ]]; then
-  echo "설치 위치를 옮겼다 — logout(또는 재시동)해야 sandbox 된 app 이 homi 를 찾는다. 그 전에는 새로 뜬 app 에서 homi 가 동작하지 않는다."
+if [[ $needs_logout == true ]]; then
+  echo "처음 설치했거나 설치 위치를 옮겼다 — logout(또는 재시동)해야 sandbox 된 app 이 homi 를 찾는다. 그 전에는 새로 뜬 app 에서 homi 가 동작하지 않는다."
 fi
