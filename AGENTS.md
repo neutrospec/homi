@@ -8,7 +8,8 @@
 >   서명 `homi code signing`, commit `d9e2723`. 11-03 16:47 build(UUID `72DB0109-2D65-3F5E-A511-3DEEC2426231`)에 [보안 입력 중의 기록 제외](#작업-규칙)만 더했다.
 >   Debug·Release 각각 389개 test 에서 known issue 1개 외 실패·warning 없음.
 > - **보안 입력 중에 ABC 로 밀려나던 증상**: 원인은 [설치 위치](docs/macos-input.md#보안-입력-문서의-secure-source-와-입력기의-설치-위치-2026-11-13-확인)였고 2026-11-15 에 옮겼다 — homi 가 secure 로 읽힌다.
->   보안 입력 중의 실제 동작은 주인의 확인이 남았다 ([다음 작업](#다음-작업) 3번).
+>   sandbox 밖의 app 에서는 보안 입력 중에도 유지된다 (11-16 Ghostty). **옮긴 뒤 logout 을 아직 하지 않아, 새로 뜨는 sandbox app 은 homi 를 찾지 못한다** —
+>   그 app 에서 입력 소스 HUD(⌃Space·🌐)를 띄우면 app 이 죽는다 ([11-16 TextEdit](docs/macos-input.md#sandbox-된-app-은-옮긴-위치를-logout-전에는-알지-못한다-2026-11-16)). logout·재시동부터 한다 ([다음 작업](#다음-작업) 3번).
 > - **미확정**: Telegram 의 [창 전환 뒤 첫 key 영문](docs/apps/telegram.md#창-전환-뒤-첫-key-가-영문-2026-10-29-미해결)·[초성 누락](docs/apps/telegram.md#창-전환-뒤-초성-누락-2026-10-30-미해결),
 >   [후보 뜻 표시 누락](docs/apps/engines/appkit.md#후보-뜻의-첫-표시-누락-보고-2026-10-31-미해결) — 재발 때 조사한다.
 > - 고친 결함은 [lessons](docs/lessons.md), 개선 안건의 채택·보류는 [안정성 검토](docs/stability-review.md), 남은 작업은 [다음 작업](#다음-작업)에 있다.
@@ -187,7 +188,7 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 6. **`activateServer`·`setValue` 안에서 client 에게 묻거나 기다리지 않는다** — Chrome deadlock, Spotlight 멈춤 사례.
    homi 아래 layout 을 정하는 `overrideKeyboard` 만 activate 때 부른다 (선행 입력기들도 activate·`setValue` 에서 부른다).
 7. **영문 mode 를 system 에 노출하면 비밀번호 칸에서도 그 mode 가 살아 key 를 받는다.** 한국어 mode 만 두면 system 이 ABC 로 대체한다.
-8. **등록** — parent input method 를 먼저 enable, 첫 등록엔 logout 을 각오, `ComponentInputModeDict` 를 바꾸면 logout + 재추가.
+8. **등록** — parent input method 를 먼저 enable, 첫 등록엔 logout 을 각오 (설치 위치를 옮기는 것도 첫 등록이다 — sandbox app 은 logout 전까지 새 위치를 모른다), `ComponentInputModeDict` 를 바꾸면 logout + 재추가.
    **`imklaunchagent` 는 절대 죽이지 않는다** (실행 중인 app 들이 모든 입력기를 잃는다).
 9. **ad-hoc 서명은 build 마다 신원이 바뀌어** 손쉬운 사용 허가가 풀린다 — login keychain 의 자체 서명 인증서 "homi code signing" 으로 서명한다 (2036 만료).
 10. **app 마다 "입력기가 먹었다" 판정이 다르다.** Ghostty·iTerm2 는 입력기의 YES 를 보지 않고, 조합도 글자도 없이 먹은 key 를 스스로 보낸다 — 전환 key 가 수식키인 이유.
@@ -222,6 +223,7 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
   `homi code signing` 인증서 조회·서명이 실패하면 중단한다. ad-hoc 대체 서명은 개발용 probe 의 `app.sh --allow-ad-hoc`에서만 명시한다.
   다음 입력 때 system 이 새 binary 로 띄운다. `--register` 는 처음 한 번 (TIS 등록 + enable).
   지금 설치본은 system 위치다 (2026-11-15) — `--system` 으로 설치하고 sudo 암호는 주인이 넣는다.
+  설치 위치를 옮긴 뒤에는 logout 이 필요하다 — 그 전까지 새로 뜨는 sandbox app 은 homi 를 찾지 못한다 (2026-11-16).
 - 개발 도구 (`tools/`, 제품 아님):
   - `swift run caps-probe --seconds 90` — Caps Lock 의 물리 HID·remap 뒤 modifier 와 인접 입력의 시각·counter 를 읽기 전용으로 관찰한다.
     일반 key code·문자는 수집하지 않으며, 수집 종료 뒤 출력한다. [관측 범위와 제한](docs/macos-input.md#caps-lock-전환-누락-관측-2026-10-29).
@@ -331,8 +333,11 @@ Mail 의 누락은 [재개 규칙](docs/apps/mail.md#idle-확정-음절의-재�
    로그인 test 가 비밀번호 칸을 잡는 동안(36초 안무·10초 기다림) session 전역으로 켜지고, 그 사이 주인이 app 을 옮기면 ABC 로 강제된다. 07:13 의 Orca·10:29 의 Telegram/KakaoTalk 은 앞 app 일 뿐이다
    (IORegistry 의 pid 는 앞 app 이다 — `tis watch` 는 `front` 로 적는다). 10:29 에는 input menu 에 homi 가 보였다 — 켜짐이 짧아 주인이 볼 때는 꺼져 있었다.
    **2026-11-13: homi 만 밀려나는 까닭은 설치 위치다** ([기전](docs/macos-input.md#보안-입력-문서의-secure-source-와-입력기의-설치-위치-2026-11-13-확인)) — 11-05 의 "남은 일은 homi 밖"은 틀렸다.
-   2026-11-15 15:52 에 `scripts/install.sh --system` 으로 옮겼다 — logout 없이 반영됐고 enabled 상태와 손쉬운 사용 허가가 유지됐다 ([읽은 값](docs/macos-input.md#옮긴-뒤-읽은-값-2026-11-15)).
-   ① `tis secure sources` 가 homi 를 secure 로 읽는다 ✅. 남은 것은 보안 입력을 켜야 해서 주인이 보는 셋이다:
+   2026-11-15 15:52 에 `scripts/install.sh --system` 으로 옮겼다 — enabled 상태와 손쉬운 사용 허가는 유지됐다 ([읽은 값](docs/macos-input.md#옮긴-뒤-읽은-값-2026-11-15)).
+   **logout 은 아직 하지 않았다** — sandbox 밖의 app 은 바로 새 위치를 썼지만, 새로 뜨는 sandbox app 은 homi 를 찾지 못하고 그 app 에서 입력 소스 HUD 를 띄우면 죽는다
+   ([11-16 TextEdit 과 그 근거](docs/macos-input.md#sandbox-된-app-은-옮긴-위치를-logout-전에는-알지-못한다-2026-11-16)). 먼저 logout·재시동하고, 새로 뜬 TextEdit 에서 homi 가 activate 되는지와
+   sandbox app 의 cache(`$DARWIN_USER_CACHE_DIR/com.apple.TextEdit/com.apple.IntlDataCache.le.kbdx`)가 새 위치를 적는지부터 본다. 아니면 user 위치로 되돌린다.
+   ① `tis secure sources` 가 homi 를 secure 로 읽는다 ✅. ② 는 sandbox 밖에서 확인했다 ✅ (11-16 Ghostty — 켜진 21초 동안 활성화 3번, 줄곧 homi). logout 뒤에 sandbox app 에서 다시 본다:
    ② `tis secure hold 20` 동안 새로 연 TextEdit 을 활성화해도 homi 가 유지된다 (11-05 실험 B 의 반대 결과) ③ 비밀번호 칸 안은 여전히 ABC 이고, 다녀온 뒤 homi 로 돌아온다 (11-16 T3 Code 에서 한 번 관측)
    ④ 보안 입력 중의 Caps Lock 전환(event tap 이 keyboard 를 못 보므로 counter 판정)과 terminal·Telegram 의 조합 중 Enter 다시 보내기.
    아래 (a)–(d) 는 11-05 의 정리이고, 옮긴 뒤에도 남는 것만 다시 본다.

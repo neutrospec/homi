@@ -382,7 +382,7 @@ macOS 27.2 (26B123) HIToolbox 의 disassembly 에서 세 곳이 맞물린다 ✅
 |---|---|---|
 | 분류 | homi 의 두 source 모두 secure, 입력기 bundle 은 `/Library/Input Methods/homi.app` | `tis secure sources` |
 | secure 목록 | `com.apple.keylayout.ABC` 와 `com.unocult.inputmethod.homi.korean` | `TISCreateSecureKeyboardInputSourceList()` 직접 호출 |
-| 반영 | logout·재시작 없이 됐다 — 14:21 부터 돌던 imklaunchagent 가 15:52:48 에 새 위치의 homi 를 띄웠다 | `ps` |
+| 반영 | sandbox 밖의 app 에는 logout 없이 됐다 — 14:21 부터 돌던 imklaunchagent 가 15:52:48 에 새 위치의 homi 를 띄웠다. sandbox app 은 [아니다](#sandbox-된-app-은-옮긴-위치를-logout-전에는-알지-못한다-2026-11-16) | `ps` |
 | enabled·선택 | 그대로다. third-party 입력기의 enabled 목록(`com.apple.inputsources` 의 `AppleEnabledThirdPartyInputSources`)은 bundle ID 로 적혀 있고 경로가 없다 | `tis list`, `defaults read` |
 | 손쉬운 사용 허가 | 그대로다. 서명의 designated requirement 는 identifier 와 인증서뿐이고 경로가 없다 — 새 process 가 허가를 확인한 뒤에만 만드는 session event tap 이 요청한 mask 그대로 걸려 있다 | `codesign -d -r-`, `CGGetEventTapList` |
 | 사본·등록 | disk 와 LaunchServices 에 하나씩 | `mdfind`, `lsregister -dump` |
@@ -393,6 +393,30 @@ macOS 27.2 (26B123) HIToolbox 의 disassembly 에서 세 곳이 맞물린다 ✅
 비밀번호 칸의 관측 하나 (2026-11-16, 주인이 T3 Code 의 암호 입력 card 를 쓰는 동안 `tis watch` 와 homi 의 lifecycle log): 칸이 보안 입력을 켜자(16:24:59.927)
 homi 가 activate 됐다가 3 ms 뒤 deactivate 되고 ABC 가 됐다(16:25:00.126) — 칸 안은 ABC 다 ✅. card 가 닫히고 보안 입력이 꺼진 직후의 첫 문서 활성화(16:25:19.046)에서
 homi 로 돌아왔다 ✅. 옮기기 전에도 저절로 돌아오던 모양(깨웠다 재우는 override)이라 이 한 번을 옮긴 효과로 세지 않는다 — 켜진 동안 다른 문서를 활성화한 경우는 아직 없다.
+
+#### sandbox 된 app 은 옮긴 위치를 logout 전에는 알지 못한다 (2026-11-16)
+
+위 표의 "logout 없이 반영됐다"는 sandbox 밖의 process 만 보고 내린 결론이었다 — 틀렸다. 옮긴 뒤 새로 뜬 sandbox app 은 homi 를 찾지 못한다 ✅:
+
+- 옮긴 뒤에 input source cache 를 다시 쓴 sandbox app 10개(`$DARWIN_USER_CACHE_DIR/<bundle ID>/com.apple.IntlDataCache.le` — FaceTime·Books·TextEdit 등) 모두에 입력기 목록(`.le.kbdx`)이 없다.
+  옮기기 전에 쓴 66개의 `.le.kbdx` 는 모두 옛 `~/Library/Input Methods/homi.app` 을 적고 있다. sandbox 밖의 cache(`$DARWIN_USER_CACHE_DIR/com.apple.IntlDataCache.le.kbdx`)만 새 위치다.
+- App Sandbox 로 서명한 시험 process 는 `/Library/Input Methods/homi.app` 을 읽을 수 있는데도 TIS 목록에 homi 가 없다 (설치된 source 331개, sandbox 밖은 333개).
+  `TISCopyInputSourceRefForInputSourceID` 도 NULL 을 준다. 시험 source 는 `build/system-location-20261115/sandbox-probe/` 에 있다.
+- 옮기기 전부터 떠 있던 sandbox app(Safari·Telegram·KakaoTalk·Mail·Notes, 11-15 14:21 시작)은 memory 의 목록으로 계속 동작한다. sandbox 밖의 app(Ghostty·T3 Code·Orca·Finder)은 바로 새 위치를 썼다.
+
+입력기를 `/Library/Input Methods` 에 처음 놓으면 logout 하라는 관례가 여기서 나온다 — sandbox app 은 그 위치를 스스로 훑지 않고 login 때 만들어지는 정보에 기대는 듯하다 🔶.
+logout·재시동 뒤에 새로 뜬 sandbox app 이 homi 를 찾는지는 아직 확인하지 않았다 🔶. 아니라면 user 위치로 되돌린다.
+
+**이 상태에서 TextEdit 이 죽었다** (16:31:57, 주인의 `tis secure hold 20` 실험 중 — 보안 입력이 원인은 아니다). 입력 소스 전환 HUD 를 띄우라는 message 가 TextEdit 에 왔다 ✅ (log):
+`-[TUINSCursorUIController showTextInputMenuHUD:]`, `tsmEnabledInputSourceIDs = (ABC, homi.korean)`, `tsmSelection = 1`.
+`TextInputUIMacHelper` 의 `-[TUINSCursorUIController _selectCurrentInputSource]` 는 고른 ID 를 `TISCopyInputSourceRefForInputSourceID` 로 찾아 `TSMSelectInputSource` 에 넘기고 `CFRelease` 한다 —
+NULL 검사가 없다 ✅ (disassembly, macOS 27.2.1 26B131). TextEdit 의 process 는 homi 를 모르니 NULL 이 왔고 `CFRelease(NULL)` 로 죽었다 (`TextEdit-2026-11-16-163201.ips`).
+homi 는 죽지 않았고 TextEdit 의 문서에서 activate 된 적도 없다. HUD 의 목록은 homi 를 아는 process 가 만들고, 고르는 일은 homi 를 모르는 app 이 한다 —
+둘이 어긋나 있는 동안 그 app 에서 ⌃Space·🌐 로 HUD 를 띄우면 같은 일이 난다.
+
+같은 실험에서 **보안 입력 중의 문서 활성화는 homi 를 유지했다** ✅ — 켜진 21초(16:31:49.677–16:32:10.679) 동안 Ghostty 2번·UserNotificationCenter 1번의 활성화에서
+선택된 source 는 줄곧 `homi.korean` 이었다 (`tis watch`, homi 의 lifecycle log). 옮기기 전에는 이런 활성화마다 4 ms 뒤 ABC 가 됐다. sandbox app 에서의 확인은 logout 뒤로 남는다.
+그 구간에 homi 가 받은 key 는 없어, 보안 입력 중의 기록 제외는 실제 app 에서 아직 보지 못했다.
 
 ### input menu 의 비활성·누락 (2026-10-09, 미해결)
 

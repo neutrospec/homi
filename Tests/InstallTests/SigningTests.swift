@@ -245,9 +245,10 @@ func systemInstallReplacesThroughSudo() throws {
     #expect(try fixture.read("system/homi.app/Contents/MacOS/homi") == "new")
     #expect(try fixture.read("process-state") == "stopped")
     #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.installed.deletingLastPathComponent().path).isEmpty)
+    #expect(!result.output.contains("logout"))  // 위치가 그대로면 logout 을 요구하지 않는다
 }
 
-@Test("설치 위치 이동: 교환에 성공한 뒤에만 user 위치의 사본과 등록을 지우고 새 위치를 등록한다")
+@Test("설치 위치 이동: 교환에 성공한 뒤에만 user 위치의 사본과 등록을 지우고 새 위치를 등록하며 logout 이 필요하다고 알린다")
 func systemInstallMovesFromUserLocation() throws {
     let fixture = try SigningFixture()
     defer { fixture.clean() }
@@ -255,6 +256,7 @@ func systemInstallMovesFromUserLocation() throws {
     #expect(result.status == 0, "\(result.output)")
     #expect(try fixture.trace() == ["identity", "sign:homi code signing", "verify", "uuid", "sudo", "replace",
         "unregister", "register", "stop", "tis:register", "tis:enable", "tis:enable", "tis:list"])
+    #expect(result.output.contains("logout"))  // sandbox 된 app 은 logout 전까지 새 위치를 모른다
     #expect(try fixture.read("system/homi.app/Contents/MacOS/homi") == "new")
     #expect(try fixture.read("process-state") == "stopped")
     #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.installed.deletingLastPathComponent().path).isEmpty)

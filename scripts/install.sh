@@ -11,7 +11,7 @@
 # imklaunchagent 는 절대 죽이지 않는다 — 실행 중인 app 들이 모든 입력기를 잃는다.
 #
 # --register  처음 한 번, 그리고 설치 위치를 옮긴 뒤: TIS 에 등록하고 input source 목록에 넣는다 (parent 먼저, 그다음 mode).
-#             system 이 바로 알아보지 못하면 logout 이 한 번 필요하다.
+#             처음 놓은 위치는 logout 뒤에야 모든 app 이 안다 — 그 전까지 새로 뜨는 sandbox app 은 homi 를 찾지 못한다 (docs/macos-input.md 2026-11-16).
 set -euo pipefail
 cd "${0:A:h}/.."
 
@@ -22,6 +22,7 @@ readonly lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks
 
 system=false
 register=false
+moved=false
 for option in "$@"; do
   case $option in
     --system) system=true ;;
@@ -84,6 +85,7 @@ if [[ $system == true && -e $user_dest ]]; then
   rm -rf "$user_dest" || echo "warning: could not remove $user_dest" >&2
   "$lsregister" -f "$dest" || true
   register=true
+  moved=true
 fi
 pkill -x homi || true
 echo "installed: $dest"
@@ -107,4 +109,7 @@ if [[ $register == true ]]; then
   "$tis" enable "$id"
   "$tis" enable "$id.korean"
   "$tis" list --all | grep -F "$id" || echo "homi 가 아직 TIS 목록에 없다 — logout 후 다시 확인"
+fi
+if [[ $moved == true ]]; then
+  echo "설치 위치를 옮겼다 — logout(또는 재시동)해야 sandbox 된 app 이 homi 를 찾는다. 그 전에는 새로 뜬 app 에서 homi 가 동작하지 않는다."
 fi
