@@ -34,7 +34,7 @@ func recordExportEmptyAndMetadata() throws {
         let file = try writeRecord(entries: [], directory: directory, at: Date(timeIntervalSince1970: 0),
                                    binaryUUID: "TEST-UUID", processID: "123-TEST")
         let text = try String(contentsOf: file, encoding: .utf8)
-        #expect(text.contains("친 key 와 조합 결과") && text.contains("주인이 요청"))
+        #expect(text.contains("친 key 와 조합 결과") && text.contains("보안 입력") && text.contains("주인이 요청"))
         #expect(text.contains("TEST-UUID") && text.contains("123-TEST") && text.hasSuffix("\n"))
         let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
         let permissions = try #require(attributes[.posixPermissions] as? NSNumber)

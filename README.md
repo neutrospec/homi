@@ -170,7 +170,8 @@ menu bar 의 **한/A 를 눌러 "homi 설정…"**, 또는 input menu 의 **"설
 
 ### 이상할 때
 
-input menu 의 **"최근 key 기록 저장"** 을 곧바로 누르면 `~/Library/Logs/homi/` 에 최근 key event 와 상태 전이가 저장된다 (타이핑한 글자는 들어 있지 않다).
+input menu 의 **"최근 key 기록 저장"** 을 곧바로 누르면 `~/Library/Logs/homi/` 에 최근 key event·조합 결과·상태 전이가 저장된다.
+친 내용이 든 file 이다 — 보안 입력이 켜진 동안(비밀번호 입력, terminal 의 Secure Keyboard Entry 등)의 key 와 글자만 빠진다. 누르기 전에는 memory 에만 있다.
 system log 는 `/usr/bin/log stream --level debug --predicate 'subsystem == "com.unocult.inputmethod.homi"'` 로 본다.
 
 ## 구조

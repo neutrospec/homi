@@ -93,7 +93,7 @@ nonisolated final class HomiInputController: IMKInputController, CandidateOwner 
             var resend: Resend?
             return coordinator.keyDown(key, client: client, before: {
                 cancelModifiers()
-                record("key \(key)")
+                record("key", typed: "\(key)")
             }, canResend: {
                 resend = Resend.prepare(event, app: coordinator.clientApp)
                 if resend == nil { record("  resend not prepared — passed") }

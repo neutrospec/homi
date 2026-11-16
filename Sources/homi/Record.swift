@@ -1,3 +1,4 @@
+import Carbon
 import Darwin
 import Foundation
 import InputSession
@@ -13,6 +14,12 @@ nonisolated let recorder = Mutex(Recorder(capacity: 8000))
 
 nonisolated func record(_ event: String) {
     recorder.withLock { $0.record(event) }
+}
+
+/// 친 key·글자가 딸린 기록. 보안 입력이 켜진 동안에는 그 내용을 memory 에도 담지 않는다 (`Recorder.line`).
+/// 보안 입력은 session 전역이라 다른 process 가 켠 동안의 평범한 입력도 빠진다. 상태를 한 번 읽는 데 12ns 다 (2026-11-16) — key 처리 안에서 읽는다.
+nonisolated func record(_ event: String, typed: @autoclosure () -> String) {
+    record(Recorder.line(event, typed: typed(), secure: IsSecureEventInputEnabled()))
 }
 
 /// 기록을 ~/Library/Logs/homi/ 에 쓰고 그 경로를 돌려준다.
@@ -49,7 +56,7 @@ nonisolated func writeRecord(entries: [Recorder.Entry], directory: URL, at date:
     clock.locale = Locale(identifier: "en_US_POSIX")
     clock.dateFormat = "HH:mm:ss.SSS"
     let lines = entries.map { "\(clock.string(from: $0.time))  \($0.event)" }
-    let header = "# homi 최근 기록 — 친 key 와 조합 결과가 들어 있다. 주인이 요청해서 저장했다."
+    let header = "# homi 최근 기록 — 친 key 와 조합 결과가 들어 있다 (보안 입력이 켜진 동안의 것은 뺐다). 주인이 요청해서 저장했다."
     let metadata = "# executable UUID: \(binaryUUID) · process: \(processID)"
     let data = Data(([header, metadata] + lines).joined(separator: "\n").appending("\n").utf8)
     clock.dateFormat = "yyyy-MM-dd'T'HHmmss"

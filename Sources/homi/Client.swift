@@ -74,19 +74,19 @@ nonisolated struct Client: InputClient {
             submission?.willApply(action)
             switch action {
             case .mark(let text):
-                record("  mark \"\(text)\"")
+                record("  mark", typed: "\"\(text)\"")
                 let caret = NSRange(location: (text as NSString).length, length: 0)
                 call("mark", planned: planned, kind: .mark) {
                     proxy.setMarkedText(text, selectionRange: caret, replacementRange: Self.nowhere)
                 }
             case .markCommitted(let text, let range):
-                record("  mark \"\(text)\" over {\(range.location),\(range.length)}")
+                record("  mark", typed: "\"\(text)\" over {\(range.location),\(range.length)}")
                 let caret = NSRange(location: (text as NSString).length, length: 0)
                 call("markCommitted", planned: planned, kind: .mark) {
                     proxy.setMarkedText(text, selectionRange: caret, replacementRange: range)
                 }
             case .insert(let text):
-                record("  insert \"\(text)\"")
+                record("  insert", typed: "\"\(text)\"")
                 // {NSNotFound, NSNotFound} 실험은 Chrome 의 실패를 해결하지 못했다. 기존 range 로 복귀한다.
                 call("insert", planned: planned, kind: .insert) {
                     proxy.insertText(text, replacementRange: Self.nowhere)

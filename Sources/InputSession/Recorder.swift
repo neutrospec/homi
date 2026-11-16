@@ -33,4 +33,10 @@ public struct Recorder: Sendable {
     public var entries: [Entry] {
         ring.count < capacity ? ring : Array(ring[next...] + ring[..<next])
     }
+
+    /// 친 key·글자가 딸린 기록 한 줄. 보안 입력이 켜진 동안에는 그 내용을 담지 않고, 있었다는 것만 남긴다 —
+    /// 그때 치는 것은 비밀번호이고 이 기록은 주인이 저장하면 file 이 된다. 처리 결과의 줄은 그대로라 순서는 읽을 수 있다.
+    public static func line(_ event: String, typed: @autoclosure () -> String, secure: Bool) -> String {
+        secure ? "\(event) (secure input)" : "\(event) \(typed())"
+    }
 }

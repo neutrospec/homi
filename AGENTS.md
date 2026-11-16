@@ -276,6 +276,7 @@ SwiftPM package 하나. `.xcodeproj` 는 두지 않는다 — build·test·설�
 - **macOS 동작을 추측으로 코딩하지 않는다.** IMK·TIS 는 문서가 얇고 app 마다 다르게 군다 — 실험으로 확인하고 `docs/macos-input.md` 에 남긴다.
   결함을 고쳤다면 `docs/lessons.md` 에 증상·원인·증거·대응으로.
 - **입력 내용을 log·file 에 남기지 않는다.** 상태 전이·bundle ID 까지만 — key code 도 모이면 입력 내용이다 (key 는 memory 의 ring buffer 에만).
+  보안 입력이 켜진 동안에는 그 buffer 에도 key 와 글자를 담지 않고 있었다는 것만 남긴다 (`Recorder.line`, 2026-11-16).
   타이핑은 곧 비밀번호이고 대화다. (예외: `probe` 는 test 창에 친 것만 `build/` 에 남긴다.)
 - IMK 층을 바꿨으면 설치해서 해당 app 에서 직접 확인하고, 무엇을 확인했는지 보고한다. `swift test` 통과만으로 "된다" 고 하지 않는다.
 - app 에 관해 알게 된 것은 그 app 의 원장(`docs/apps/<app>.md`)에 version·날짜·근거와 함께 적는다. `AppRules.swift` 를 바꾸기 전에 읽고, 바꾼 뒤에 갱신한다.
