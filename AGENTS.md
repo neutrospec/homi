@@ -4,9 +4,9 @@
 목표는 **두벌식 한글 입력이 완벽하게 동작하는 것** 하나다. 기능을 늘리는 프로젝트가 아니다 — 잡다한 기능·옵션·변죽은 만들지 않는다.
 
 > **현재 (2026-11-17)**: M0–M4·M6·M7 을 주인이 확인했다. 지금은 M5 — 일상 사용과 app 호환성.
-> - **설치본**: 2026-11-16 16:25 KST, `/Library/Input Methods/homi.app` (root 소유). executable UUID `4AE30F64-BF20-3376-93EB-0131380E3939`,
->   서명 `homi code signing`, commit `d9e2723`. 11-03 16:47 build(UUID `72DB0109-2D65-3F5E-A511-3DEEC2426231`)에 [보안 입력 중의 기록 제외](#작업-규칙)만 더했다.
->   Debug·Release 각각 389개 test 에서 known issue 1개 외 실패·warning 없음.
+> - **설치본**: 2026-11-17 02:07 KST, `/Library/Input Methods/homi.app` (root 소유). executable UUID `4AE30F64-BF20-3376-93EB-0131380E3939`,
+>   서명 `homi code signing`, commit `d471e0b`. 제품 code 는 11-16 설치본(`d9e2723`)과 같아 UUID 도 같다 — 11-03 16:47 build 에 [보안 입력 중의 기록 제외](#작업-규칙)만 더한 것이다.
+>   system 위치 전용으로 고친 `install.sh` 로 같은 자리에 다시 놓았다. Debug·Release 각각 388개 test 에서 known issue 1개 외 실패·warning 없음.
 > - **보안 입력 중에 ABC 로 밀려나던 증상**: 원인은 [설치 위치](docs/macos-input.md#보안-입력-문서의-secure-source-와-입력기의-설치-위치-2026-11-13-확인)였고 2026-11-15 에 `/Library/Input Methods` 로 옮겼다 (함정 14).
 >   재시동 뒤인 11-17 에 주인이 확인했다 — 보안 입력이 켜진 동안 새로 활성화한 문서(sandbox app 인 TextEdit 포함)에서 homi 가 유지되고 한글과 Caps Lock 전환이 된다
 >   ([기록](docs/macos-input.md#주인-확인-보안-입력-중에도-sandbox-app-에서-homi-가-유지된다-2026-11-17)). 남은 관찰은 [다음 작업](#다음-작업) 3번에 있다.
@@ -329,11 +329,11 @@ Mail 의 누락은 [재개 규칙](docs/apps/mail.md#idle-확정-음절의-재�
    homi 만 밀려난 까닭은 [설치 위치](docs/macos-input.md#보안-입력-문서의-secure-source-와-입력기의-설치-위치-2026-11-13-확인)였다(11-13, 함정 14). 11-15 에 `/Library/Input Methods` 로 옮겼고,
    재시동 뒤인 11-17 에 주인이 [확인했다](docs/macos-input.md#주인-확인-보안-입력-중에도-sandbox-app-에서-homi-가-유지된다-2026-11-17) — 켜진 31초 동안 문서 활성화 7번(TextEdit·T3 Code·Ghostty·Finder)에서 줄곧 homi 였다.
    켜는 쪽은 주인의 다른 agent 가 돌리는 [Playwright](docs/macos-input.md#켠-process-는-다른-agent-의-playwright-headless-chromium-2026-11-05-확인)다 — 이제는 켜져 있어도 밀려나지 않는다. 남은 관찰:
-   - 비밀번호 칸을 다녀온 뒤 homi 로 돌아오는가. 칸 안이 ABC 인 것은 맞다 (함정 7). 11-16 T3 Code 의 암호 card 에서는 돌아왔고,
+   - 비밀번호 칸을 다녀온 뒤 homi 로 돌아오는가. 칸 안이 ABC 인 것은 맞다 (함정 7). T3 Code 의 암호 card 에서는 두 번 다 돌아왔고(11-16·11-17),
      옮기기 전에는 Safari 의 비밀번호 칸 뒤에 [ABC 로 고정](docs/macos-input.md#강제된-문서에서-key-전환을-시도한-뒤에는-다른-app-의-활성화도-abc-였다-2026-11-05-1550-🔶)된 적이 있다. 안 돌아오면 주인이 곧바로 "최근 key 기록 저장" 을 누른다.
-   - 같은 자리 재설치 직후에도 sandbox process 가 homi 를 [찾는가](docs/macos-input.md#재시동-뒤에는-sandbox-process-가-homi-를-찾는다-2026-11-17) — 다음 설치 때 시험 process(`build/system-location-20261115/sandbox-probe/`)로 본다.
    - 보안 입력 중의 조합 중 Enter 다시 보내기(terminal·Telegram), sandbox app 에서 HUD 를 띄운 채의 입력 소스 선택 — 일상 사용에서 지켜본다.
 
+   같은 자리에 다시 설치한 직후에도 sandbox process 는 homi 를 [찾는다](docs/macos-input.md#재시동-뒤에는-sandbox-process-가-homi-를-찾는다-2026-11-17) (11-17) — 재설치마다 logout 할 필요는 없다.
    11-05 의 조사 경과(켠 process 의 계보, 강제의 두 모양, hold 실험 A–F)는 위 문서에 있다. homi 가 스스로 돌아오는 timer·재선택은 넣지 않는다.
 
 다른 source 왕복의 교정은 [Chrome 원장](docs/apps/chrome.md#다음-작업)에 남겨 후순위로 둔다.

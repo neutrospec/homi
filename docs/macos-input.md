@@ -393,7 +393,8 @@ macOS 27.2 (26B123) HIToolbox 의 disassembly 에서 세 곳이 맞물린다 ✅
 
 비밀번호 칸의 관측 하나 (2026-11-16, 주인이 T3 Code 의 암호 입력 card 를 쓰는 동안 `tis watch` 와 homi 의 lifecycle log): 칸이 보안 입력을 켜자(16:24:59.927)
 homi 가 activate 됐다가 3 ms 뒤 deactivate 되고 ABC 가 됐다(16:25:00.126) — 칸 안은 ABC 다 ✅. card 가 닫히고 보안 입력이 꺼진 직후의 첫 문서 활성화(16:25:19.046)에서
-homi 로 돌아왔다 ✅. 옮기기 전에도 저절로 돌아오던 모양(깨웠다 재우는 override)이라 이 한 번을 옮긴 효과로 세지 않는다 — 켜진 동안 다른 문서를 활성화한 경우는 아직 없다.
+homi 로 돌아왔다 ✅. 옮기기 전에도 저절로 돌아오던 모양(깨웠다 재우는 override)이라 이 한 번을 옮긴 효과로 세지 않는다.
+11-17 의 같은 card 에서도 같았다 — 켜지고(02:06:57.562) 0.3초 뒤 ABC, card 가 닫히며 02:07:00.884 에 homi. Safari 같은 sandbox app 의 비밀번호 칸은 옮긴 뒤에 아직 보지 않았다.
 
 #### sandbox 된 app 은 옮긴 위치를 logout 전에는 알지 못한다 (2026-11-16)
 
@@ -431,7 +432,8 @@ homi 는 죽지 않았고 TextEdit 의 문서에서 activate 된 적도 없다. 
 옮긴 날의 system cache 는 옮기기 전 login(11-15 14:20)의 것이었고 user 위치는 비어 있었다 — 그날 그 cache 의 내용은 읽어 두지 않았다.
 
 - logout 만으로 되는지는 보지 않았다.
-- 같은 자리의 교체(재설치)는 경로가 같아 낡은 cache 로도 맞을 것이다 🔶 — 다음 설치 직후에 시험 process 로 확인한다.
+- 같은 자리의 교체(재설치) 뒤에도 찾는다 ✅ — 02:07:12 에 다시 설치한 직후, system cache 는 login 때의 것 그대로인데 시험 process 가 sandbox 안에서 333개와 homi 를 읽었다.
+  경로가 같으면 낡은 cache 로도 맞는다. 재설치마다 logout 할 필요는 없다.
 - 손쉬운 사용 허가는 재시동 뒤에도 그대로다 ✅ — tccd 가 homi 의 `kTCCServiceListenEvent` 조회에 허가(`authValue=2`)로 답했고 event tap 이 걸려 있다.
 - 실제 sandbox app 의 입력과 보안 입력 중의 유지는 같은 날 주인이 [확인했다](#주인-확인-보안-입력-중에도-sandbox-app-에서-homi-가-유지된다-2026-11-17).
 
@@ -449,7 +451,7 @@ homi 는 죽지 않았고 TextEdit 의 문서에서 activate 된 적도 없다. 
 key 는 단축키 설정(symbolic hotkey 60·61)과 맞춰 본 것이다 🔶. 둘 다 짧게 눌러 HUD 는 뜨지 않았다 (`showTextInputMenuHUD:` 가 없다) —
 HUD 를 띄운 채의 선택은 실제 app 에서 아직 보지 않았다. 시험 process 의 조회는 NULL 을 주지 않는다.
 
-남은 것 🔶: 비밀번호 칸을 나온 뒤의 복귀, 보안 입력 중의 조합 중 Enter 다시 보내기, 같은 자리 재설치 뒤의 sandbox process.
+남은 것 🔶: 비밀번호 칸을 나온 뒤의 복귀(sandbox app), 보안 입력 중의 조합 중 Enter 다시 보내기.
 
 ### input menu 의 비활성·누락 (2026-10-09, 미해결)
 
